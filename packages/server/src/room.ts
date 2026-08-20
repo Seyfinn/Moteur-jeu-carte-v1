@@ -5,7 +5,7 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I to avoid
 
 export function generateRoomCode(): string {
   let code = '';
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 2; i++) {
     code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
   }
   return code;

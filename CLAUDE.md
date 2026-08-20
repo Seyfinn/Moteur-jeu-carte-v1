@@ -119,12 +119,10 @@ ctx.cloneCharacter(sourceInstanceId, hp, 'active'|'bench'): string // renvoie le
   du code impératif — c'est le système que le moteur scanne automatiquement tant que la
   carte est en jeu (voir `queries.ts` et le README pour la liste des `QueryName`).
 
-## Bug connu du moteur (pas encore corrigé, tâche en attente)
+## Bug du moteur corrigé (historique, pour référence)
 
-`match.ts` (`validateAction`, cas `'use-ability'`) ne vérifie **pas** `ability.condition()`
-avant d'autoriser une activation manuelle d'ability active — seul `events.ts` (abilities
-déclenchées automatiquement) le fait. Donc une ability active avec un `condition` (ex:
-"nen" de Beyond Netero, "death-lotus" de Katarina) n'est pas *réellement* bloquée par le
-moteur si le joueur essaie de l'utiliser trop tôt ; ça reste correct côté UI/convention
-seulement. Ne pas re-signaler ce bug pour chaque nouvelle carte qui a un `condition` sur
-une ability active — c'est déjà tracké, pas la peine de le redécouvrir.
+`match.ts` (`validateAction`) vérifie maintenant `ability.condition()` (cas `'use-ability'`)
+et `attack.condition()` (cas `'attack'`, si un jour une attaque en a un) avant d'autoriser
+une activation manuelle — plus seulement `events.ts` pour les abilities auto-déclenchées.
+Donc "nen" de Beyond Netero et "death-lotus" de Katarina sont bien bloquées côté moteur,
+pas juste par convention UI. Rien à refaire ici pour les futures cartes avec `condition`.

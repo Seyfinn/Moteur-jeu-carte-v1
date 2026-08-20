@@ -25,11 +25,11 @@ export function Lobby({ conn }: { conn: GameConnection }) {
             value={joinCode}
             onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
             placeholder="CODE"
-            maxLength={6}
+            maxLength={2}
           />
           <button
             onClick={() => conn.joinRoom(joinCode, name || 'Joueur')}
-            disabled={conn.status === 'connecting' || joinCode.length < 4}
+            disabled={conn.status === 'connecting' || joinCode.length < 2}
           >
             Rejoindre
           </button>
