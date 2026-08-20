@@ -554,6 +554,21 @@ input {
   font-family: monospace;
 }
 
+.waiting-badge {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  opacity: 0.85;
+  pointer-events: none;
+  z-index: 5;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -609,6 +624,100 @@ input {
 }
 .order-buttons button {
   padding: 2px 8px;
+}
+
+/* Deck manager / builder */
+.deck-manager-link {
+  align-self: flex-start;
+  font-size: 0.82rem;
+  padding: 4px 10px;
+  margin-bottom: 16px;
+}
+.deck-manager {
+  max-width: 760px;
+  margin: 4vh auto;
+  padding: 24px;
+  background: var(--panel);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+.deck-manager-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.deck-manager-header h1 {
+  margin: 0;
+}
+.deck-list {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.deck-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.deck-list-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.deck-list-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.deck-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.deck-section {
+  margin-top: 12px;
+}
+.deck-section h2 {
+  font-size: 0.95rem;
+  margin: 0 0 8px;
+}
+.deck-section-count {
+  color: var(--text-dim);
+  font-weight: 400;
+  font-size: 0.82rem;
+}
+.deck-card-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.deck-card-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.deck-card-stepper button {
+  padding: 2px 8px;
+}
+.deck-card-stepper span {
+  min-width: 1em;
+  text-align: center;
+}
+.deck-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
 }
 
 @media (max-width: 760px) {

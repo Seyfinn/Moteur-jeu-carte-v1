@@ -458,11 +458,7 @@ export function Board({ conn }: { conn: GameConnection }) {
         <ChoiceModal state={state} choice={pendingChoice} onAnswer={(answer) => conn.answerChoice(pendingChoice.id, answer)} />
       )}
       {pendingChoice && pendingChoice.playerId !== you && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <p>En attente du choix de l'adversaire...</p>
-          </div>
-        </div>
+        <div className="waiting-badge">En attente du choix de l'adversaire...</div>
       )}
     </div>
   );

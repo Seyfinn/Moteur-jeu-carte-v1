@@ -1,5 +1,5 @@
 import type { ChoiceAnswer, GameState, PlayerId } from './types.js';
-import type { PlayerAction } from './match.js';
+import type { PlayerAction, RosterConfig } from './match.js';
 
 /**
  * WebSocket wire protocol between the web client and the server. Lives in
@@ -7,8 +7,8 @@ import type { PlayerAction } from './match.js';
  * without depending on each other.
  */
 export type ClientMessage =
-  | { type: 'create-room'; playerName: string }
-  | { type: 'join-room'; roomCode: string; playerName: string }
+  | { type: 'create-room'; playerName: string; roster?: RosterConfig }
+  | { type: 'join-room'; roomCode: string; playerName: string; roster?: RosterConfig }
   | { type: 'action'; action: PlayerAction }
   | { type: 'answer-choice'; choiceId: string; answer: ChoiceAnswer };
 

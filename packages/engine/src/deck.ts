@@ -1,0 +1,69 @@
+import { getCard, listCards } from './cards/registry.js';
+import type { RosterConfig } from './match.js';
+
+/**
+ * Target deck shape from the rules document. Treated as caps, not required
+ * minimums: the current demo card pool doesn't have enough object/terrain
+ * cards yet to fill a deck up to these numbers (see CLAUDE.md), so a deck
+ * with fewer cards than the cap is still valid.
+ */
+export const DECK_LIMITS = {
+  character: 6,
+  object: 6,
+  terrain: 2,
+  maxCopiesPerCard: 2,
+} as const;
+
+export interface DeckPoolEntry {
+  id: string;
+  type: 'character' | 'object' | 'terrain';
+  name: string;
+}
+
+/** Every card available to put in a deck, for deck-builder UIs. */
+export function listDeckPool(): DeckPoolEntry[] {
+  return listCards().map((def) => ({ id: def.id, type: def.type, name: def.name }));
+}
+
+export type RosterValidation = { ok: true } | { ok: false; error: string };
+
+const GROUPS: Array<{ key: keyof RosterConfig; type: DeckPoolEntry['type']; max: number; label: string }> = [
+  { key: 'characterCardIds', type: 'character', max: DECK_LIMITS.character, label: 'personnage' },
+  { key: 'objectCardIds', type: 'object', max: DECK_LIMITS.object, label: 'objet' },
+  { key: 'terrainCardIds', type: 'terrain', max: DECK_LIMITS.terrain, label: 'terrain' },
+];
+
+/** Validates a roster against the deck-building rules (caps + max copies per card). */
+export function validateRoster(roster: RosterConfig): RosterValidation {
+  for (const group of GROUPS) {
+    const ids = roster[group.key];
+    if (ids.length > group.max) {
+      return { ok: false, error: `Trop de cartes ${group.label} (max ${group.max})` };
+    }
+
+    const copies = new Map<string, number>();
+    for (const id of ids) {
+      let def;
+      try {
+        def = getCard(id);
+      } catch {
+        return { ok: false, error: `Carte inconnue : "${id}"` };
+      }
+      if (def.type !== group.type) {
+        return { ok: false, error: `"${id}" n'est pas une carte ${group.label}` };
+      }
+      copies.set(id, (copies.get(id) ?? 0) + 1);
+    }
+    for (const [id, count] of copies) {
+      if (count > DECK_LIMITS.maxCopiesPerCard) {
+        return { ok: false, error: `Trop d'exemplaires de "${id}" (max ${DECK_LIMITS.maxCopiesPerCard})` };
+      }
+    }
+  }
+
+  if (roster.characterCardIds.length === 0) {
+    return { ok: false, error: 'Le deck doit contenir au moins une carte personnage' };
+  }
+
+  return { ok: true };
+}

@@ -1,5 +1,5 @@
 import type { WebSocket } from 'ws';
-import { DEMO_ROSTER, Match, getPlayerView, type PlayerId, type ServerMessage } from 'engine';
+import { DEMO_ROSTER, Match, getPlayerView, type PlayerId, type RosterConfig, type ServerMessage } from 'engine';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I to avoid ambiguity
 
@@ -21,6 +21,7 @@ export class Room {
   readonly code: string;
   private sockets: Partial<Record<PlayerId, WebSocket>> = {};
   private playerNames: Partial<Record<PlayerId, string>> = {};
+  private playerRosters: Partial<Record<PlayerId, RosterConfig>> = {};
   private match?: Match;
   private unsubscribe?: () => void;
 
@@ -32,10 +33,11 @@ export class Room {
     return Boolean(this.sockets.p1 && this.sockets.p2);
   }
 
-  addPlayer(socket: WebSocket, playerName: string): PlayerId {
+  addPlayer(socket: WebSocket, playerName: string, roster?: RosterConfig): PlayerId {
     const playerId: PlayerId = this.sockets.p1 ? 'p2' : 'p1';
     this.sockets[playerId] = socket;
     this.playerNames[playerId] = playerName || playerId;
+    this.playerRosters[playerId] = roster;
 
     if (this.isFull && !this.match) {
       this.startMatch();
@@ -55,8 +57,8 @@ export class Room {
     this.match = Match.create({
       p1Name: this.playerNames.p1 ?? 'Joueur 1',
       p2Name: this.playerNames.p2 ?? 'Joueur 2',
-      p1Roster: DEMO_ROSTER,
-      p2Roster: DEMO_ROSTER,
+      p1Roster: this.playerRosters.p1 ?? DEMO_ROSTER,
+      p2Roster: this.playerRosters.p2 ?? DEMO_ROSTER,
     });
     this.unsubscribe = this.match.onChange(() => this.broadcastState());
     this.broadcastState();

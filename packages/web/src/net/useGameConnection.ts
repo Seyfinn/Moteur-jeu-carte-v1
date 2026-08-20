@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import type { ChoiceAnswer, ClientMessage, GameState, PlayerAction, PlayerId, ServerMessage } from 'engine';
+import type { ChoiceAnswer, ClientMessage, GameState, PlayerAction, PlayerId, RosterConfig, ServerMessage } from 'engine';
 
 const WS_URL =
   (import.meta.env.VITE_WS_URL as string | undefined) ??
@@ -20,8 +20,8 @@ export interface GameConnection {
   state: GameState | null;
   error: string | null;
   opponentDisconnected: boolean;
-  createRoom(playerName: string): void;
-  joinRoom(roomCode: string, playerName: string): void;
+  createRoom(playerName: string, roster: RosterConfig): void;
+  joinRoom(roomCode: string, playerName: string, roster: RosterConfig): void;
   applyAction(action: PlayerAction): void;
   answerChoice(choiceId: string, answer: ChoiceAnswer): void;
   clearError(): void;
@@ -99,15 +99,15 @@ export function useGameConnection(): GameConnection {
   }, []);
 
   const createRoom = useCallback(
-    (playerName: string) => {
-      ensureSocket(() => send({ type: 'create-room', playerName }));
+    (playerName: string, roster: RosterConfig) => {
+      ensureSocket(() => send({ type: 'create-room', playerName, roster }));
     },
     [ensureSocket, send]
   );
 
   const joinRoom = useCallback(
-    (code: string, playerName: string) => {
-      ensureSocket(() => send({ type: 'join-room', roomCode: code, playerName }));
+    (code: string, playerName: string, roster: RosterConfig) => {
+      ensureSocket(() => send({ type: 'join-room', roomCode: code, playerName, roster }));
     },
     [ensureSocket, send]
   );
