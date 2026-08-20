@@ -5,6 +5,12 @@ const WS_URL =
   (import.meta.env.VITE_WS_URL as string | undefined) ??
   `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
 
+// Free hosting (e.g. Render) spins the server down after inactivity; the first WebSocket
+// upgrade after a cold start can fail while the instance is still waking up, so retry a
+// few times before surfacing an error.
+const MAX_CONNECT_RETRIES = 4;
+const RETRY_DELAY_MS = 2000;
+
 export type ConnectionStatus = 'idle' | 'connecting' | 'waiting' | 'playing' | 'error';
 
 export interface GameConnection {
@@ -33,52 +39,59 @@ export function useGameConnection(): GameConnection {
   const ensureSocket = useCallback((onOpen: () => void) => {
     setStatus('connecting');
     setError(null);
-    const socket = new WebSocket(WS_URL);
-    socketRef.current = socket;
 
-    socket.addEventListener('open', onOpen);
+    const attemptConnect = (attempt: number) => {
+      const socket = new WebSocket(WS_URL);
+      socketRef.current = socket;
+      let opened = false;
 
-    socket.addEventListener('message', (event) => {
-      const message: ServerMessage = JSON.parse(event.data as string);
-      switch (message.type) {
-        case 'room-created':
-          setRoomCode(message.roomCode);
-          setYou(message.you);
-          setStatus('waiting');
-          break;
-        case 'joined':
-          setRoomCode(message.roomCode);
-          setYou(message.you);
-          setStatus('playing');
-          break;
-        case 'waiting-for-opponent':
-          setStatus('waiting');
-          break;
-        case 'state':
-          setState(message.state);
-          setYou(message.you);
-          setStatus('playing');
-          setError(null);
-          break;
-        case 'opponent-disconnected':
-          setOpponentDisconnected(true);
-          break;
-        case 'error':
-          setError(message.message);
-          break;
-      }
-    });
+      socket.addEventListener('open', () => {
+        opened = true;
+        onOpen();
+      });
 
-    socket.addEventListener('close', () => {
-      setStatus((prev) => (prev === 'playing' ? prev : 'error'));
-    });
+      socket.addEventListener('message', (event) => {
+        const message: ServerMessage = JSON.parse(event.data as string);
+        switch (message.type) {
+          case 'room-created':
+            setRoomCode(message.roomCode);
+            setYou(message.you);
+            setStatus('waiting');
+            break;
+          case 'joined':
+            setRoomCode(message.roomCode);
+            setYou(message.you);
+            setStatus('playing');
+            break;
+          case 'waiting-for-opponent':
+            setStatus('waiting');
+            break;
+          case 'state':
+            setState(message.state);
+            setYou(message.you);
+            setStatus('playing');
+            setError(null);
+            break;
+          case 'opponent-disconnected':
+            setOpponentDisconnected(true);
+            break;
+          case 'error':
+            setError(message.message);
+            break;
+        }
+      });
 
-    socket.addEventListener('error', () => {
-      setError('Connexion au serveur impossible.');
-      setStatus('error');
-    });
+      socket.addEventListener('close', () => {
+        if (!opened && attempt < MAX_CONNECT_RETRIES) {
+          setTimeout(() => attemptConnect(attempt + 1), RETRY_DELAY_MS);
+          return;
+        }
+        if (!opened) setError('Connexion au serveur impossible.');
+        setStatus((prev) => (prev === 'playing' ? prev : 'error'));
+      });
+    };
 
-    return socket;
+    attemptConnect(0);
   }, []);
 
   const send = useCallback((message: ClientMessage) => {
