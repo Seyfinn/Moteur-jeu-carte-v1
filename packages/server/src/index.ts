@@ -4,7 +4,7 @@ import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { registerDemoCards, type ClientMessage, type PlayerId } from 'engine';
+import { registerDemoCards, validateRoster, type ClientMessage, type PlayerId } from 'engine';
 import { generateRoomCode, Room } from './room.js';
 
 registerDemoCards();
@@ -90,16 +90,24 @@ wss.on('connection', (socket) => {
 function handleMessage(socket: WebSocket, message: ClientMessage): void {
   switch (message.type) {
     case 'create-room': {
+      if (message.roster) {
+        const check = validateRoster(message.roster);
+        if (!check.ok) return sendError(socket, check.error);
+      }
       let code = generateRoomCode();
       while (rooms.has(code)) code = generateRoomCode();
       const room = new Room(code);
       rooms.set(code, room);
-      const playerId = room.addPlayer(socket, message.playerName);
+      const playerId = room.addPlayer(socket, message.playerName, message.roster);
       connections.set(socket, { roomCode: code, playerId });
       socket.send(JSON.stringify({ type: 'room-created', roomCode: code, you: playerId }));
       return;
     }
     case 'join-room': {
+      if (message.roster) {
+        const check = validateRoster(message.roster);
+        if (!check.ok) return sendError(socket, check.error);
+      }
       const room = rooms.get(message.roomCode.toUpperCase());
       if (!room) {
         sendError(socket, `Room "${message.roomCode}" not found`);
@@ -109,7 +117,7 @@ function handleMessage(socket: WebSocket, message: ClientMessage): void {
         sendError(socket, 'Room is already full');
         return;
       }
-      const playerId = room.addPlayer(socket, message.playerName);
+      const playerId = room.addPlayer(socket, message.playerName, message.roster);
       connections.set(socket, { roomCode: room.code, playerId });
       socket.send(JSON.stringify({ type: 'joined', roomCode: room.code, you: playerId }));
       return;

@@ -44,3 +44,5 @@ export {
 
 export * from './cards/demo/index.js';
 export type { ClientMessage, ServerMessage } from './protocol.js';
+export { DECK_LIMITS, listDeckPool, validateRoster } from './deck.js';
+export type { DeckPoolEntry, RosterValidation } from './deck.js';
