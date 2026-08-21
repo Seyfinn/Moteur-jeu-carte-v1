@@ -102,8 +102,7 @@ ctx.cloneCharacter(sourceInstanceId, hp, 'active'|'bench'): string // renvoie le
   `CharacterInstance`. Utiliser un `status` custom avec un `data.count`, sans
   `remainingTurns` (donc jamais retiré automatiquement par `tickStatusesAtTurnStart`) :
   lire via `ctx.getCharacter(id).statuses.find(s => s.statusId === 'mon-id')`, puis pour
-  incrémenter faire `removeStatus` + `applyStatus` (il n'y a pas d'API "update"). Exemple
-  réel : `cards/demo/katarina.ts` (`katarina-kills`).
+  incrémenter faire `removeStatus` + `applyStatus` (il n'y a pas d'API "update").
 - **"Peut agir de nouveau ce tour si condition remplie pendant l'attaque"** (ex: Verocity
   de Katarina) : ne pas essayer de le faire via un `trigger` d'ability séparé (pas assez
   d'info dans l'event `onCharacterKO`, voir plus haut). Le faire directement sur
@@ -111,7 +110,7 @@ ctx.cloneCharacter(sourceInstanceId, hp, 'active'|'bench'): string // renvoie le
   `endsTurn` d'une même définition d'attaque, remis à `false` en début d'`execute`,
   `endsTurn` retourne `!flag`). `match.ts` appelle `execute(ctx)` puis `endsTurn(ctx)`
   avec le même `ctx`, donc c'est sûr en asynchrone tant qu'une seule attaque n'est
-  résolue à la fois (le cas normal). Exemple réel : `cards/demo/katarina.ts` (`shunpo`).
+  résolue à la fois (le cas normal).
 - **AoE sur tout le board adverse** : `ctx.getAllOnBoard(ctx.opponentId)` puis
   `dealDamage` sur chaque instance.
 - **Override d'une règle générale** (fréquence, ciblage du banc, ATK effectif, limite
