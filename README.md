@@ -22,8 +22,8 @@ packages/
 - `events.ts` — bus d'événements pour les abilities passives déclenchées (`onAttackDeclared`, `onCharacterKO`, `onTurnStart`, ...)
 - `hp.ts` / `statuses.ts` / `zones.ts` — primitives HP/valeur lock, états (suspension sur banc, exception Poison/Brûlure), déplacements de zone (KO, remplacement obligatoire, cimetière, clonage)
 - `turn.ts` / `match.ts` — machine à tours et orchestration d'une partie (`Match`), avec un pipeline d'actions asynchrone qui se met en pause sur `ctx.choose(...)` et reprend via `answerChoice`
-- `cards/demo/` — 8 cartes d'exemple (Nakime, Gilgamesh V, Kashimo V, Gogeta Blue V, Beyond Netero VMAX, Batman V, Allié indomptable, Terrain : Domaine Quincy) qui servent à démontrer l'étendue des mécaniques possibles (lancers de pièce, valeur lock, esquive, clonage à la mort, aura de terrain, fréquence de déclenchement doublée, protection du banc...). **Ce ne sont pas les cartes finales du jeu.**
-- `test/` — suite Vitest (règles de tour, HP/valeur lock, états, KO/victoire/égalité, cartes de démo, simulation bot-vs-bot)
+- `cards/demo/` — les cartes d'exemple qui y vivaient ont été supprimées (c'était du contenu de test) ; `registerDemoCards()` / `DEMO_ROSTER` restent exportés mais vides le temps que le vrai pool de cartes soit écrit.
+- `test/` — suite Vitest (règles de tour, HP/valeur lock, états, KO/victoire/égalité)
 
 ### `server`
 
