@@ -2,6 +2,7 @@ import type {
   ChoiceAnswer,
   ChoiceOption,
   CharacterInstance,
+  DealDamageOptions,
   EngineEvent,
   EventName,
   GameState,
@@ -33,7 +34,9 @@ export type QueryName =
   | 'getAbilityUsesPerGame'
   | 'getIncomingDamageAmount'
   | 'getIncomingValeurLockAmount'
-  | 'getTriggerFireCount';
+  | 'getIncomingHealAmount'
+  | 'getTriggerFireCount'
+  | 'canPlayObject';
 
 export interface ModifierEvalContext {
   state: GameState;
@@ -94,17 +97,36 @@ export interface EffectContext {
   getAllOnBoard(playerId: PlayerId): CharacterInstance[];
   isKO(characterInstanceId: string): boolean;
 
-  /** Ordinary damage: reduces current HP only, healable. */
-  dealDamage(targetInstanceId: string, amount: number): Promise<void>;
+  /**
+   * Ordinary damage: consumes shield first, then reduces current HP (healable).
+   * Pass `{ ignoreShield: true }` for effects that pierce straight through a shield.
+   */
+  dealDamage(targetInstanceId: string, amount: number, options?: DealDamageOptions): Promise<void>;
   /** "Valeur lock": permanently reduces max HP, never healable. */
   applyValeurLock(targetInstanceId: string, amount: number): Promise<void>;
-  /** Restores lost (non-locked) HP, capped at currentMaxHP. */
+  /** Restores lost (non-locked) HP, capped at currentMaxHP. Does not affect shield. */
   heal(targetInstanceId: string, amount: number): void;
   /** The positive counterpart to applyValeurLock: permanently raises the HP ceiling. */
   raiseMaxHP(targetInstanceId: string, amount: number): void;
 
-  applyStatus(targetInstanceId: string, status: StatusInstance): void;
+  /** Adds shield points on top of current HP; absorbs ordinary damage first, persists on the bench. */
+  addShield(targetInstanceId: string, amount: number): void;
+  /** Strips shield points directly, bypassing damage entirely. Omit `amount` to remove it all (e.g. "removes the shield" effects). */
+  removeShield(targetInstanceId: string, amount?: number): void;
+
+  applyStatus(targetInstanceId: string, status: StatusInstance, options?: { skipEvasionRoll?: boolean }): void;
   removeStatus(targetInstanceId: string, statusId: string): void;
+
+  /**
+   * Rolls esquive once (same rate/rules as the automatic roll inside
+   * dealDamage/applyStatus) without applying anything. For an effect that
+   * deals damage AND applies a status from the same hit and needs both to
+   * hit-or-miss together: roll here first, bail out entirely if it returns
+   * true, otherwise pass `{ skipEvasionRoll: true }` to the subsequent
+   * dealDamage/applyStatus calls so they don't each roll independently.
+   * Returns false (never evaded) for object-card effects or self-targeting.
+   */
+  rollEvasion(targetInstanceId: string): boolean;
 
   getEffectiveATK(characterInstanceId: string, baseATK: number): number;
 
@@ -113,6 +135,14 @@ export interface EffectContext {
 
   /** Attach the source object instance to a character (keeps it in play instead of going to the graveyard). */
   attachSelfTo(targetCharacterInstanceId: string): void;
+
+  /** Destroys any object currently in play (own or opponent's), detaching it from its character and sending it to the graveyard. */
+  destroyObject(objectInstanceId: string): void;
+
+  /** Adds `turns` to a currently-active terrain's remaining duration (own or opponent's). No-op on an indefinite terrain (no durationTurns declared). */
+  extendTerrain(terrainInstanceId: string, turns: number): void;
+  /** Removes `turns` from a currently-active terrain's remaining duration (own or opponent's); expires it immediately (graveyard + onTerrainRemoved) if this brings it to 0 or below. No-op on an indefinite terrain. */
+  shortenTerrain(terrainInstanceId: string, turns: number): Promise<void>;
 
   /** Switch triggered by an external source (object/terrain/bench ability) -- bypasses Stun's standard-switch block. */
   forceSwitch(playerId: PlayerId, newActiveInstanceId: string): Promise<void>;
@@ -165,6 +195,8 @@ export interface CharacterCardDef {
   modifiers?: ModifierDef[];
   /** Card family for cross-card synergies (e.g. "NEN"). Absent = basic card, no family. */
   family?: string;
+  /** Overrides DECK_LIMITS.maxCopiesPerCard for this specific card. Absent = use the general limit. */
+  maxCopies?: number;
 }
 
 export interface ObjectCardDef {
@@ -176,6 +208,8 @@ export interface ObjectCardDef {
   modifiers?: ModifierDef[];
   /** Card family for cross-card synergies (e.g. "NEN"). Absent = basic card, no family. */
   family?: string;
+  /** Overrides DECK_LIMITS.maxCopiesPerCard for this specific card. Absent = use the general limit. */
+  maxCopies?: number;
 }
 
 export interface TerrainCardDef {
@@ -189,6 +223,8 @@ export interface TerrainCardDef {
   modifiers?: ModifierDef[];
   /** Card family for cross-card synergies (e.g. "NEN"). Absent = basic card, no family. */
   family?: string;
+  /** Overrides DECK_LIMITS.maxCopiesPerCard for this specific card. Absent = use the general limit. */
+  maxCopies?: number;
 }
 
 export type CardDef = CharacterCardDef | ObjectCardDef | TerrainCardDef;

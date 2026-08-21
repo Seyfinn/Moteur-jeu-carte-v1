@@ -1,6 +1,6 @@
 import type { EngineApi } from './engine-api.js';
 import { tickStatusesAtTurnStart } from './statuses.js';
-import { checkWinCondition } from './zones.js';
+import { checkWinCondition, tickTerrainAtTurnStart } from './zones.js';
 import { otherPlayer, type GameState } from './types.js';
 
 export async function startTurn(state: GameState, api: EngineApi): Promise<void> {
@@ -17,6 +17,7 @@ export async function startTurn(state: GameState, api: EngineApi): Promise<void>
   await api.emitEvent({ name: 'onTurnStart', playerId: state.activePlayerId, data: {} });
   if (state.result) return;
   await tickStatusesAtTurnStart(state, state.activePlayerId, api);
+  await tickTerrainAtTurnStart(state, state.activePlayerId, api);
   checkWinCondition(state);
 }
 

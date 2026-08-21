@@ -1,4 +1,5 @@
 import { registerCard, type CharacterCardDef, type ObjectCardDef, type RosterConfig, type TerrainCardDef } from '../src/index.js';
+import { findCharacter } from '../src/queries.js';
 
 const fxStriker: CharacterCardDef = {
   type: 'character',
@@ -127,6 +128,25 @@ const fxAuraTerrain: TerrainCardDef = {
   description: 'No mechanical effect; used to exercise play/replace/graveyard cycling.',
 };
 
+/** Test-only mirror of the "Hôpital" demo card: doubles heals landing on its owner's own characters. */
+const fxHealAuraTerrain: TerrainCardDef = {
+  type: 'terrain',
+  id: 'fx-heal-aura-terrain',
+  name: 'Fixture Heal Aura Terrain',
+  description: "Doubles healing received by its owner's characters.",
+  modifiers: [
+    {
+      query: 'getIncomingHealAmount',
+      transform(ctx, current) {
+        const targetInstanceId = ctx.query['targetInstanceId'] as string;
+        const target = findCharacter(ctx.state, targetInstanceId);
+        if (target.ownerId !== ctx.sourceOwnerId) return current;
+        return (current as number) * 2;
+      },
+    },
+  ],
+};
+
 let registered = false;
 
 export function registerTestFixtures(): void {
@@ -138,12 +158,13 @@ export function registerTestFixtures(): void {
   registerCard(fxGlass);
   registerCard(fxHealObject);
   registerCard(fxAuraTerrain);
+  registerCard(fxHealAuraTerrain);
 }
 
 export const FX_ROSTER: RosterConfig = {
   characterCardIds: [fxStriker.id, fxTank.id, fxStunner.id],
   objectCardIds: [fxHealObject.id, fxHealObject.id],
-  terrainCardIds: [fxAuraTerrain.id],
+  terrainCardIds: [fxAuraTerrain.id, fxHealAuraTerrain.id],
 };
 
 /** Two 10-HP one-shot-able characters per side -- cheap to fully wipe out for KO/win-condition tests. */

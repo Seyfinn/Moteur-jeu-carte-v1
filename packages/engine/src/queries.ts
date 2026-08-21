@@ -2,7 +2,9 @@ import type { CharacterInstance, GameState, PlayerId } from './types.js';
 import type { AbilityDef, ModifierDef, ModifierEvalContext, QueryName, Vote } from './cards/types.js';
 import { getCharacterCard, getObjectCard, getTerrainCard } from './cards/registry.js';
 import {
+  getAtkBoostTotal,
   getAtkReductionTotal,
+  hasStatus,
   isDisarmed,
   isSilencedActive,
   isSilencedPassive,
@@ -127,6 +129,7 @@ export function canSwitchStandard(state: GameState, characterInstanceId: string)
   const char = findCharacter(state, characterInstanceId);
   const extra: Vote[] = [];
   if (isStunned(char)) extra.push({ allow: false, source: 'status:stun' });
+  if (hasStatus(char, 'chained')) extra.push({ allow: false, source: 'status:chained' });
   return evaluatePermission(state, 'canSwitchStandard', { characterInstanceId }, true, extra);
 }
 
@@ -187,8 +190,12 @@ export function canTargetBench(
   return evaluatePermission(state, 'canTargetBench', { sourceInstanceId, targetInstanceId }, allowedBySource);
 }
 
+export function canPlayObject(state: GameState, playerId: PlayerId): PermissionResult {
+  return evaluatePermission(state, 'canPlayObject', { playerId }, true);
+}
+
 export function getEffectiveATK(state: GameState, characterInstanceId: string, baseATK: number): number {
   const char = findCharacter(state, characterInstanceId);
   const transformed = evaluateTransform(state, 'getEffectiveATK', { characterInstanceId }, baseATK);
-  return Math.max(0, transformed - getAtkReductionTotal(char));
+  return Math.max(0, transformed + getAtkBoostTotal(char) - getAtkReductionTotal(char));
 }

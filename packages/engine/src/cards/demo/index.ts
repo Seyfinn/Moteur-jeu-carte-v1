@@ -1,20 +1,65 @@
 import type { RosterConfig } from '../../match.js';
+import { registerCard } from '../registry.js';
+import { blitzcrank } from './blitzcrank.js';
+import { guts } from './guts.js';
+import { potionForce } from './potion-force.js';
+import { potionDeSoin } from './potion-de-soin.js';
+import { chaines } from './chaines.js';
+import { poisonMortel } from './poison-mortel.js';
+import { rengoku } from './rengoku.js';
+import { hopital } from './hopital.js';
+import { confiscation } from './confiscation.js';
+import { destruction } from './destruction.js';
+import { regulationThermique } from './regulation-thermique.js';
+import { bouclierUltime } from './bouclier-ultime.js';
+import { autelDemoniaque } from './autel-demoniaque.js';
+
+export {
+  blitzcrank,
+  guts,
+  potionForce,
+  potionDeSoin,
+  chaines,
+  poisonMortel,
+  rengoku,
+  hopital,
+  confiscation,
+  destruction,
+  regulationThermique,
+  bouclierUltime,
+  autelDemoniaque,
+};
 
 let registered = false;
 
-/**
- * Formerly registered the engine's demo/example cards. All of them were test
- * content and have been removed; the game's real card pool has not been
- * written yet. Kept as a no-op so callers (server/web bootstrap) don't need
- * to change until real cards are registered here.
- */
 export function registerDemoCards(): void {
   if (registered) return;
   registered = true;
+
+  registerCard(blitzcrank);
+  registerCard(guts);
+  registerCard(potionForce);
+  registerCard(potionDeSoin);
+  registerCard(chaines);
+  registerCard(poisonMortel);
+  registerCard(rengoku);
+  registerCard(hopital);
+  registerCard(confiscation);
+  registerCard(destruction);
+  registerCard(regulationThermique);
+  registerCard(bouclierUltime);
+  registerCard(autelDemoniaque);
 }
 
 export const DEMO_ROSTER: RosterConfig = {
-  characterCardIds: [],
-  objectCardIds: [],
-  terrainCardIds: [],
+  characterCardIds: [blitzcrank.id, guts.id, rengoku.id],
+  objectCardIds: [potionForce.id, potionDeSoin.id, chaines.id, poisonMortel.id],
+  terrainCardIds: [
+    hopital.id,
+    confiscation.id,
+    destruction.id,
+    regulationThermique.id,
+    bouclierUltime.id,
+    autelDemoniaque.id,
+  ],
 };

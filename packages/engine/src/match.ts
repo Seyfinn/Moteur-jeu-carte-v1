@@ -18,7 +18,7 @@ import { recordAbilityUse } from './abilities.js';
 import * as hp from './hp.js';
 import * as statusesMod from './statuses.js';
 import * as zones from './zones.js';
-import { canAttack, canSwitchStandard, canUseAbility, evaluateTransform, findCharacter, getMaxAttachedObjects } from './queries.js';
+import { canAttack, canPlayObject, canSwitchStandard, canUseAbility, evaluateTransform, findCharacter, getMaxAttachedObjects } from './queries.js';
 import { endTurn, startTurn } from './turn.js';
 import { getPlayerView } from './view.js';
 
@@ -58,6 +58,7 @@ function createPlayerState(id: PlayerId, displayName: string, roster: RosterConf
       baseMaxHP: def.baseMaxHP,
       currentMaxHP: def.baseMaxHP,
       damage: 0,
+      shield: 0,
       statuses: [],
       attachedObjectInstanceIds: [],
       abilityUsesThisTurn: {},
@@ -263,6 +264,10 @@ export class Match {
         if (!player.unplayedObjectInstanceIds.includes(action.objectInstanceId)) {
           return { ok: false, error: 'Object not available to play' };
         }
+        const permission = canPlayObject(state, playerId);
+        if (!permission.allow) {
+          return { ok: false, error: `Cannot play object (${permission.votes.map((v) => v.source).join(', ')})` };
+        }
         return { ok: true };
       }
       case 'play-terrain': {
@@ -372,7 +377,7 @@ export class Match {
     this.api.log(`${playerId} plays object ${def.name}`, { objectInstanceId, cardId: def.id });
     await this.api.emitEvent({ name: 'onObjectPlayed', playerId, data: { objectInstanceId } });
 
-    const ctx = this.api.buildEffectContext(objectInstanceId, playerId);
+    const ctx = this.api.buildEffectContext(objectInstanceId, playerId, undefined, false); // object effect, not an attack/ability
     await def.execute(ctx);
 
     if (!obj.attachedToCharacterInstanceId) {
@@ -430,18 +435,27 @@ export class Match {
     const api: EngineApi = {
       rng: state.rng,
 
-      async dealDamage(targetInstanceId, amount) {
+      async dealDamage(targetInstanceId, amount, options) {
         const target = findCharacter(state, targetInstanceId);
-        if (statusesMod.isEvasive(target)) {
-          statusesMod.removeStatus(target, 'evasive');
-          api.log(`${target.cardId} dodges the attack (evasive)`, { targetInstanceId });
-          return;
+        const reduced = evaluateTransform(state, 'getIncomingDamageAmount', { targetInstanceId, source: options?.source }, amount);
+        let finalAmount = Math.max(0, reduced);
+
+        let shieldAbsorbed = 0;
+        if (!options?.ignoreShield) {
+          shieldAbsorbed = hp.absorbWithShield(target, finalAmount);
+          finalAmount -= shieldAbsorbed;
+          if (shieldAbsorbed > 0) {
+            api.log(`${target.cardId}'s shield absorbs ${shieldAbsorbed} damage`, {
+              targetInstanceId,
+              absorbed: shieldAbsorbed,
+              shieldRemaining: target.shield,
+            });
+          }
         }
-        const reduced = evaluateTransform(state, 'getIncomingDamageAmount', { targetInstanceId }, amount);
-        const finalAmount = Math.max(0, reduced);
+
         hp.dealDamage(target, finalAmount);
         api.log(`${target.cardId} takes ${finalAmount} damage`, { targetInstanceId, amount: finalAmount });
-        await api.emitEvent({ name: 'afterDamage', data: { targetInstanceId, amount: finalAmount } });
+        await api.emitEvent({ name: 'afterDamage', data: { targetInstanceId, amount: finalAmount, shieldAbsorbed } });
         if (hp.isKO(target)) await api.koCharacter(targetInstanceId);
       },
 
@@ -456,14 +470,28 @@ export class Match {
 
       heal(targetInstanceId, amount) {
         const target = findCharacter(state, targetInstanceId);
-        hp.heal(target, amount);
-        api.log(`${target.cardId} heals ${amount}`, { targetInstanceId, amount });
+        const boosted = evaluateTransform(state, 'getIncomingHealAmount', { targetInstanceId }, amount);
+        const finalAmount = Math.max(0, boosted);
+        hp.heal(target, finalAmount);
+        api.log(`${target.cardId} heals ${finalAmount}`, { targetInstanceId, amount: finalAmount });
       },
 
       raiseMaxHP(targetInstanceId, amount) {
         const target = findCharacter(state, targetInstanceId);
         hp.raiseMaxHP(target, amount);
         api.log(`${target.cardId} gains +${amount} max HP`, { targetInstanceId, amount });
+      },
+
+      addShield(targetInstanceId, amount) {
+        const target = findCharacter(state, targetInstanceId);
+        hp.addShield(target, amount);
+        api.log(`${target.cardId} gains ${amount} shield`, { targetInstanceId, amount, shield: target.shield });
+      },
+
+      removeShield(targetInstanceId, amount) {
+        const target = findCharacter(state, targetInstanceId);
+        hp.removeShield(target, amount);
+        api.log(`${target.cardId} loses shield`, { targetInstanceId, amount: amount ?? 'all', shield: target.shield });
       },
 
       applyStatus(targetInstanceId, status) {
@@ -497,6 +525,28 @@ export class Match {
         zones.attachObjectToCharacter(state, objectInstanceId, targetCharacterInstanceId);
       },
 
+      destroyObject(objectInstanceId) {
+        const owner = zones.findObjectOwner(state, objectInstanceId);
+        const obj = state.players[owner].objects[objectInstanceId];
+        zones.destroyObject(state, objectInstanceId);
+        api.log(`${obj?.cardId} is destroyed`, { objectInstanceId, ownerId: owner });
+      },
+
+      extendTerrain(terrainInstanceId, turns) {
+        const owner = zones.findTerrainOwner(state, terrainInstanceId);
+        const terrain = state.players[owner].terrains[terrainInstanceId];
+        zones.extendTerrainDuration(state, terrainInstanceId, turns);
+        api.log(`${terrain?.cardId}'s duration is extended by ${turns} turn(s)`, { terrainInstanceId, turns, remainingTurns: terrain?.remainingTurns });
+      },
+
+      async shortenTerrain(terrainInstanceId, turns) {
+        const owner = zones.findTerrainOwner(state, terrainInstanceId);
+        const terrain = state.players[owner].terrains[terrainInstanceId];
+        const cardId = terrain?.cardId;
+        await zones.shortenTerrainDuration(state, terrainInstanceId, turns, api);
+        api.log(`${cardId}'s duration is shortened by ${turns} turn(s)`, { terrainInstanceId, turns, remainingTurns: terrain?.remainingTurns });
+      },
+
       async switchActive(playerId, newActiveInstanceId) {
         await zones.switchActive(state, playerId, newActiveInstanceId, api);
       },
@@ -521,8 +571,8 @@ export class Match {
         return rngFlipCoin(state.rng);
       },
 
-      buildEffectContext(sourceInstanceId, ownerId, event) {
-        return buildEffectContext(state, sourceInstanceId, ownerId, api, event);
+      buildEffectContext(sourceInstanceId, ownerId, event, isAttackOrAbility) {
+        return buildEffectContext(state, sourceInstanceId, ownerId, api, event, isAttackOrAbility);
       },
     };
     return api;

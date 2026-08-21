@@ -1,5 +1,18 @@
 import type { CharacterInstance, GameState, PlayerId, StatusInstance } from './types.js';
 import type { EngineApi } from './engine-api.js';
+import { chancePercent } from './rng.js';
+
+/** Fixed damage-per-tick formulas -- not customizable via a status's `data`. */
+const BURN_DAMAGE = 50;
+const POISON_FLAT_DAMAGE = 10;
+const POISON_PERCENT_OF_MAX_HP = 0.1;
+
+/** Innate rates every character has on their attacks/abilities, with no status required. */
+const BASE_EVASION_CHANCE_PERCENT = 5;
+const BASE_CRITICAL_CHANCE_PERCENT = 2;
+/** Rates while the 'evasive'/'critical' status is present -- replaces the base rate, doesn't stack with it. */
+const EVASIVE_STATUS_CHANCE_PERCENT = 33;
+const CRITICAL_STATUS_CHANCE_PERCENT = 33;
 
 export function hasStatus(char: CharacterInstance, statusId: string): boolean {
   return char.statuses.some((s) => s.statusId === statusId);
@@ -21,6 +34,31 @@ export function isEvasive(char: CharacterInstance): boolean {
   return hasStatus(char, 'evasive');
 }
 
+export function isCritical(char: CharacterInstance): boolean {
+  return hasStatus(char, 'critical');
+}
+
+/**
+ * Esquive: every character has a base 5% chance to fully negate an incoming
+ * attack/ability (damage or status application), no status required. The
+ * 'evasive' status raises that to 33% while it's present (it replaces the
+ * base rate rather than stacking with it). Never consumed on a successful roll.
+ */
+export function rollEvasion(state: GameState, char: CharacterInstance): boolean {
+  const percent = isEvasive(char) ? EVASIVE_STATUS_CHANCE_PERCENT : BASE_EVASION_CHANCE_PERCENT;
+  return chancePercent(state.rng, percent);
+}
+
+/**
+ * Critique: every character has a base 2% chance for an attack/ability they
+ * deal damage with to double. The 'critical' status raises that to 33% while
+ * it's present (replaces the base rate, doesn't stack with it).
+ */
+export function rollCritical(state: GameState, char: CharacterInstance): boolean {
+  const percent = isCritical(char) ? CRITICAL_STATUS_CHANCE_PERCENT : BASE_CRITICAL_CHANCE_PERCENT;
+  return chancePercent(state.rng, percent);
+}
+
 export function isSilencedActive(char: CharacterInstance): boolean {
   return hasStatus(char, 'silence-active') || hasStatus(char, 'silence-ultimate');
 }
@@ -32,6 +70,13 @@ export function isSilencedPassive(char: CharacterInstance): boolean {
 export function getAtkReductionTotal(char: CharacterInstance): number {
   return char.statuses
     .filter((s) => s.statusId === 'atk-reduction')
+    .reduce((sum, s) => sum + Number(s.data?.['amount'] ?? 0), 0);
+}
+
+/** Symmetric counterpart to getAtkReductionTotal: sums every active "atk-boost" status's { amount }. */
+export function getAtkBoostTotal(char: CharacterInstance): number {
+  return char.statuses
+    .filter((s) => s.statusId === 'atk-boost')
     .reduce((sum, s) => sum + Number(s.data?.['amount'] ?? 0), 0);
 }
 
@@ -65,10 +110,11 @@ export async function tickStatusesAtTurnStart(state: GameState, playerId: Player
       if (!isActive && !tickAlwaysOnBench) continue; // suspended while benched
 
       if (tickAlwaysOnBench) {
-        const amount = Number(status.data?.['amount'] ?? 0);
+        const amount =
+          status.statusId === 'burn' ? BURN_DAMAGE : POISON_FLAT_DAMAGE + Math.round(char.currentMaxHP * POISON_PERCENT_OF_MAX_HP);
         if (amount > 0) {
-          api.log(`${status.statusId} inflicts ${amount} damage`, { characterInstanceId: instanceId, statusId: status.statusId });
-          await api.dealDamage(instanceId, amount);
+          api.log(`${status.statusId} inflicts ${amount} damage`, { characterInstanceId: instanceId, statusId: status.statusId, amount });
+          await api.dealDamage(instanceId, amount, { source: status.statusId });
         }
       }
 

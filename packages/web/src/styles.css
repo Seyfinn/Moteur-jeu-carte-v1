@@ -379,6 +379,9 @@ input {
   font-size: 0.68rem;
   color: var(--text-dim);
 }
+.shield-text {
+  color: #7fc7f2;
+}
 .statuses {
   display: flex;
   flex-wrap: wrap;
