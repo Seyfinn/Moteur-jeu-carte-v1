@@ -1,12 +1,13 @@
 export * from './types.js';
 export * from './rng.js';
-export { getCurrentHP, isKO, dealDamage, applyValeurLock, heal, raiseMaxHP } from './hp.js';
+export { getCurrentHP, isKO, dealDamage, applyValeurLock, heal, raiseMaxHP, addShield, removeShield, absorbWithShield } from './hp.js';
 export {
   hasStatus,
   getStatus,
   isStunned,
   isDisarmed,
   isEvasive,
+  isCritical,
   isSilencedActive,
   isSilencedPassive,
   getAtkReductionTotal,

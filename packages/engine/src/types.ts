@@ -23,9 +23,25 @@ export type BuiltinStatusId =
   | 'silence-passive'
   | 'silence-ultimate'
   | 'atk-reduction'
+  | 'atk-boost'
   | 'burn'
   | 'poison'
-  | 'evasive';
+  | 'evasive'
+  | 'critical'
+  | 'chained';
+
+export interface DealDamageOptions {
+  /** Bypasses shield entirely: damage hits `damage` directly, ignoring any current `shield` value. */
+  ignoreShield?: boolean;
+  /**
+   * Skips this call's own esquive roll -- for effects that already resolved a
+   * single shared roll via `ctx.rollEvasion()` and are applying its outcome
+   * across multiple calls (e.g. damage + a status from the same hit).
+   */
+  skipEvasionRoll?: boolean;
+  /** Tags where this damage instance comes from (e.g. 'burn', 'poison') so a card can react to that specific source via getIncomingDamageAmount, without affecting unrelated damage. Absent for ordinary attack/ability damage. */
+  source?: string;
+}
 
 export interface StatusInstance {
   statusId: BuiltinStatusId | (string & {});
@@ -40,7 +56,10 @@ export interface StatusInstance {
    * bench (still applies mechanically, just doesn't count down).
    */
   ticksOnBench?: boolean;
-  /** Effect-specific payload, e.g. { amount: 20 } for atk-reduction/burn/poison. */
+  /**
+   * Effect-specific payload, e.g. { amount: 20 } for atk-reduction/atk-boost.
+   * Burn/poison damage is a fixed engine formula and ignores `data`.
+   */
   data?: Record<string, unknown>;
 }
 
@@ -58,6 +77,13 @@ export interface CharacterInstance {
   currentMaxHP: number;
   /** Accumulated ordinary damage. Healable. Always <= currentMaxHP (excess KOs). */
   damage: number;
+  /**
+   * Shield: extra HP stacked on top of the normal pool. Absorbs ordinary
+   * damage before it touches `damage`, persists while benched, and is never
+   * restored by `heal`. Only `addShield`/`removeShield` (and damage
+   * absorption) change it.
+   */
+  shield: number;
   statuses: StatusInstance[];
   attachedObjectInstanceIds: string[];
   abilityUsesThisTurn: Record<string, number>;

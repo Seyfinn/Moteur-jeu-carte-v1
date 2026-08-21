@@ -42,6 +42,7 @@ export function validateRoster(roster: RosterConfig): RosterValidation {
     }
 
     const copies = new Map<string, number>();
+    const maxCopiesById = new Map<string, number>();
     for (const id of ids) {
       let def;
       try {
@@ -53,10 +54,12 @@ export function validateRoster(roster: RosterConfig): RosterValidation {
         return { ok: false, error: `"${id}" n'est pas une carte ${group.label}` };
       }
       copies.set(id, (copies.get(id) ?? 0) + 1);
+      maxCopiesById.set(id, def.maxCopies ?? DECK_LIMITS.maxCopiesPerCard);
     }
     for (const [id, count] of copies) {
-      if (count > DECK_LIMITS.maxCopiesPerCard) {
-        return { ok: false, error: `Trop d'exemplaires de "${id}" (max ${DECK_LIMITS.maxCopiesPerCard})` };
+      const maxCopies = maxCopiesById.get(id)!;
+      if (count > maxCopies) {
+        return { ok: false, error: `Trop d'exemplaires de "${id}" (max ${maxCopies})` };
       }
     }
   }

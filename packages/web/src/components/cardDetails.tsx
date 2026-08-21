@@ -10,6 +10,7 @@ export function characterDetailBody(cardId: string, instance?: CharacterInstance
         {instance ? (
           <>
             {currentHP} / {instance.currentMaxHP} HP
+            {instance.shield > 0 && <span className="shield-text"> +{instance.shield} 🛡</span>}
           </>
         ) : (
           <>{def.baseMaxHP} HP</>

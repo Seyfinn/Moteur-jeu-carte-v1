@@ -37,3 +37,27 @@ export function raiseMaxHP(char: CharacterInstance, amount: number): void {
   if (amount <= 0) return;
   char.currentMaxHP += amount;
 }
+
+/** Adds shield points, stacking on top of any shield already present. */
+export function addShield(char: CharacterInstance, amount: number): void {
+  if (amount <= 0) return;
+  char.shield += amount;
+}
+
+/** Strips shield points directly (not via damage). `amount` undefined clears it entirely. */
+export function removeShield(char: CharacterInstance, amount?: number): void {
+  if (amount === undefined) {
+    char.shield = 0;
+    return;
+  }
+  if (amount <= 0) return;
+  char.shield = Math.max(0, char.shield - amount);
+}
+
+/** Consumes up to `amount` of the character's shield, returning how much was absorbed. */
+export function absorbWithShield(char: CharacterInstance, amount: number): number {
+  if (amount <= 0 || char.shield <= 0) return 0;
+  const absorbed = Math.min(char.shield, amount);
+  char.shield -= absorbed;
+  return absorbed;
+}

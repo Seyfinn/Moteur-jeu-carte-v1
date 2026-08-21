@@ -47,6 +47,7 @@ export function CharacterCard({
           </div>
           <div className="hp-text">
             {currentHP} / {char.currentMaxHP} HP
+            {char.shield > 0 && <span className="shield-text"> +{char.shield} 🛡</span>}
           </div>
           {char.statuses.length > 0 && (
             <div className="statuses">

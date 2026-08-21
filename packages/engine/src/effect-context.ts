@@ -2,6 +2,7 @@ import type { EffectContext } from './cards/types.js';
 import type { EngineApi } from './engine-api.js';
 import { isKO } from './hp.js';
 import { findCharacter, getEffectiveATK } from './queries.js';
+import { rollCritical, rollEvasion } from './statuses.js';
 import { otherPlayer, type EngineEvent, type GameState, type PlayerId } from './types.js';
 
 export function buildEffectContext(
@@ -9,7 +10,8 @@ export function buildEffectContext(
   sourceInstanceId: string,
   ownerId: PlayerId,
   api: EngineApi,
-  event?: EngineEvent
+  event?: EngineEvent,
+  isAttackOrAbility = true
 ): EffectContext {
   const opponentId = otherPlayer(ownerId);
 
@@ -87,8 +89,27 @@ export function buildEffectContext(
       return isKO(findCharacter(state, characterInstanceId));
     },
 
-    async dealDamage(targetInstanceId, amount) {
-      await api.dealDamage(targetInstanceId, amount);
+    async dealDamage(targetInstanceId, amount, options) {
+      // Critique/esquive (innate or status-driven) only apply to attacks and
+      // abilities, never to object-card effects, self-inflicted damage, or
+      // poison/burn ticks (those call api.dealDamage directly, bypassing this
+      // context entirely).
+      if (!options?.skipEvasionRoll && isAttackOrAbility && targetInstanceId !== sourceInstanceId) {
+        const target = findCharacter(state, targetInstanceId);
+        if (rollEvasion(state, target)) {
+          api.log(`${target.cardId} esquive l'attaque`, { targetInstanceId, sourceInstanceId });
+          return;
+        }
+      }
+
+      let finalAmount = amount;
+      const source = isAttackOrAbility ? state.players[ownerId].characters[sourceInstanceId] : undefined;
+      if (source && rollCritical(state, source)) {
+        finalAmount = amount * 2;
+        api.log(`${source.cardId} inflige un coup critique !`, { sourceInstanceId, targetInstanceId, baseAmount: amount, amount: finalAmount });
+      }
+
+      await api.dealDamage(targetInstanceId, finalAmount, options);
     },
     async applyValeurLock(targetInstanceId, amount) {
       await api.applyValeurLock(targetInstanceId, amount);
@@ -99,9 +120,32 @@ export function buildEffectContext(
     raiseMaxHP(targetInstanceId, amount) {
       api.raiseMaxHP(targetInstanceId, amount);
     },
+    addShield(targetInstanceId, amount) {
+      api.addShield(targetInstanceId, amount);
+    },
+    removeShield(targetInstanceId, amount) {
+      api.removeShield(targetInstanceId, amount);
+    },
 
-    applyStatus(targetInstanceId, status) {
+    applyStatus(targetInstanceId, status, options) {
+      // Same esquive scoping as dealDamage: attacks/abilities only, never self-applied.
+      if (!options?.skipEvasionRoll && isAttackOrAbility && targetInstanceId !== sourceInstanceId) {
+        const target = findCharacter(state, targetInstanceId);
+        if (rollEvasion(state, target)) {
+          api.log(`${target.cardId} esquive l'altération ${status.statusId}`, { targetInstanceId, statusId: status.statusId, sourceInstanceId });
+          return;
+        }
+      }
       api.applyStatus(targetInstanceId, status);
+    },
+    rollEvasion(targetInstanceId) {
+      if (!isAttackOrAbility || targetInstanceId === sourceInstanceId) return false;
+      const target = findCharacter(state, targetInstanceId);
+      const evaded = rollEvasion(state, target);
+      if (evaded) {
+        api.log(`${target.cardId} esquive`, { targetInstanceId, sourceInstanceId });
+      }
+      return evaded;
     },
     removeStatus(targetInstanceId, statusId) {
       api.removeStatus(targetInstanceId, statusId);
@@ -117,6 +161,17 @@ export function buildEffectContext(
 
     attachSelfTo(targetCharacterInstanceId) {
       api.attachObject(sourceInstanceId, targetCharacterInstanceId);
+    },
+
+    destroyObject(objectInstanceId) {
+      api.destroyObject(objectInstanceId);
+    },
+
+    extendTerrain(terrainInstanceId, turns) {
+      api.extendTerrain(terrainInstanceId, turns);
+    },
+    async shortenTerrain(terrainInstanceId, turns) {
+      await api.shortenTerrain(terrainInstanceId, turns);
     },
 
     async forceSwitch(playerId, newActiveInstanceId) {

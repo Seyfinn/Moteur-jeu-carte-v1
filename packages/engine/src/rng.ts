@@ -30,6 +30,11 @@ export function randomInt(state: RngState, maxExclusive: number): number {
   return nextUint32(state) % maxExclusive;
 }
 
+/** True `percent` out of 100 times (0-100). Used for crit/evasion-style rolls. */
+export function chancePercent(state: RngState, percent: number): boolean {
+  return randomInt(state, 100) < percent;
+}
+
 export function pickRandom<T>(state: RngState, items: readonly T[]): T {
   if (items.length === 0) throw new Error('cannot pick from empty array');
   const item = items[randomInt(state, items.length)];

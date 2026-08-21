@@ -98,6 +98,7 @@ export function reviveCharacter(state: GameState, characterInstanceId: string, h
   const char = player.characters[characterInstanceId]!;
   char.currentMaxHP = Math.max(char.currentMaxHP, hp);
   char.damage = Math.max(0, char.currentMaxHP - hp);
+  char.shield = 0;
   char.statuses = [];
 
   if (placement === 'active' && player.activeCharacterInstanceId === null) {
@@ -127,6 +128,7 @@ export function createCharacterClone(
     baseMaxHP: cardDef.baseMaxHP,
     currentMaxHP: hp,
     damage: 0,
+    shield: 0,
     statuses: [],
     attachedObjectInstanceIds: [],
     abilityUsesThisTurn: {},
@@ -218,6 +220,30 @@ export function moveObjectToGraveyard(state: GameState, playerId: PlayerId, obje
   }
 }
 
+export function findObjectOwner(state: GameState, objectInstanceId: string): PlayerId {
+  for (const playerId of ['p1', 'p2'] as PlayerId[]) {
+    if (state.players[playerId].objects[objectInstanceId]) return playerId;
+  }
+  throw new Error(`Unknown object instance "${objectInstanceId}"`);
+}
+
+/** Destroys an in-play object regardless of owner: detaches it from its character (if equipped) and sends it to the graveyard. */
+export function destroyObject(state: GameState, objectInstanceId: string): void {
+  const ownerId = findObjectOwner(state, objectInstanceId);
+  const player = state.players[ownerId];
+  const obj = player.objects[objectInstanceId];
+  if (!obj) return;
+  if (obj.attachedToCharacterInstanceId) {
+    const char = player.characters[obj.attachedToCharacterInstanceId];
+    if (char) {
+      const idx = char.attachedObjectInstanceIds.indexOf(objectInstanceId);
+      if (idx !== -1) char.attachedObjectInstanceIds.splice(idx, 1);
+    }
+    obj.attachedToCharacterInstanceId = undefined;
+  }
+  moveObjectToGraveyard(state, ownerId, objectInstanceId);
+}
+
 /** Section 8: posing a new terrain sends the previous one to the graveyard. */
 export function moveTerrainFromPoolToActive(state: GameState, playerId: PlayerId, terrainInstanceId: string): TerrainInstance | undefined {
   const player = state.players[playerId];
@@ -239,4 +265,77 @@ export function removeActiveTerrain(state: GameState, playerId: PlayerId): void 
   if (!player.activeTerrainInstanceId) return;
   player.graveyardTerrainInstanceIds.push(player.activeTerrainInstanceId);
   player.activeTerrainInstanceId = null;
+}
+
+async function expireTerrainIfDepleted(
+  state: GameState,
+  playerId: PlayerId,
+  terrainInstanceId: string,
+  terrain: TerrainInstance,
+  api: EngineApi
+): Promise<void> {
+  if (terrain.remainingTurns === undefined || terrain.remainingTurns > 0) return;
+  removeActiveTerrain(state, playerId);
+  api.log(`Terrain expires`, { terrainInstanceId });
+  await api.emitEvent({ name: 'onTerrainRemoved', playerId, data: { terrainInstanceId } });
+}
+
+/**
+ * Mirrors tickStatusesAtTurnStart (statuses.ts): a terrain with a defined
+ * durationTurns counts down only during its owner's own turns, and is
+ * removed (graveyard + onTerrainRemoved) once it hits 0. A terrain with no
+ * durationTurns (undefined) never ticks -- it stays until replaced/removed.
+ */
+export async function tickTerrainAtTurnStart(state: GameState, playerId: PlayerId, api: EngineApi): Promise<void> {
+  const player = state.players[playerId];
+  const terrainInstanceId = player.activeTerrainInstanceId;
+  if (!terrainInstanceId) return;
+  const terrain = player.terrains[terrainInstanceId];
+  if (!terrain || terrain.remainingTurns === undefined) return;
+
+  terrain.remainingTurns -= 1;
+  await expireTerrainIfDepleted(state, playerId, terrainInstanceId, terrain, api);
+}
+
+export function findTerrainOwner(state: GameState, terrainInstanceId: string): PlayerId {
+  for (const playerId of ['p1', 'p2'] as PlayerId[]) {
+    if (state.players[playerId].terrains[terrainInstanceId]) return playerId;
+  }
+  throw new Error(`Unknown terrain instance "${terrainInstanceId}"`);
+}
+
+/**
+ * Adds `turns` to a currently-active terrain's remaining duration (own or
+ * opponent's). No-op on an indefinite terrain (no durationTurns declared) or
+ * on a terrain that isn't the active one for its owner anymore.
+ */
+export function extendTerrainDuration(state: GameState, terrainInstanceId: string, turns: number): void {
+  const playerId = findTerrainOwner(state, terrainInstanceId);
+  const player = state.players[playerId];
+  if (player.activeTerrainInstanceId !== terrainInstanceId) return;
+  const terrain = player.terrains[terrainInstanceId]!;
+  if (terrain.remainingTurns === undefined) return;
+  terrain.remainingTurns += turns;
+}
+
+/**
+ * Removes `turns` from a currently-active terrain's remaining duration (own
+ * or opponent's), expiring it immediately (graveyard + onTerrainRemoved) if
+ * this brings it to 0 or below -- same outcome as running out the clock
+ * naturally via tickTerrainAtTurnStart. No-op on an indefinite terrain or on
+ * a terrain that isn't the active one for its owner anymore.
+ */
+export async function shortenTerrainDuration(
+  state: GameState,
+  terrainInstanceId: string,
+  turns: number,
+  api: EngineApi
+): Promise<void> {
+  const playerId = findTerrainOwner(state, terrainInstanceId);
+  const player = state.players[playerId];
+  if (player.activeTerrainInstanceId !== terrainInstanceId) return;
+  const terrain = player.terrains[terrainInstanceId]!;
+  if (terrain.remainingTurns === undefined) return;
+  terrain.remainingTurns -= turns;
+  await expireTerrainIfDepleted(state, playerId, terrainInstanceId, terrain, api);
 }

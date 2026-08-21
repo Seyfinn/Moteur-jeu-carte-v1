@@ -25,7 +25,20 @@ describe('KO, mandatory replacement and win condition (sections 2 & 5)', () => {
     const attackerActive = match.state.players[attacker].activeCharacterInstanceId!;
     const defenderActiveBefore = match.state.players[defender].activeCharacterInstanceId!;
 
-    await drive(match, attacker, { kind: 'attack', characterInstanceId: attackerActive, attackId: 'shatter' });
+    // "shatter" always deals exactly fx-glass's max HP, but every character's
+    // innate ~5% dodge chance can occasionally make a single hit whiff --
+    // retry (passing the defender's turn back) until it actually lands.
+    for (
+      let i = 0;
+      i < 10 && !match.state.players[defender].graveyardCharacterInstanceIds.includes(defenderActiveBefore);
+      i++
+    ) {
+      if (match.state.activePlayerId === attacker) {
+        await drive(match, attacker, { kind: 'attack', characterInstanceId: attackerActive, attackId: 'shatter' });
+      } else {
+        await drive(match, defender, { kind: 'pass' });
+      }
+    }
 
     expect(match.state.players[defender].graveyardCharacterInstanceIds).toContain(defenderActiveBefore);
     expect(match.state.players[defender].activeCharacterInstanceId).not.toBeNull();

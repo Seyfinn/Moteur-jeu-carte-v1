@@ -59,6 +59,7 @@ function SelectCharacters({
               footer={
                 <div className="hp-text">
                   {currentHP} / {instance.currentMaxHP} HP
+                  {instance.shield > 0 && <span className="shield-text"> +{instance.shield} 🛡</span>}
                 </div>
               }
             />
