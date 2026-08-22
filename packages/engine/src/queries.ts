@@ -3,6 +3,7 @@ import type { AbilityDef, ModifierDef, ModifierEvalContext, QueryName, Vote } fr
 import { getCharacterCard, getObjectCard, getTerrainCard } from './cards/registry.js';
 import {
   getAtkBoostTotal,
+  getAtkMultiplierTotal,
   getAtkReductionTotal,
   hasStatus,
   isDisarmed,
@@ -197,7 +198,8 @@ export function canPlayObject(state: GameState, playerId: PlayerId): PermissionR
 export function getEffectiveATK(state: GameState, characterInstanceId: string, baseATK: number): number {
   const char = findCharacter(state, characterInstanceId);
   const transformed = evaluateTransform(state, 'getEffectiveATK', { characterInstanceId }, baseATK);
-  return Math.max(0, transformed + getAtkBoostTotal(char) - getAtkReductionTotal(char));
+  const withBoosts = Math.max(0, transformed + getAtkBoostTotal(char) - getAtkReductionTotal(char));
+  return Math.round(withBoosts * getAtkMultiplierTotal(char));
 }
 
 /** Defaults to the base x2 critical multiplier; a card (e.g. a terrain) can transform it for a specific attacker. */

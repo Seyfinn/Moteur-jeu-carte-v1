@@ -176,6 +176,51 @@ const fxHealObject: ObjectCardDef = {
   },
 };
 
+/** Test-only mirror of the "Miroir de Renvoi" demo card: attaches to the owner active, reflects a percentage of the next hit back to the attacker, then self-destroys. */
+const fxMirrorObject: ObjectCardDef = {
+  type: 'object',
+  id: 'fx-mirror-object',
+  name: 'Fixture Mirror Object',
+  description: 'Attaches to the owner active; reflects 50% of the next hit back to the attacker, then self-destroys.',
+  async execute(ctx) {
+    const active = ctx.getActive(ctx.ownerId);
+    if (!active) return;
+    ctx.attachSelfTo(active.instanceId);
+    ctx.applyStatus(active.instanceId, {
+      statusId: 'miroir-de-renvoi',
+      label: 'Fixture Mirror',
+      sourceCardInstanceId: ctx.sourceInstanceId,
+      data: { percent: 50, objectInstanceId: ctx.sourceInstanceId },
+    });
+  },
+};
+
+/** Test-only mirror of "Adrénaline Ultime": requires >=150 current HP to play, drops it to 10, doubles this turn's (getEffectiveATK-routed) attack damage. */
+const fxAdrenalineObject: ObjectCardDef = {
+  type: 'object',
+  id: 'fx-adrenaline-object',
+  name: 'Fixture Adrenaline Object',
+  description: 'Requires the owner active to have >=150 HP; drops it to 10 and doubles its attack damage this turn.',
+  condition(ctx) {
+    const active = ctx.getActive(ctx.ownerId);
+    if (!active) return false;
+    return active.currentMaxHP - active.damage >= 150;
+  },
+  async execute(ctx) {
+    const active = ctx.getActive(ctx.ownerId);
+    if (!active) return;
+    const currentHP = active.currentMaxHP - active.damage;
+    const toLose = currentHP - 10;
+    if (toLose > 0) await ctx.dealDamage(active.instanceId, toLose);
+    ctx.applyStatus(active.instanceId, {
+      statusId: 'atk-multiplier',
+      label: 'Fixture Adrenaline',
+      data: { multiplier: 2 },
+      remainingTurns: 1,
+    });
+  },
+};
+
 const fxAuraTerrain: TerrainCardDef = {
   type: 'terrain',
   id: 'fx-aura-terrain',
@@ -240,6 +285,30 @@ const fxCritBoostTerrain: TerrainCardDef = {
   ],
 };
 
+/** Test-only mirror of Muzan's "Sang Maudit": while active, poison on enemy characters (any source) ticks as valeur lock instead of ordinary damage -- rechecked every tick, never affects its own side. */
+const fxPoisonCurse: CharacterCardDef = {
+  type: 'character',
+  id: 'fx-poison-curse',
+  name: 'Fixture Poison Curse',
+  baseMaxHP: 200,
+  abilities: [],
+  attacks: [],
+  modifiers: [
+    {
+      query: 'poisonTicksAsValeurLock',
+      isActive(ctx) {
+        return ctx.state.players[ctx.sourceOwnerId].activeCharacterInstanceId === ctx.sourceInstanceId;
+      },
+      vote(ctx) {
+        const targetInstanceId = ctx.query['targetInstanceId'] as string;
+        const target = findCharacter(ctx.state, targetInstanceId);
+        if (target.ownerId === ctx.sourceOwnerId) return undefined;
+        return { allow: true, source: 'fx-poison-curse' };
+      },
+    },
+  ],
+};
+
 let registered = false;
 
 export function registerTestFixtures(): void {
@@ -255,6 +324,9 @@ export function registerTestFixtures(): void {
   registerCard(fxShieldNullifierTerrain);
   registerCard(fxCritBoostTerrain);
   registerCard(fxTransformer);
+  registerCard(fxPoisonCurse);
+  registerCard(fxMirrorObject);
+  registerCard(fxAdrenalineObject);
 }
 
 export const FX_ROSTER: RosterConfig = {
@@ -277,4 +349,36 @@ export const TRANSFORMER_ROSTER: RosterConfig = {
   terrainCardIds: [],
 };
 
-export { fxStriker, fxTank, fxStunner, fxGlass, fxTransformer, fxHealObject, fxAuraTerrain };
+/** Poison-curse fixture on p1 slot 1, a plain tank as its own bench-mate on slot 2 -- lets tests pick which side is active. */
+export const POISON_CURSE_ROSTER: RosterConfig = {
+  characterCardIds: [fxPoisonCurse.id, fxTank.id],
+  objectCardIds: [],
+  terrainCardIds: [],
+};
+
+/** fxStriker/fxTank plus the mirror object in the unplayed pool -- lets tests play it and immediately attack back and forth. */
+export const MIRROR_ROSTER: RosterConfig = {
+  characterCardIds: [fxStriker.id, fxTank.id],
+  objectCardIds: [fxMirrorObject.id],
+  terrainCardIds: [],
+};
+
+/** fxStriker/fxTank plus the adrenaline object in the unplayed pool. */
+export const ADRENALINE_ROSTER: RosterConfig = {
+  characterCardIds: [fxStriker.id, fxTank.id],
+  objectCardIds: [fxAdrenalineObject.id],
+  terrainCardIds: [],
+};
+
+export {
+  fxStriker,
+  fxTank,
+  fxStunner,
+  fxGlass,
+  fxTransformer,
+  fxPoisonCurse,
+  fxMirrorObject,
+  fxAdrenalineObject,
+  fxHealObject,
+  fxAuraTerrain,
+};

@@ -26,6 +26,7 @@ export type BuiltinStatusId =
   | 'atk-boost'
   | 'burn'
   | 'poison'
+  | 'bleed'
   | 'evasive'
   | 'critical'
   | 'chained';
@@ -41,6 +42,13 @@ export interface DealDamageOptions {
   skipEvasionRoll?: boolean;
   /** Tags where this damage instance comes from (e.g. 'burn', 'poison') so a card can react to that specific source via getIncomingDamageAmount, without affecting unrelated damage. Absent for ordinary attack/ability damage. */
   source?: string;
+  /**
+   * Routes the final computed amount (after esquive/critique/"couteau dans le dos")
+   * into applyValeurLock instead of ordinary damage -- e.g. Mahito's "Altération de
+   * l'Âme". Esquive/critique still resolve normally beforehand; only the destination
+   * of the resulting number changes.
+   */
+  asValeurLock?: boolean;
 }
 
 export interface StatusInstance {
@@ -134,6 +142,8 @@ export interface PlayerState {
 
   objectsPlayedThisTurn: number;
   hasHadFirstTurn: boolean;
+  /** Once true, getPlayerView (section 1) stops redacting the OPPONENT's unplayed object/terrain instances for this player -- e.g. Kirigiri's "Ultimate Détective". Never reset once set. */
+  revealsOpponentUnplayedCards: boolean;
 }
 
 export type GamePhase = 'setup' | 'main' | 'ended';

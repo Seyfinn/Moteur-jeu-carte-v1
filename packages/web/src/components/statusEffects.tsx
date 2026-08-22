@@ -15,12 +15,14 @@ interface StatusVisual {
     | 'mute'
     | 'sparkle'
     | 'lock'
-    | 'shield';
+    | 'shield'
+    | 'drip';
 }
 
 const STATUS_VISUALS: Record<string, StatusVisual> = {
   poison: { className: 'fx-poison', particles: 'bubbles' },
   burn: { className: 'fx-burn', particles: 'embers' },
+  bleed: { className: 'fx-bleed', particles: 'drip' },
   chained: { className: 'fx-chained', particles: 'chain' },
   'atk-boost': { className: 'fx-atk-boost', particles: 'arrow-up' },
   'atk-reduction': { className: 'fx-atk-reduction', particles: 'arrow-down' },
@@ -59,6 +61,14 @@ function Particles({ kind }: { kind: StatusVisual['particles'] }) {
           <span className="fx-ember" style={{ left: '25%', animationDelay: '0s' }} />
           <span className="fx-ember" style={{ left: '55%', animationDelay: '0.3s' }} />
           <span className="fx-ember" style={{ left: '78%', animationDelay: '0.6s' }} />
+        </>
+      );
+    case 'drip':
+      return (
+        <>
+          <span className="fx-drip" style={{ left: '30%', animationDelay: '0s' }} />
+          <span className="fx-drip" style={{ left: '55%', animationDelay: '0.4s' }} />
+          <span className="fx-drip" style={{ left: '72%', animationDelay: '0.8s' }} />
         </>
       );
     case 'chain':

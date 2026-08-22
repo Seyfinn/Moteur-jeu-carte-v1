@@ -15,6 +15,8 @@ export interface EngineApi {
 
   dealDamage(targetInstanceId: string, amount: number, options?: DealDamageOptions): Promise<void>;
   applyValeurLock(targetInstanceId: string, amount: number): Promise<void>;
+  /** Lets a card's modifier (query 'poisonTicksAsValeurLock') redirect a poison tick into an unhealable max-HP loss instead of ordinary damage -- checked fresh at every tick. */
+  poisonTicksAsValeurLock(targetInstanceId: string): boolean;
   heal(targetInstanceId: string, amount: number): void;
   raiseMaxHP(targetInstanceId: string, amount: number): void;
   addShield(targetInstanceId: string, amount: number): void;

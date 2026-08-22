@@ -21,7 +21,11 @@ export function characterDetailBody(cardId: string, instance?: CharacterInstance
           {instance.statuses.map((s, i) => (
             <span key={i} className="status-badge" title={s.label}>
               {s.statusId}
-              {s.remainingTurns !== undefined ? ` (${s.remainingTurns})` : ''}
+              {s.remainingTurns !== undefined
+                ? ` (${s.remainingTurns})`
+                : s.statusId === 'bleed'
+                  ? ` (${Number(s.data?.['stacks'] ?? 1)})`
+                  : ''}
             </span>
           ))}
         </div>
