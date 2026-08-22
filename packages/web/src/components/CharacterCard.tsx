@@ -92,7 +92,10 @@ export function CharacterCard({
       footer={
         <>
           <div className="hp-bar">
-            <div className="hp-bar-fill" style={{ width: `${pct}%` }} />
+            <div
+              className={`hp-bar-fill${pct <= 25 ? ' low' : pct <= 50 ? ' mid' : ''}`}
+              style={{ width: `${pct}%` }}
+            />
           </div>
           <div className="hp-text">
             {currentHP} / {char.currentMaxHP} HP
