@@ -18,7 +18,16 @@ import { recordAbilityUse } from './abilities.js';
 import * as hp from './hp.js';
 import * as statusesMod from './statuses.js';
 import * as zones from './zones.js';
-import { canAttack, canPlayObject, canSwitchStandard, canUseAbility, evaluateTransform, findCharacter, getMaxAttachedObjects } from './queries.js';
+import {
+  canAttack,
+  canPlayObject,
+  canSwitchStandard,
+  canUseAbility,
+  evaluatePermission,
+  evaluateTransform,
+  findCharacter,
+  getMaxAttachedObjects,
+} from './queries.js';
 import { endTurn, startTurn } from './turn.js';
 import { getPlayerView } from './view.js';
 
@@ -377,7 +386,7 @@ export class Match {
     this.api.log(`${playerId} plays object ${def.name}`, { objectInstanceId, cardId: def.id });
     await this.api.emitEvent({ name: 'onObjectPlayed', playerId, data: { objectInstanceId } });
 
-    const ctx = this.api.buildEffectContext(objectInstanceId, playerId, undefined, false); // object effect, not an attack/ability
+    const ctx = this.api.buildEffectContext(objectInstanceId, playerId, undefined, 'other'); // object effect, not an attack/ability
     await def.execute(ctx);
 
     if (!obj.attachedToCharacterInstanceId) {
@@ -421,7 +430,7 @@ export class Match {
     await this.api.emitEvent({ name: 'onAttackDeclared', playerId, data: { characterInstanceId, attackId } });
     if (state.result) return true;
 
-    const ctx = this.api.buildEffectContext(characterInstanceId, playerId);
+    const ctx = this.api.buildEffectContext(characterInstanceId, playerId, undefined, 'attack');
     await attack.execute(ctx);
 
     if (state.result) return true;
@@ -441,7 +450,8 @@ export class Match {
         let finalAmount = Math.max(0, reduced);
 
         let shieldAbsorbed = 0;
-        if (!options?.ignoreShield) {
+        const shieldPermission = evaluatePermission(state, 'canShieldAbsorb', { targetInstanceId }, true);
+        if (!options?.ignoreShield && shieldPermission.allow) {
           shieldAbsorbed = hp.absorbWithShield(target, finalAmount);
           finalAmount -= shieldAbsorbed;
           if (shieldAbsorbed > 0) {
@@ -451,6 +461,10 @@ export class Match {
               shieldRemaining: target.shield,
             });
           }
+        }
+
+        if (statusesMod.hasDeathWard(target)) {
+          finalAmount = Math.min(finalAmount, Math.max(0, hp.getCurrentHP(target) - 1));
         }
 
         hp.dealDamage(target, finalAmount);
@@ -509,6 +523,13 @@ export class Match {
         await zones.koCharacter(state, characterInstanceId, api);
       },
 
+      async reviveCharacter(characterInstanceId, hp, placement) {
+        const ownerId = zones.findCharacterOwner(state, characterInstanceId);
+        zones.reviveCharacter(state, characterInstanceId, hp, placement);
+        api.log(`${ownerId}'s ${characterInstanceId} is revived`, { characterInstanceId, hp, placement });
+        await api.emitEvent({ name: 'onCharacterRevived', playerId: ownerId, data: { characterInstanceId } });
+      },
+
       swapBenchCharacters(forPlayer, ownBenchInstanceId, enemyBenchInstanceId) {
         zones.swapBenchCharacters(state, forPlayer, ownBenchInstanceId, enemyBenchInstanceId);
       },
@@ -547,12 +568,31 @@ export class Match {
         api.log(`${cardId}'s duration is shortened by ${turns} turn(s)`, { terrainInstanceId, turns, remainingTurns: terrain?.remainingTurns });
       },
 
+      async destroyTerrain(terrainInstanceId) {
+        const owner = zones.findTerrainOwner(state, terrainInstanceId);
+        const player = state.players[owner];
+        if (player.activeTerrainInstanceId !== terrainInstanceId) return;
+        const cardId = player.terrains[terrainInstanceId]?.cardId;
+        zones.removeActiveTerrain(state, owner);
+        api.log(`${cardId} is destroyed`, { terrainInstanceId });
+        await api.emitEvent({ name: 'onTerrainRemoved', playerId: owner, data: { terrainInstanceId } });
+      },
+
       async switchActive(playerId, newActiveInstanceId) {
         await zones.switchActive(state, playerId, newActiveInstanceId, api);
       },
 
       cloneCharacter(ownerId, sourceInstanceId, hpAmount, placement) {
         return zones.createCharacterClone(state, ownerId, sourceInstanceId, hpAmount, placement);
+      },
+
+      createObject(ownerId, cardId) {
+        const instanceId = randomUUID();
+        const player = state.players[ownerId];
+        player.objects[instanceId] = { instanceId, cardId, ownerId };
+        player.unplayedObjectInstanceIds.push(instanceId);
+        api.log(`${ownerId} gains a new object: ${cardId}`, { instanceId, cardId });
+        return instanceId;
       },
 
       async emitEvent(event) {
@@ -571,8 +611,8 @@ export class Match {
         return rngFlipCoin(state.rng);
       },
 
-      buildEffectContext(sourceInstanceId, ownerId, event, isAttackOrAbility) {
-        return buildEffectContext(state, sourceInstanceId, ownerId, api, event, isAttackOrAbility);
+      buildEffectContext(sourceInstanceId, ownerId, event, damageSource) {
+        return buildEffectContext(state, sourceInstanceId, ownerId, api, event, damageSource);
       },
     };
     return api;

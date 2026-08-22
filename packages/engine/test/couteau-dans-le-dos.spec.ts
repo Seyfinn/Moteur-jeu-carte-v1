@@ -1,0 +1,54 @@
+import { beforeAll, describe, expect, it } from 'vitest';
+import { type EngineApi } from '../src/index.js';
+import { registerTestFixtures, FX_ROSTER } from './fixtures.js';
+import { createReadyMatch } from './test-utils.js';
+
+beforeAll(() => {
+  registerTestFixtures();
+});
+
+describe('"Couteau dans le dos" mechanism (bench-damage doubling from any of the owner\'s characters) -- through the engine', () => {
+  it('doubles damage dealt to the enemy bench, but not to the enemy active', async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: FX_ROSTER, p2Roster: FX_ROSTER, seed: 70 },
+      { p1ActiveCardId: 'fx-striker', p2ActiveCardId: 'fx-tank' }
+    );
+    const attackerId = match.state.activePlayerId;
+    const defenderId = attackerId === 'p1' ? 'p2' : 'p1';
+    const attacker = match.state.players[attackerId].characters[match.state.players[attackerId].activeCharacterInstanceId!]!;
+    attacker.statuses.push({ statusId: 'couteau-dans-le-dos', label: 'Couteau dans le dos', remainingTurns: 2 });
+
+    const defenderActiveId = match.state.players[defenderId].activeCharacterInstanceId!;
+    const defenderBenchId = match.state.players[defenderId].benchCharacterInstanceIds[0]!;
+    const api = match['api'] as EngineApi;
+    const ctx = api.buildEffectContext(attacker.instanceId, attackerId, undefined, 'ability');
+
+    await ctx.dealDamage(defenderBenchId, 10, { skipEvasionRoll: true });
+    await ctx.dealDamage(defenderActiveId, 10, { skipEvasionRoll: true });
+
+    expect(match.state.players[defenderId].characters[defenderBenchId]!.damage).toBe(20); // doubled
+    expect(match.state.players[defenderId].characters[defenderActiveId]!.damage).toBe(10); // untouched, not benched
+  });
+
+  it("a bench-mate of the caster (not just their active) also benefits from the buff", async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: FX_ROSTER, p2Roster: FX_ROSTER, seed: 71 },
+      { p1ActiveCardId: 'fx-striker', p2ActiveCardId: 'fx-tank' }
+    );
+    const attackerId = match.state.activePlayerId;
+    const defenderId = attackerId === 'p1' ? 'p2' : 'p1';
+    const benchAllyId = match.state.players[attackerId].benchCharacterInstanceIds[0]!;
+    match.state.players[attackerId].characters[benchAllyId]!.statuses.push({
+      statusId: 'couteau-dans-le-dos',
+      label: 'Couteau dans le dos',
+      remainingTurns: 2,
+    });
+
+    const defenderBenchId = match.state.players[defenderId].benchCharacterInstanceIds[0]!;
+    const api = match['api'] as EngineApi;
+    const ctx = api.buildEffectContext(benchAllyId, attackerId, undefined, 'ability');
+    await ctx.dealDamage(defenderBenchId, 10, { skipEvasionRoll: true });
+
+    expect(match.state.players[defenderId].characters[defenderBenchId]!.damage).toBe(20);
+  });
+});

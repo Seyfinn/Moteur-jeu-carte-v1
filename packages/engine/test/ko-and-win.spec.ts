@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { checkWinCondition, type PlayerId } from '../src/index.js';
-import { registerTestFixtures, TINY_ROSTER } from './fixtures.js';
+import { registerTestFixtures, FX_ROSTER, TINY_ROSTER } from './fixtures.js';
 import { createReadyMatch, drive } from './test-utils.js';
 
 beforeAll(() => {
@@ -96,5 +96,24 @@ describe('KO, mandatory replacement and win condition (sections 2 & 5)', () => {
     checkWinCondition(match.state);
 
     expect(match.state.result).toEqual({ kind: 'draw' });
+  });
+
+  it('ctx.koCharacter (used by "instant kill" effects like Perfect Execution) kills without touching HP bookkeeping', async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: FX_ROSTER, p2Roster: FX_ROSTER, seed: 33 },
+      { p1ActiveCardId: 'fx-striker', p2ActiveCardId: 'fx-tank' }
+    );
+    const strikerSide: PlayerId =
+      match.state.players.p1.characters[match.state.players.p1.activeCharacterInstanceId!]!.cardId === 'fx-striker' ? 'p1' : 'p2';
+    const defenderSide = opponentOf(strikerSide);
+    if (match.state.activePlayerId !== strikerSide) await drive(match, defenderSide, { kind: 'pass' });
+
+    const strikerActiveId = match.state.players[strikerSide].activeCharacterInstanceId!;
+    const defenderActiveId = match.state.players[defenderSide].activeCharacterInstanceId!;
+
+    await drive(match, strikerSide, { kind: 'use-ability', characterInstanceId: strikerActiveId, abilityId: 'instant-ko' });
+
+    expect(match.state.players[defenderSide].graveyardCharacterInstanceIds).toContain(defenderActiveId);
+    expect(match.state.players[defenderSide].characters[defenderActiveId]!.damage).toBe(0); // bypassed the damage pipeline entirely
   });
 });

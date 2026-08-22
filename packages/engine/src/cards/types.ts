@@ -29,7 +29,9 @@ export type QueryName =
   | 'doesActionEndTurn'
   | 'getMaxAttachedObjects'
   | 'canTargetBench'
+  | 'canShieldAbsorb'
   | 'getEffectiveATK'
+  | 'getCriticalMultiplier'
   | 'getAbilityUsesPerTurn'
   | 'getAbilityUsesPerGame'
   | 'getIncomingDamageAmount'
@@ -98,6 +100,18 @@ export interface EffectContext {
   isKO(characterInstanceId: string): boolean;
 
   /**
+   * Instantly KOs a character (graveyard, attached objects cleared,
+   * onCharacterKO emitted) without going through the damage pipeline at all --
+   * no crit/esquive roll, doesn't touch damage/currentMaxHP, and (like Valeur
+   * Lock) is a kill vector separate from dealDamage, so it is NOT blocked by
+   * a death-ward status unless the card explicitly checks for one first
+   * (see "Perfect Execution" / Akali for that pattern).
+   */
+  koCharacter(characterInstanceId: string): Promise<void>;
+  /** Pulls a character back out of its own graveyard at `hp` (clamped to its current ceiling), statuses/shield cleared, placed active or bench. */
+  reviveCharacter(characterInstanceId: string, hp: number, placement: 'active' | 'bench'): Promise<void>;
+
+  /**
    * Ordinary damage: consumes shield first, then reduces current HP (healable).
    * Pass `{ ignoreShield: true }` for effects that pierce straight through a shield.
    */
@@ -143,12 +157,17 @@ export interface EffectContext {
   extendTerrain(terrainInstanceId: string, turns: number): void;
   /** Removes `turns` from a currently-active terrain's remaining duration (own or opponent's); expires it immediately (graveyard + onTerrainRemoved) if this brings it to 0 or below. No-op on an indefinite terrain. */
   shortenTerrain(terrainInstanceId: string, turns: number): Promise<void>;
+  /** Unconditionally destroys a currently-active terrain (own or opponent's), finite or indefinite duration alike: graveyard + onTerrainRemoved. No-op if it's not the active terrain for its owner anymore. */
+  destroyTerrain(terrainInstanceId: string): Promise<void>;
 
   /** Switch triggered by an external source (object/terrain/bench ability) -- bypasses Stun's standard-switch block. */
   forceSwitch(playerId: PlayerId, newActiveInstanceId: string): Promise<void>;
 
   /** Creates a fresh character instance copying `sourceInstanceId`'s card at the given HP, placed active or on the bench. Returns the new instance id. */
   cloneCharacter(sourceInstanceId: string, hp: number, placement: 'active' | 'bench'): string;
+
+  /** Creates a brand-new object instance of `cardId` for the effect's own owner, added straight to their unplayed pool. Returns the new instance id. */
+  createObject(cardId: string): string;
 }
 
 // ---------------------------------------------------------------------------
