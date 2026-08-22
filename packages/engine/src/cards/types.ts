@@ -38,7 +38,8 @@ export type QueryName =
   | 'getIncomingValeurLockAmount'
   | 'getIncomingHealAmount'
   | 'getTriggerFireCount'
-  | 'canPlayObject';
+  | 'canPlayObject'
+  | 'poisonTicksAsValeurLock';
 
 export interface ModifierEvalContext {
   state: GameState;
@@ -223,6 +224,8 @@ export interface ObjectCardDef {
   id: string;
   name: string;
   description: string;
+  /** Extra gating beyond the generic canPlayObject query -- e.g. requiring the owner active to be above an HP threshold. Checked before the action is allowed, not just inside execute(). */
+  condition?(ctx: EffectContext): boolean;
   execute(ctx: EffectContext): Promise<void>;
   modifiers?: ModifierDef[];
   /** Card family for cross-card synergies (e.g. "NEN"). Absent = basic card, no family. */

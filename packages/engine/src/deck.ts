@@ -18,11 +18,21 @@ export interface DeckPoolEntry {
   id: string;
   type: 'character' | 'object' | 'terrain';
   name: string;
+  /** Characters only. */
+  baseMaxHP?: number;
+  /** Terrains only. `undefined` = indefinite duration. */
+  durationTurns?: number;
 }
 
 /** Every card available to put in a deck, for deck-builder UIs. */
 export function listDeckPool(): DeckPoolEntry[] {
-  return listCards().map((def) => ({ id: def.id, type: def.type, name: def.name }));
+  return listCards().map((def) => ({
+    id: def.id,
+    type: def.type,
+    name: def.name,
+    baseMaxHP: def.type === 'character' ? def.baseMaxHP : undefined,
+    durationTurns: def.type === 'terrain' ? def.durationTurns : undefined,
+  }));
 }
 
 export type RosterValidation = { ok: true } | { ok: false; error: string };

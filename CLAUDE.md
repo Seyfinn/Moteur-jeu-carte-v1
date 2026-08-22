@@ -130,6 +130,20 @@ ctx.cloneCharacter(sourceInstanceId, hp, 'active'|'bench'): string // renvoie le
   le statut `'critical'` accepte un `data.percent` optionnel (`statuses.ts::rollCritical`),
   sinon 33% par défaut. Comme pour le compteur persistant ci-dessus, pas d'API "update" —
   `removeStatus` puis `applyStatus` avec le nouveau `data.percent` pour changer la valeur.
+- **Bleed** : statut générique reconnu par le moteur (comme `death-ward`/`atk-boost`),
+  pas de logique par carte. Poser avec
+  `ctx.applyStatus(targetId, {statusId: 'bleed', label, data: {stacks: N}})` — `N`
+  stacks par défaut si `data.stacks` absent = 1. Ré-appliquer pendant que bleed est déjà
+  présent ADDITIONNE les stacks (jusqu'à 10 max) au lieu de créer une deuxième instance
+  (contrairement à poison/burn) ; c'est géré automatiquement dans
+  `statuses.ts::applyStatus`, rien à faire côté carte. Au début du PROCHAIN tour du
+  porteur (tick toujours actif même sur banc, comme poison/burn), inflige
+  `10% * stacks` des HP max en dégâts (donc 100% à 10 stacks) puis le statut est
+  consommé (retiré), qu'il ait fait des dégâts ou non — ce n'est pas un compte à rebours
+  comme les autres statuts à `remainingTurns`. N'importe quel `heal()` sur le porteur
+  (même 1 point) retire bleed immédiatement, avant même d'atteindre le tick — géré dans
+  `match.ts`'s `heal` handler, rien à faire côté carte non plus. Pas de champ
+  `remainingTurns` à passer.
 
 ## Bug du moteur corrigé (historique, pour référence)
 

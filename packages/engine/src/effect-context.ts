@@ -154,6 +154,35 @@ export function buildEffectContext(
         }
       }
 
+      // "Miroir de Renvoi" : le porteur renvoie un pourcentage des dégâts subis à
+      // l'attaquant (une fois), puis l'objet qui portait l'effet se détruit. Statut
+      // générique reconnu par le moteur ici, comme "couteau-dans-le-dos" -- l'identité
+      // de l'attaquant (via `source`) n'est disponible qu'à ce point précis du pipeline,
+      // afterDamage ne la porte pas dans son payload (même limite documentée pour
+      // onCharacterKO dans CLAUDE.md).
+      if (source && finalAmount > 0) {
+        const target = findCharacter(state, targetInstanceId);
+        const mirror = getStatus(target, 'miroir-de-renvoi');
+        if (mirror) {
+          api.removeStatus(target.instanceId, 'miroir-de-renvoi');
+          const objectInstanceId = mirror.data?.['objectInstanceId'] as string | undefined;
+          if (objectInstanceId) api.destroyObject(objectInstanceId);
+          const percent = Number(mirror.data?.['percent'] ?? 50);
+          const reflected = Math.round(finalAmount * (percent / 100));
+          if (reflected > 0) {
+            api.log(`${target.cardId} renvoie ${reflected} dégâts via Miroir de Renvoi`, {
+              targetInstanceId: source.instanceId,
+              amount: reflected,
+            });
+            await api.dealDamage(source.instanceId, reflected);
+          }
+        }
+      }
+
+      if (options?.asValeurLock) {
+        await api.applyValeurLock(targetInstanceId, finalAmount);
+        return;
+      }
       await api.dealDamage(targetInstanceId, finalAmount, options);
     },
     async applyValeurLock(targetInstanceId, amount) {

@@ -110,6 +110,7 @@ function createPlayerState(id: PlayerId, displayName: string, roster: RosterConf
     graveyardTerrainInstanceIds: [],
     objectsPlayedThisTurn: 0,
     hasHadFirstTurn: false,
+    revealsOpponentUnplayedCards: false,
   };
 }
 
@@ -276,6 +277,14 @@ export class Match {
         const permission = canPlayObject(state, playerId);
         if (!permission.allow) {
           return { ok: false, error: `Cannot play object (${permission.votes.map((v) => v.source).join(', ')})` };
+        }
+        const obj = player.objects[action.objectInstanceId];
+        const def = obj ? getObjectCard(obj.cardId) : undefined;
+        if (def?.condition) {
+          const ctx = this.api.buildEffectContext(action.objectInstanceId, playerId, undefined, 'other');
+          if (!def.condition(ctx)) {
+            return { ok: false, error: `Object condition not met (${def.name})` };
+          }
         }
         return { ok: true };
       }
@@ -482,12 +491,20 @@ export class Match {
         if (hp.isKO(target)) await api.koCharacter(targetInstanceId);
       },
 
+      poisonTicksAsValeurLock(targetInstanceId) {
+        return evaluatePermission(state, 'poisonTicksAsValeurLock', { targetInstanceId }, false).allow;
+      },
+
       heal(targetInstanceId, amount) {
         const target = findCharacter(state, targetInstanceId);
         const boosted = evaluateTransform(state, 'getIncomingHealAmount', { targetInstanceId }, amount);
         const finalAmount = Math.max(0, boosted);
         hp.heal(target, finalAmount);
         api.log(`${target.cardId} heals ${finalAmount}`, { targetInstanceId, amount: finalAmount });
+        if (finalAmount > 0 && statusesMod.hasStatus(target, 'bleed')) {
+          statusesMod.removeStatus(target, 'bleed');
+          api.log(`${target.cardId}'s bleed is cured by healing`, { targetInstanceId });
+        }
       },
 
       raiseMaxHP(targetInstanceId, amount) {

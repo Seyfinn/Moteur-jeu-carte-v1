@@ -37,6 +37,19 @@ import { annulationDeTerritoire } from './annulation-de-territoire.js';
 import { echangeEquivalent } from './echange-equivalent.js';
 import { cameleon } from './cameleon.js';
 import { soraka } from './soraka.js';
+import { todo } from './todo.js';
+import { gojoSatoru } from './gojo-satoru.js';
+import { muzan } from './muzan.js';
+import { killua } from './killua.js';
+import { chopper } from './chopper.js';
+import { kakashi } from './kakashi.js';
+import { mahito } from './mahito.js';
+import { miroirDeRenvoi } from './miroir-de-renvoi.js';
+import { adrenalineUltime } from './adrenaline-ultime.js';
+import { kirigiri } from './kirigiri.js';
+import { sukuna } from './sukuna.js';
+import { bakugo } from './bakugo.js';
+import { roiDesEsprits } from './roi-des-esprits.js';
 
 export {
   blitzcrank,
@@ -76,6 +89,19 @@ export {
   echangeEquivalent,
   cameleon,
   soraka,
+  todo,
+  gojoSatoru,
+  muzan,
+  killua,
+  chopper,
+  kakashi,
+  mahito,
+  miroirDeRenvoi,
+  adrenalineUltime,
+  kirigiri,
+  sukuna,
+  bakugo,
+  roiDesEsprits,
 };
 
 let registered = false;
@@ -121,6 +147,19 @@ export function registerDemoCards(): void {
   registerCard(echangeEquivalent);
   registerCard(cameleon);
   registerCard(soraka);
+  registerCard(todo);
+  registerCard(gojoSatoru);
+  registerCard(muzan);
+  registerCard(killua);
+  registerCard(chopper);
+  registerCard(kakashi);
+  registerCard(mahito);
+  registerCard(miroirDeRenvoi);
+  registerCard(adrenalineUltime);
+  registerCard(kirigiri);
+  registerCard(sukuna);
+  registerCard(bakugo);
+  registerCard(roiDesEsprits);
 }
 
 export const DEMO_ROSTER: RosterConfig = {
@@ -137,6 +176,17 @@ export const DEMO_ROSTER: RosterConfig = {
     sion.id,
     ornn.id,
     soraka.id,
+    todo.id,
+    gojoSatoru.id,
+    muzan.id,
+    killua.id,
+    chopper.id,
+    kakashi.id,
+    mahito.id,
+    kirigiri.id,
+    sukuna.id,
+    bakugo.id,
+    roiDesEsprits.id,
   ],
   objectCardIds: [
     potionForce.id,
@@ -154,6 +204,8 @@ export const DEMO_ROSTER: RosterConfig = {
     annulationDeTerritoire.id,
     echangeEquivalent.id,
     cameleon.id,
+    miroirDeRenvoi.id,
+    adrenalineUltime.id,
   ],
   terrainCardIds: [
     hopital.id,

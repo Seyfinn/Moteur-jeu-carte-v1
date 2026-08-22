@@ -98,6 +98,62 @@ describe('Statuses (section 6)', () => {
   });
 });
 
+describe('Bleed', () => {
+  it('re-applying while already present adds stacks (one merged entry), capped at 10', async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: FX_ROSTER, p2Roster: FX_ROSTER, seed: 50 },
+      { p1ActiveCardId: 'fx-striker', p2ActiveCardId: 'fx-tank' }
+    );
+    const p1 = match.state.players.p1;
+    const activeId = p1.activeCharacterInstanceId!;
+    const api = match['api'] as EngineApi;
+
+    for (let i = 0; i < 13; i++) {
+      api.applyStatus(activeId, { statusId: 'bleed', label: 'Bleed' });
+    }
+
+    const bleedEntries = p1.characters[activeId]!.statuses.filter((s) => s.statusId === 'bleed');
+    expect(bleedEntries.length).toBe(1); // merged, not 13 separate instances like poison/burn would allow
+    expect(bleedEntries[0]!.data?.['stacks']).toBe(10); // capped
+  });
+
+  it('ticks at the start of the owner turn even while benched, deals stacks * 10% of max HP, then is consumed', async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: FX_ROSTER, p2Roster: FX_ROSTER, seed: 51 },
+      { p1ActiveCardId: 'fx-striker', p2ActiveCardId: 'fx-tank' }
+    );
+    const p1 = match.state.players.p1;
+    const benchedId = p1.benchCharacterInstanceIds[0]!; // fx-tank, 300 max HP
+    const api = match['api'] as EngineApi;
+    api.applyStatus(benchedId, { statusId: 'bleed', label: 'Bleed', data: { stacks: 4 } });
+    const damageBefore = p1.characters[benchedId]!.damage;
+
+    await tickStatusesAtTurnStart(match.state, 'p1', api);
+
+    expect(p1.characters[benchedId]!.damage).toBe(damageBefore + 120); // 4 stacks * 10% of 300
+    expect(p1.characters[benchedId]!.statuses.some((s) => s.statusId === 'bleed')).toBe(false); // consumed, not a countdown
+  });
+
+  it('healing the bearer for any amount cures bleed immediately, before it ever ticks', async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: FX_ROSTER, p2Roster: FX_ROSTER, seed: 52 },
+      { p1ActiveCardId: 'fx-striker', p2ActiveCardId: 'fx-tank' }
+    );
+    const p1 = match.state.players.p1;
+    const activeId = p1.activeCharacterInstanceId!;
+    const api = match['api'] as EngineApi;
+    p1.characters[activeId]!.damage = 50;
+    api.applyStatus(activeId, { statusId: 'bleed', label: 'Bleed', data: { stacks: 5 } });
+
+    api.heal(activeId, 1);
+    expect(p1.characters[activeId]!.statuses.some((s) => s.statusId === 'bleed')).toBe(false);
+
+    const damageBefore = p1.characters[activeId]!.damage;
+    await tickStatusesAtTurnStart(match.state, 'p1', api);
+    expect(p1.characters[activeId]!.damage).toBe(damageBefore); // no bleed damage: it was cured before it could tick
+  });
+});
+
 describe('Critique & Esquive (section 6)', () => {
   it('base rates: every character has an innate ~2% crit / ~5% dodge chance with no status at all', async () => {
     const match = await createReadyMatch(

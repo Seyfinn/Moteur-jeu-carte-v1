@@ -9,6 +9,10 @@ export function getPlayerView(state: GameState, forPlayerId: PlayerId): GameStat
   const opponentId = otherPlayer(forPlayerId);
   const opponent = state.players[opponentId];
 
+  // "Ultimate Détective" (Kirigiri) and similar effects: once this player has
+  // revealed the opponent's hidden pool, stop redacting it for every future view.
+  if (state.players[forPlayerId].revealsOpponentUnplayedCards) return state;
+
   const visibleObjects = Object.fromEntries(
     Object.entries(opponent.objects).filter(([id]) => !opponent.unplayedObjectInstanceIds.includes(id))
   );
