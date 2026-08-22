@@ -124,6 +124,7 @@ input {
 
 /* Board */
 .board {
+  position: relative;
   max-width: 1200px;
   height: 100dvh;
   margin: 0 auto;
@@ -285,6 +286,7 @@ input {
 /* Visual card frame -- reserves space for real card art (falls back to a
    placeholder icon), used for characters, objects and terrains alike. */
 .tcg-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: var(--panel-alt);
@@ -362,6 +364,421 @@ input {
   font-size: 0.68rem;
   color: var(--accent);
   text-align: center;
+}
+
+/* Status-effect / damage overlays -- absolutely positioned over the whole card,
+   clipped by .tcg-card's own overflow:hidden, never intercept clicks. */
+.fx-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.fx-icon {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  font-size: 0.65rem;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+
+@keyframes fx-tint-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+.fx-poison {
+  background: radial-gradient(circle at 50% 55%, rgba(155, 89, 182, 0.45), transparent 70%);
+  animation: fx-tint-pulse 1.6s ease-in-out infinite;
+}
+.fx-bubble {
+  position: absolute;
+  bottom: 8%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #e5c6ff, #8e44ad 70%);
+  opacity: 0;
+  animation: fx-bubble-rise 1.8s ease-in infinite;
+}
+@keyframes fx-bubble-rise {
+  0% {
+    transform: translateY(0) scale(0.6);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.9;
+  }
+  85% {
+    opacity: 0.2;
+  }
+  100% {
+    transform: translateY(-42px) scale(1);
+    opacity: 0;
+  }
+}
+
+.fx-burn {
+  background: radial-gradient(circle at 50% 60%, rgba(255, 120, 40, 0.4), transparent 70%);
+  animation: fx-tint-pulse 0.9s ease-in-out infinite;
+}
+.fx-ember {
+  position: absolute;
+  bottom: 6%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #ff8a3d;
+  box-shadow: 0 0 4px 1px #ff5b1f;
+  opacity: 0;
+  animation: fx-ember-rise 1.1s ease-out infinite;
+}
+@keyframes fx-ember-rise {
+  0% {
+    transform: translate(0, 0);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(5px, -36px);
+    opacity: 0;
+  }
+}
+
+.fx-chained {
+  background: linear-gradient(rgba(120, 130, 150, 0.3), transparent 60%);
+}
+.fx-chain-icon {
+  animation: fx-shake 0.6s ease-in-out infinite;
+}
+@keyframes fx-shake {
+  0%,
+  100% {
+    transform: rotate(-8deg);
+  }
+  50% {
+    transform: rotate(8deg);
+  }
+}
+
+.fx-atk-boost {
+  box-shadow: inset 0 0 10px 2px rgba(255, 205, 60, 0.5);
+  animation: fx-pulse-gold 1.2s ease-in-out infinite;
+}
+@keyframes fx-pulse-gold {
+  0%,
+  100% {
+    box-shadow: inset 0 0 6px 1px rgba(255, 205, 60, 0.35);
+  }
+  50% {
+    box-shadow: inset 0 0 14px 4px rgba(255, 205, 60, 0.75);
+  }
+}
+.fx-arrow-up-icon {
+  color: #ffd23c;
+  animation: fx-bounce 0.8s ease-in-out infinite;
+}
+@keyframes fx-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.fx-atk-reduction {
+  box-shadow: inset 0 0 10px 2px rgba(200, 40, 40, 0.5);
+  animation: fx-pulse-red 1.2s ease-in-out infinite;
+}
+@keyframes fx-pulse-red {
+  0%,
+  100% {
+    box-shadow: inset 0 0 6px 1px rgba(200, 40, 40, 0.35);
+  }
+  50% {
+    box-shadow: inset 0 0 14px 4px rgba(200, 40, 40, 0.75);
+  }
+}
+.fx-arrow-down-icon {
+  color: #ff6b6b;
+  animation: fx-bounce 0.8s ease-in-out infinite reverse;
+}
+
+.fx-stun {
+  background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.22), transparent 70%);
+}
+.fx-stun-icon {
+  color: #ffe066;
+  animation: fx-spin 1s linear infinite;
+}
+@keyframes fx-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.fx-disarmed {
+  background: repeating-linear-gradient(135deg, rgba(150, 150, 150, 0.25) 0 6px, transparent 6px 12px);
+}
+.fx-ban-icon {
+  color: #b0b0b0;
+  animation: fx-tint-pulse 1.3s ease-in-out infinite;
+}
+
+.fx-evasive {
+  animation: fx-evasive-blur 1.4s ease-in-out infinite;
+}
+@keyframes fx-evasive-blur {
+  0%,
+  100% {
+    backdrop-filter: none;
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+.fx-dash-icon {
+  color: #7fe3f2;
+  animation: fx-dash-slide 1.2s ease-in-out infinite;
+}
+@keyframes fx-dash-slide {
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateX(-4px);
+    opacity: 1;
+  }
+}
+
+.fx-critical {
+  box-shadow: inset 0 0 0 2px rgba(255, 60, 60, 0.7);
+  animation: fx-pulse-red 0.7s ease-in-out infinite;
+}
+.fx-target-icon {
+  color: #ff4d4d;
+  animation: fx-pulse-scale 0.7s ease-in-out infinite;
+}
+@keyframes fx-pulse-scale {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.3);
+  }
+}
+
+.fx-silence {
+  background: rgba(40, 40, 50, 0.35);
+}
+.fx-mute-icon {
+  color: #ff6b6b;
+  animation: fx-tint-pulse 1.2s ease-in-out infinite;
+}
+
+.fx-shield {
+  box-shadow: inset 0 0 10px 2px rgba(127, 199, 242, 0.55);
+  animation: fx-pulse-gold 1.6s ease-in-out infinite;
+}
+.fx-shield-icon {
+  color: #7fc7f2;
+  animation: fx-tint-pulse 1.6s ease-in-out infinite;
+}
+
+.fx-locked {
+  background: repeating-linear-gradient(135deg, rgba(90, 110, 160, 0.3) 0 6px, transparent 6px 12px);
+}
+.fx-lock-icon {
+  animation: fx-tint-pulse 1.4s ease-in-out infinite;
+}
+
+.fx-generic {
+  background: radial-gradient(circle at 50% 50%, rgba(230, 233, 239, 0.18), transparent 70%);
+}
+.fx-sparkle-icon {
+  animation: fx-tint-pulse 1.5s ease-in-out infinite;
+}
+
+.fx-damage-flash {
+  position: absolute;
+  inset: 0;
+  background: rgba(224, 85, 95, 0.6);
+  pointer-events: none;
+  animation: fx-damage-flash-anim 0.4s ease-out;
+}
+@keyframes fx-damage-flash-anim {
+  0% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.fx-floaters {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.fx-floater-number {
+  position: absolute;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #ff6b6b;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  animation: fx-float-up 0.95s ease-out forwards;
+}
+@keyframes fx-float-up {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-22px);
+    opacity: 0;
+  }
+}
+
+/* Character-anchored action badges (attack/ability/crit/evasion) -- short-lived pop-in text
+   pills over the card's art, always kept within its clipped bounds (ellipsis on overflow). */
+.fx-action-badges {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  right: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  z-index: 2;
+}
+.fx-action-badge {
+  max-width: 100%;
+  padding: 2px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  font-size: 0.58rem;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #fff;
+  background: rgba(20, 23, 28, 0.78);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  animation: fx-badge-pop 1.3s ease-out forwards;
+}
+@keyframes fx-badge-pop {
+  0% {
+    transform: scale(0.6) translateY(-4px);
+    opacity: 0;
+  }
+  15% {
+    transform: scale(1.08) translateY(0);
+    opacity: 1;
+  }
+  25% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.fx-action-badge-attack {
+  border-color: #ff8a3d;
+}
+.fx-action-badge-ability {
+  border-color: #7fc7f2;
+}
+.fx-action-badge-critical {
+  border-color: #ff4d4d;
+  background: rgba(120, 10, 10, 0.78);
+}
+.fx-action-badge-evasion {
+  border-color: #7fe3f2;
+  background: rgba(10, 60, 70, 0.78);
+}
+
+/* Table-level events (turn changes, object/terrain plays, coin flips) -- centered banner
+   stack floating over the board, doesn't affect layout. */
+.table-event-stack {
+  position: absolute;
+  top: 54px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 30;
+}
+.table-event-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(20, 23, 28, 0.85);
+  border: 1px solid var(--border);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  animation: fx-table-banner 2s ease-out forwards;
+}
+.table-event-icon {
+  font-size: 0.95rem;
+}
+@keyframes fx-table-banner {
+  0% {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  10% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.table-event-turn-transition {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.table-event-coin-flip {
+  border-color: #ffd23c;
 }
 
 .hp-bar {
@@ -522,6 +939,13 @@ input {
   color: var(--text-dim);
   white-space: nowrap;
 }
+.menu-dropdown-empty {
+  margin: 0;
+  padding: 7px 9px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
 .pass-button {
   background: var(--danger);
   border-color: var(--danger);
@@ -638,11 +1062,13 @@ input {
 }
 .deck-manager {
   max-width: 760px;
+  max-height: 92dvh;
   margin: 4vh auto;
   padding: 24px;
   background: var(--panel);
   border-radius: 12px;
   border: 1px solid var(--border);
+  overflow-y: auto;
 }
 .deck-manager-header {
   display: flex;
@@ -663,13 +1089,18 @@ input {
 }
 .deck-list-item {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 10px;
   padding: 10px 14px;
   background: var(--panel-alt);
   border: 1px solid var(--border);
   border-radius: 8px;
+}
+.deck-list-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
 }
 .deck-list-info {
   display: flex;
@@ -680,6 +1111,31 @@ input {
   display: flex;
   gap: 8px;
   flex-shrink: 0;
+}
+.deck-share-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.deck-share-box textarea {
+  resize: vertical;
+}
+.deck-import {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.deck-import textarea {
+  resize: vertical;
+}
+textarea {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 0.85rem;
 }
 .deck-editor {
   display: flex;

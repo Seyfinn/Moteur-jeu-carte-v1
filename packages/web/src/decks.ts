@@ -1,4 +1,4 @@
-import { DECK_LIMITS, DEMO_ROSTER, type RosterConfig } from 'engine';
+import { DECK_LIMITS, DEMO_ROSTER, validateRoster, type RosterConfig } from 'engine';
 
 export interface Deck {
   id: string;
@@ -61,6 +61,62 @@ export function deckCardCount(deck: Deck): number {
 
 export function isDeckPlayable(deck: Deck): boolean {
   return deck.characterCardIds.length > 0;
+}
+
+const EXPORT_PREFIX = 'CTGDECK1:';
+
+function utf8ToBase64(str: string): string {
+  const bytes = new TextEncoder().encode(str);
+  let binary = '';
+  bytes.forEach((b) => (binary += String.fromCharCode(b)));
+  return btoa(binary);
+}
+
+function base64ToUtf8(b64: string): string {
+  const binary = atob(b64);
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+/** Serializes a deck to a short text code that another player can paste into "Importer un deck". */
+export function encodeDeckCode(deck: Deck): string {
+  const payload: RosterConfig & { name: string } = {
+    name: deck.name,
+    characterCardIds: deck.characterCardIds,
+    objectCardIds: deck.objectCardIds,
+    terrainCardIds: deck.terrainCardIds,
+  };
+  return EXPORT_PREFIX + utf8ToBase64(JSON.stringify(payload));
+}
+
+/** Inverse of {@link encodeDeckCode}. Throws with a user-facing message if the code is malformed or the deck is invalid. */
+export function decodeDeckCode(code: string): Deck {
+  const trimmed = code.trim();
+  if (!trimmed.startsWith(EXPORT_PREFIX)) {
+    throw new Error("Code de deck invalide -- vérifiez que vous avez copié le code en entier.");
+  }
+  let payload: Partial<RosterConfig & { name: string }>;
+  try {
+    payload = JSON.parse(base64ToUtf8(trimmed.slice(EXPORT_PREFIX.length)));
+  } catch {
+    throw new Error("Code de deck invalide -- vérifiez que vous avez copié le code en entier.");
+  }
+  if (
+    typeof payload.name !== 'string' ||
+    !Array.isArray(payload.characterCardIds) ||
+    !Array.isArray(payload.objectCardIds) ||
+    !Array.isArray(payload.terrainCardIds)
+  ) {
+    throw new Error('Code de deck invalide -- format inattendu.');
+  }
+  const roster: RosterConfig = {
+    characterCardIds: payload.characterCardIds,
+    objectCardIds: payload.objectCardIds,
+    terrainCardIds: payload.terrainCardIds,
+  };
+  const validation = validateRoster(roster);
+  if (!validation.ok) throw new Error(validation.error);
+  return { id: makeId(), name: payload.name, ...roster };
 }
 
 export { DECK_LIMITS };

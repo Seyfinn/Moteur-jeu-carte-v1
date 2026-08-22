@@ -69,6 +69,7 @@ export function terrainDetailBody(cardId: string) {
   const def = getTerrainCard(cardId);
   return (
     <>
+      <div className="hover-card-hp">{def.durationTurns !== undefined ? `Durée : ${def.durationTurns} tour${def.durationTurns > 1 ? 's' : ''}` : 'Durée : indéfinie'}</div>
       <p>{def.description}</p>
       {def.abilities && def.abilities.length > 0 && (
         <div className="hover-card-section">

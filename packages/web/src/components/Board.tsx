@@ -6,6 +6,8 @@ import { ChoiceModal } from './ChoiceModal';
 import { EventLog } from './EventLog';
 import { useHoverCard } from './HoverCard';
 import { hiddenCardDetailBody, objectDetailBody, terrainDetailBody } from './cardDetails';
+import { useGameEvents, type CharacterBadge } from './gameEvents';
+import { TableEventBanners } from './gameEventBadges';
 import type { GameConnection } from '../net/useGameConnection';
 
 function objectName(cardId: string): string {
@@ -120,11 +122,13 @@ function PlayerZone({
   isSelf,
   label,
   conn,
+  badgesByCharacter,
 }: {
   player: PlayerState;
   isSelf: boolean;
   label: string;
   conn: GameConnection;
+  badgesByCharacter: Map<string, CharacterBadge[]>;
 }) {
   const active = player.activeCharacterInstanceId ? player.characters[player.activeCharacterInstanceId] : undefined;
   const bench = player.benchCharacterInstanceIds.map((id) => player.characters[id]!);
@@ -147,7 +151,7 @@ function PlayerZone({
     <div className="slot-row bench-slot-row">
       {bench.map((char) => (
         <div className="card-slot bench-slot" key={char.instanceId}>
-          <CharacterCard char={char} isActive={false} isKOable size="small" />
+          <CharacterCard char={char} isActive={false} isKOable size="small" badges={badgesByCharacter.get(char.instanceId)} />
         </div>
       ))}
       {Array.from({ length: benchEmptyCount }).map((_, i) => (
@@ -190,7 +194,9 @@ function PlayerZone({
         </div>
       </div>
 
-      <div className="active-character-zone">{active && <CharacterCard char={active} isActive isKOable />}</div>
+      <div className="active-character-zone">
+        {active && <CharacterCard char={active} isActive isKOable badges={badgesByCharacter.get(active.instanceId)} />}
+      </div>
 
       <div className="terrain-zone">
         <span className="zone-label">Magie active</span>
@@ -235,6 +241,7 @@ function ActionMenuButton({
   label,
   options,
   autoFireSingle,
+  emptyMessage,
   isOpen,
   onOpen,
   onClose,
@@ -242,12 +249,13 @@ function ActionMenuButton({
   label: string;
   options: MenuOption[];
   autoFireSingle?: boolean;
+  emptyMessage?: string;
   isOpen: boolean;
   onOpen: () => void;
   onClose: () => void;
 }) {
   const hover = useHoverCard();
-  if (options.length === 0) return null;
+  if (options.length === 0 && !emptyMessage) return null;
 
   const handleClick = () => {
     if (autoFireSingle && options.length === 1) {
@@ -264,6 +272,7 @@ function ActionMenuButton({
       </button>
       {isOpen && (
         <div className="menu-dropdown">
+          {options.length === 0 && <p className="menu-dropdown-empty">{emptyMessage}</p>}
           {options.map((opt) => (
             <button
               key={opt.key}
@@ -374,6 +383,7 @@ function ActionMenu({ state, you, conn }: { state: GameState; you: PlayerId; con
         label="Capacité"
         options={abilityOptions}
         autoFireSingle
+        emptyMessage="Pas de capacité activable"
         isOpen={openMenu === 'ability'}
         onOpen={() => setOpenMenu('ability')}
         onClose={() => setOpenMenu(null)}
@@ -412,6 +422,7 @@ export function Board({ conn }: { conn: GameConnection }) {
   const state = conn.state!;
   const you = conn.you!;
   const opponentId = otherPlayer(you);
+  const { badgesByCharacter, tableEvents } = useGameEvents(state);
 
   if (state.result) {
     const message =
@@ -443,10 +454,12 @@ export function Board({ conn }: { conn: GameConnection }) {
       {conn.opponentDisconnected && <p className="warning">L'adversaire s'est déconnecté.</p>}
       {conn.error && <ActionErrorBanner message={conn.error} onDismiss={conn.clearError} />}
 
+      <TableEventBanners events={tableEvents} />
+
       <div className="board-scroll">
         <div className="board-grid">
-          <PlayerZone player={state.players[opponentId]} isSelf={false} label="Adversaire" conn={conn} />
-          <PlayerZone player={state.players[you]} isSelf label="Vous" conn={conn} />
+          <PlayerZone player={state.players[opponentId]} isSelf={false} label="Adversaire" conn={conn} badgesByCharacter={badgesByCharacter} />
+          <PlayerZone player={state.players[you]} isSelf label="Vous" conn={conn} badgesByCharacter={badgesByCharacter} />
         </div>
 
         <EventLog log={state.log} />
