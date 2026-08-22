@@ -1,9 +1,79 @@
-import { useMemo, useState } from 'react';
+import { createContext, useContext, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { DECK_LIMITS, listDeckPool, validateRoster, type DeckPoolEntry } from 'engine';
 import { CardFrame } from './CardFrame';
-import { useHoverCard } from './HoverCard';
 import { characterDetailBody, objectDetailBody, terrainDetailBody } from './cardDetails';
 import { createEmptyDeck, decodeDeckCode, deckToRoster, encodeDeckCode, loadDecks, saveDecks, type Deck } from '../decks';
+
+/** Hover-and-hold preview: unlike the instant in-game HoverCard, this waits for the
+    mouse to stay still on a pool card for a bit before popping up an enlarged card
+    next to its description -- browsing the pool shouldn't flash a tooltip per swipe. */
+const PREVIEW_DELAY_MS = 1000;
+const PREVIEW_PANEL_WIDTH = 560;
+const PREVIEW_PANEL_MAX_HEIGHT = 460;
+
+interface CardPreviewApi {
+  requestShow: (entry: DeckPoolEntry, target: HTMLElement) => void;
+  cancel: () => void;
+}
+
+const CardPreviewCtx = createContext<CardPreviewApi | null>(null);
+
+function useCardPreview(): CardPreviewApi {
+  const ctx = useContext(CardPreviewCtx);
+  if (!ctx) throw new Error('useCardPreview must be used within a CardPreviewProvider');
+  return ctx;
+}
+
+function CardPreviewProvider({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<{ entry: DeckPoolEntry; rect: DOMRect } | null>(null);
+  const showTimer = useRef<number | null>(null);
+
+  function clearTimer() {
+    if (showTimer.current !== null) {
+      window.clearTimeout(showTimer.current);
+      showTimer.current = null;
+    }
+  }
+
+  const api: CardPreviewApi = {
+    requestShow(entry, target) {
+      clearTimer();
+      const rect = target.getBoundingClientRect();
+      showTimer.current = window.setTimeout(() => {
+        showTimer.current = null;
+        setState({ entry, rect });
+      }, PREVIEW_DELAY_MS);
+    },
+    cancel() {
+      clearTimer();
+      setState(null);
+    },
+  };
+
+  let style: CSSProperties = {};
+  if (state) {
+    const { rect } = state;
+    const spaceRight = window.innerWidth - rect.right;
+    const left = spaceRight > PREVIEW_PANEL_WIDTH + 16 ? rect.right + 12 : Math.max(8, rect.left - PREVIEW_PANEL_WIDTH - 12);
+    const top = Math.min(Math.max(8, rect.top - 40), Math.max(8, window.innerHeight - PREVIEW_PANEL_MAX_HEIGHT - 8));
+    style = { left, top };
+  }
+
+  return (
+    <CardPreviewCtx.Provider value={api}>
+      {children}
+      {state && (
+        <div className="deck-card-preview" style={style}>
+          <CardFrame cardId={state.entry.id} kind={state.entry.type} name={state.entry.name} size="large" />
+          <div className="deck-card-preview-text">
+            <div className="hover-card-title">{state.entry.name}</div>
+            <div className="hover-card-content">{detailBodyFor(state.entry)}</div>
+          </div>
+        </div>
+      )}
+    </CardPreviewCtx.Provider>
+  );
+}
 
 type DeckSectionKey = 'characterCardIds' | 'objectCardIds' | 'terrainCardIds';
 type CardKind = DeckPoolEntry['type'];
@@ -42,17 +112,17 @@ function PoolCardTile({
   onAdd: () => void;
   onRemove: () => void;
 }) {
-  const hover = useHoverCard();
+  const preview = useCardPreview();
   return (
     <CardFrame
       cardId={entry.id}
       kind={entry.type}
       name={entry.name}
-      size="small"
+      size="normal"
       highlight={count > 0}
       hoverProps={{
-        onMouseEnter: (e) => hover.show({ title: entry.name, body: detailBodyFor(entry) }, e.currentTarget),
-        onMouseLeave: hover.hide,
+        onMouseEnter: (e) => preview.requestShow(entry, e.currentTarget),
+        onMouseLeave: preview.cancel,
       }}
       footer={
         <div className="deck-card-stepper">
@@ -84,6 +154,11 @@ function DeckEditor({
 }) {
   const validation = validateRoster(deckToRoster(deck));
   const canSave = deck.name.trim().length > 0 && validation.ok;
+  const [collapsedSections, setCollapsedSections] = useState<Partial<Record<DeckSectionKey, boolean>>>({});
+
+  function toggleSection(key: DeckSectionKey) {
+    setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
 
   function add(key: DeckSectionKey, max: number, id: string) {
     const ids = deck[key];
@@ -99,46 +174,59 @@ function DeckEditor({
   }
 
   return (
-    <div className="deck-editor">
-      <label className="field">
-        Nom du deck
-        <input value={deck.name} onChange={(e) => onChange({ ...deck, name: e.target.value })} placeholder="Mon deck" autoFocus />
-      </label>
+    <CardPreviewProvider>
+      <div className="deck-editor">
+        <label className="field">
+          Nom du deck
+          <input value={deck.name} onChange={(e) => onChange({ ...deck, name: e.target.value })} placeholder="Mon deck" autoFocus />
+        </label>
 
-      {SECTIONS.map((section) => {
-        const ids = deck[section.key];
-        const entries = pool[section.type];
-        return (
-          <div className="deck-section" key={section.key}>
-            <h2>
-              {section.title} <span className="deck-section-count">({ids.length}/{section.max})</span>
-            </h2>
-            <div className="deck-card-grid">
-              {entries.map((entry) => (
-                <PoolCardTile
-                  key={entry.id}
-                  entry={entry}
-                  count={countOf(ids, entry.id)}
-                  disabledAdd={ids.length >= section.max || countOf(ids, entry.id) >= DECK_LIMITS.maxCopiesPerCard}
-                  onAdd={() => add(section.key, section.max, entry.id)}
-                  onRemove={() => remove(section.key, entry.id)}
-                />
-              ))}
-              {entries.length === 0 && <p className="subtitle">Aucune carte disponible pour l'instant.</p>}
+        {SECTIONS.map((section) => {
+          const ids = deck[section.key];
+          const entries = pool[section.type];
+          const collapsed = !!collapsedSections[section.key];
+          return (
+            <div className="deck-section" key={section.key}>
+              <button
+                type="button"
+                className="deck-section-toggle"
+                onClick={() => toggleSection(section.key)}
+                aria-expanded={!collapsed}
+              >
+                <span className={collapsed ? 'deck-section-chevron collapsed' : 'deck-section-chevron'}>▾</span>
+                <h2>
+                  {section.title} <span className="deck-section-count">({ids.length}/{section.max})</span>
+                </h2>
+              </button>
+              {!collapsed && (
+                <div className="deck-card-grid">
+                  {entries.map((entry) => (
+                    <PoolCardTile
+                      key={entry.id}
+                      entry={entry}
+                      count={countOf(ids, entry.id)}
+                      disabledAdd={ids.length >= section.max || countOf(ids, entry.id) >= DECK_LIMITS.maxCopiesPerCard}
+                      onAdd={() => add(section.key, section.max, entry.id)}
+                      onRemove={() => remove(section.key, entry.id)}
+                    />
+                  ))}
+                  {entries.length === 0 && <p className="subtitle">Aucune carte disponible pour l'instant.</p>}
+                </div>
+              )}
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
 
-      {!validation.ok && <p className="error">{validation.error}</p>}
+        {!validation.ok && <p className="error">{validation.error}</p>}
 
-      <div className="deck-editor-actions">
-        <button onClick={onCancel}>Annuler</button>
-        <button className="primary" disabled={!canSave} onClick={onSave}>
-          Enregistrer
-        </button>
+        <div className="deck-editor-actions">
+          <button onClick={onCancel}>Annuler</button>
+          <button className="primary" disabled={!canSave} onClick={onSave}>
+            Enregistrer
+          </button>
+        </div>
       </div>
-    </div>
+    </CardPreviewProvider>
   );
 }
 
