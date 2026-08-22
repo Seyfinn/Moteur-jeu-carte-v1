@@ -14,6 +14,7 @@ export function CardFrame({
   highlight,
   dimmed,
   footer,
+  effects,
   onClick,
   hoverProps,
 }: {
@@ -24,6 +25,8 @@ export function CardFrame({
   highlight?: boolean;
   dimmed?: boolean;
   footer?: ReactNode;
+  /** Absolutely-positioned overlay (status animations, damage flashes...) covering the whole card. */
+  effects?: ReactNode;
   onClick?: () => void;
   hoverProps?: HoverHandlers;
 }) {
@@ -37,6 +40,7 @@ export function CardFrame({
       <CardArt cardId={cardId} kind={kind} />
       <div className="tcg-card-name-banner">{name}</div>
       {footer && <div className="tcg-card-body">{footer}</div>}
+      {effects}
     </div>
   );
 }

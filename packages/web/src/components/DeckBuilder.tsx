@@ -3,7 +3,7 @@ import { DECK_LIMITS, listDeckPool, validateRoster, type DeckPoolEntry } from 'e
 import { CardFrame } from './CardFrame';
 import { useHoverCard } from './HoverCard';
 import { characterDetailBody, objectDetailBody, terrainDetailBody } from './cardDetails';
-import { createEmptyDeck, deckToRoster, loadDecks, saveDecks, type Deck } from '../decks';
+import { createEmptyDeck, decodeDeckCode, deckToRoster, encodeDeckCode, loadDecks, saveDecks, type Deck } from '../decks';
 
 type DeckSectionKey = 'characterCardIds' | 'objectCardIds' | 'terrainCardIds';
 type CardKind = DeckPoolEntry['type'];
@@ -142,9 +142,33 @@ function DeckEditor({
   );
 }
 
+function DeckShareBox({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API unavailable/denied -- the code below is still selectable for manual copy.
+    }
+  }
+
+  return (
+    <div className="deck-share-box">
+      <textarea readOnly value={code} rows={3} onFocus={(e) => e.currentTarget.select()} />
+      <button onClick={copy}>{copied ? 'Copié !' : 'Copier le code'}</button>
+    </div>
+  );
+}
+
 export function DeckBuilder({ onBack }: { onBack: () => void }) {
   const [decks, setDecks] = useState<Deck[]>(() => loadDecks());
   const [editing, setEditing] = useState<Deck | null>(null);
+  const [sharingId, setSharingId] = useState<string | null>(null);
+  const [importCode, setImportCode] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
   const pool = useMemo(() => listDeckPool(), []);
   const poolByType = useMemo<Record<CardKind, DeckPoolEntry[]>>(
     () => ({
@@ -171,6 +195,17 @@ export function DeckBuilder({ onBack }: { onBack: () => void }) {
     setEditing(null);
   }
 
+  function handleImport() {
+    try {
+      const deck = decodeDeckCode(importCode);
+      persist([...decks, deck]);
+      setImportCode('');
+      setImportError(null);
+    } catch (err) {
+      setImportError((err as Error).message);
+    }
+  }
+
   if (editing) {
     return (
       <div className="deck-manager">
@@ -193,20 +228,43 @@ export function DeckBuilder({ onBack }: { onBack: () => void }) {
       <ul className="deck-list">
         {decks.map((deck) => (
           <li key={deck.id} className="deck-list-item">
-            <div className="deck-list-info">
-              <strong>{deck.name || '(sans nom)'}</strong>
-              <span className="subtitle">
-                {deck.characterCardIds.length} perso · {deck.objectCardIds.length} objets · {deck.terrainCardIds.length} terrains
-              </span>
+            <div className="deck-list-row">
+              <div className="deck-list-info">
+                <strong>{deck.name || '(sans nom)'}</strong>
+                <span className="subtitle">
+                  {deck.characterCardIds.length} perso · {deck.objectCardIds.length} objets · {deck.terrainCardIds.length} terrains
+                </span>
+              </div>
+              <div className="deck-list-actions">
+                <button onClick={() => setSharingId((id) => (id === deck.id ? null : deck.id))}>Partager</button>
+                <button onClick={() => setEditing({ ...deck })}>Modifier</button>
+                <button onClick={() => removeDeck(deck.id)}>Supprimer</button>
+              </div>
             </div>
-            <div className="deck-list-actions">
-              <button onClick={() => setEditing({ ...deck })}>Modifier</button>
-              <button onClick={() => removeDeck(deck.id)}>Supprimer</button>
-            </div>
+            {sharingId === deck.id && <DeckShareBox code={encodeDeckCode(deck)} />}
           </li>
         ))}
         {decks.length === 0 && <p className="subtitle">Aucun deck pour l'instant -- créez-en un pour pouvoir jouer.</p>}
       </ul>
+
+      <div className="deck-import">
+        <label className="field">
+          Importer un deck (coller un code reçu d'un autre joueur)
+          <textarea
+            value={importCode}
+            onChange={(e) => {
+              setImportCode(e.target.value);
+              setImportError(null);
+            }}
+            rows={3}
+            placeholder="CTGDECK1:..."
+          />
+        </label>
+        {importError && <p className="error">{importError}</p>}
+        <button onClick={handleImport} disabled={!importCode.trim()}>
+          Importer
+        </button>
+      </div>
     </div>
   );
 }
