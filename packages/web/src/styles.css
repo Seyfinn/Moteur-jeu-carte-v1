@@ -1061,23 +1061,25 @@ input {
   margin-bottom: 16px;
 }
 .deck-manager {
-  max-width: 760px;
-  max-height: 92dvh;
-  margin: 4vh auto;
-  padding: 24px;
+  max-width: 1180px;
+  max-height: 94dvh;
+  margin: 3vh auto;
+  padding: 32px;
   background: var(--panel);
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid var(--border);
   overflow-y: auto;
+  font-size: 1.05rem;
 }
 .deck-manager-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 .deck-manager-header h1 {
   margin: 0;
+  font-size: 1.7rem;
 }
 .deck-list {
   list-style: none;
@@ -1145,19 +1147,44 @@ textarea {
 .deck-section {
   margin-top: 12px;
 }
-.deck-section h2 {
-  font-size: 0.95rem;
-  margin: 0 0 8px;
+.deck-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 2px;
+  margin: 0 0 10px;
+  cursor: pointer;
+  text-align: left;
+}
+.deck-section-toggle:hover {
+  background: var(--panel-alt);
+}
+.deck-section-toggle h2 {
+  font-size: 1.1rem;
+  margin: 0;
+}
+.deck-section-chevron {
+  display: inline-block;
+  color: var(--text-dim);
+  transition: transform 0.15s ease-out;
+  flex-shrink: 0;
+}
+.deck-section-chevron.collapsed {
+  transform: rotate(-90deg);
 }
 .deck-section-count {
   color: var(--text-dim);
   font-weight: 400;
-  font-size: 0.82rem;
+  font-size: 0.88rem;
 }
 .deck-card-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px;
 }
 .deck-card-stepper {
   display: flex;
@@ -1177,6 +1204,48 @@ textarea {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 16px;
+}
+
+/* Hover-and-hold preview on deck-pool cards: appears after the mouse rests on a
+   card for a moment, showing it enlarged next to its full description. */
+.deck-card-preview {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+  animation: deck-card-preview-in 0.14s ease-out;
+}
+@keyframes deck-card-preview-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.deck-card-preview .tcg-card-large {
+  width: 240px;
+  flex-shrink: 0;
+}
+.deck-card-preview .tcg-card-large .tcg-card-art {
+  font-size: 3.4rem;
+}
+.deck-card-preview .tcg-card-large .tcg-card-name-banner {
+  font-size: 1.05rem;
+  padding: 8px 10px;
+}
+.deck-card-preview-text {
+  width: 320px;
+  max-height: 460px;
+  overflow-y: auto;
 }
 
 @media (max-width: 760px) {
