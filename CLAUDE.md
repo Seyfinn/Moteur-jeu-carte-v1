@@ -66,6 +66,15 @@ onAbilityUsed`. `onCharacterKO.data.characterInstanceId` = la carte qui meurt �
 d'info sur qui l'a tuée**, donc pour un effet "sur kill" il faut le détecter dans
 l'attaque elle-même (voir pattern plus bas), pas via ce trigger.
 
+⚠️ **`onGameStart` n'est jamais émis par le moteur** (déclaré dans le type `EventName`
+mais aucun `emitEvent({name: 'onGameStart', ...})` nulle part dans `match.ts`). Le
+personnage actif de départ est aussi assigné silencieusement dans `runSetup()`
+(`match.ts`), donc `onBecomeActive` ne se déclenche pas non plus pour la mise en place
+initiale (seulement sur les switches en cours de partie, via `zones.ts`). Pour un effet
+"actif dès le début de partie" (ex: Caitlyn/Execution), ne pas compter sur un trigger —
+faire une init paresseuse directement dans l'attaque/ability concernée (appliquer le
+statut si absent, en tout début d'`execute()`, avant le reste de la logique).
+
 ## `EffectContext` (ce que `execute(ctx)` peut faire)
 
 ```ts
@@ -117,6 +126,10 @@ ctx.cloneCharacter(sourceInstanceId, hp, 'active'|'bench'): string // renvoie le
   d'objets équipés...) : passer par `modifiers: ModifierDef[]` sur la carte plutôt que
   du code impératif — c'est le système que le moteur scanne automatiquement tant que la
   carte est en jeu (voir `queries.ts` et le README pour la liste des `QueryName`).
+- **Chance de critique personnalisée** (ex: Caitlyn/Execution, 33%→50% après un kill) :
+  le statut `'critical'` accepte un `data.percent` optionnel (`statuses.ts::rollCritical`),
+  sinon 33% par défaut. Comme pour le compteur persistant ci-dessus, pas d'API "update" —
+  `removeStatus` puis `applyStatus` avec le nouveau `data.percent` pour changer la valeur.
 
 ## Bug du moteur corrigé (historique, pour référence)
 

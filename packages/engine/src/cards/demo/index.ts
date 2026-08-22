@@ -1,6 +1,7 @@
 import type { RosterConfig } from '../../match.js';
 import { registerCard } from '../registry.js';
 import { blitzcrank } from './blitzcrank.js';
+import { caitlyn } from './caitlyn.js';
 import { guts } from './guts.js';
 import { potionForce } from './potion-force.js';
 import { potionDeSoin } from './potion-de-soin.js';
@@ -16,6 +17,7 @@ import { autelDemoniaque } from './autel-demoniaque.js';
 
 export {
   blitzcrank,
+  caitlyn,
   guts,
   potionForce,
   potionDeSoin,
@@ -37,6 +39,7 @@ export function registerDemoCards(): void {
   registered = true;
 
   registerCard(blitzcrank);
+  registerCard(caitlyn);
   registerCard(guts);
   registerCard(potionForce);
   registerCard(potionDeSoin);
@@ -52,7 +55,7 @@ export function registerDemoCards(): void {
 }
 
 export const DEMO_ROSTER: RosterConfig = {
-  characterCardIds: [blitzcrank.id, guts.id, rengoku.id],
+  characterCardIds: [blitzcrank.id, caitlyn.id, guts.id, rengoku.id],
   objectCardIds: [potionForce.id, potionDeSoin.id, chaines.id, poisonMortel.id],
   terrainCardIds: [
     hopital.id,

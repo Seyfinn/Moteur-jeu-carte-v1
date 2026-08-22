@@ -52,10 +52,14 @@ export function rollEvasion(state: GameState, char: CharacterInstance): boolean 
 /**
  * Critique: every character has a base 2% chance for an attack/ability they
  * deal damage with to double. The 'critical' status raises that to 33% while
- * it's present (replaces the base rate, doesn't stack with it).
+ * it's present (replaces the base rate, doesn't stack with it) -- unless the
+ * status carries its own `data.percent` (e.g. Caitlyn's "Execution" granting
+ * herself a custom rate instead of the generic 33%), in which case that value
+ * is used instead.
  */
 export function rollCritical(state: GameState, char: CharacterInstance): boolean {
-  const percent = isCritical(char) ? CRITICAL_STATUS_CHANCE_PERCENT : BASE_CRITICAL_CHANCE_PERCENT;
+  const status = char.statuses.find((s) => s.statusId === 'critical');
+  const percent = status ? Number(status.data?.['percent'] ?? CRITICAL_STATUS_CHANCE_PERCENT) : BASE_CRITICAL_CHANCE_PERCENT;
   return chancePercent(state.rng, percent);
 }
 
