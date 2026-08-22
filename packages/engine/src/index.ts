@@ -10,6 +10,7 @@ export {
   isCritical,
   isSilencedActive,
   isSilencedPassive,
+  hasDeathWard,
   getAtkReductionTotal,
   tickStatusesAtTurnStart,
 } from './statuses.js';

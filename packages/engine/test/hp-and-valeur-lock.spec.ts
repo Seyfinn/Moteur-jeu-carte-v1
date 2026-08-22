@@ -10,7 +10,7 @@ import {
   removeShield,
   type CharacterInstance,
 } from '../src/index.js';
-import { registerTestFixtures, FX_ROSTER } from './fixtures.js';
+import { registerTestFixtures, FX_ROSTER, TINY_ROSTER } from './fixtures.js';
 import { createReadyMatch, drive, findInstance } from './test-utils.js';
 
 beforeAll(() => {
@@ -136,6 +136,32 @@ describe('Shield -- through the engine', () => {
 
     expect(match.state.players.p2.characters[benchedId]!.shield).toBe(10);
   });
+
+  it("a terrain that nullifies enemy shield absorption stops it from blocking any damage", async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: FX_ROSTER, p2Roster: FX_ROSTER, seed: 9 },
+      { p1ActiveCardId: 'fx-striker', p2ActiveCardId: 'fx-tank' }
+    );
+    if (match.state.activePlayerId !== 'p1') await drive(match, 'p2', { kind: 'pass' });
+
+    const p2ActiveId = match.state.players.p2.activeCharacterInstanceId!;
+    match.state.players.p2.characters[p2ActiveId]!.shield = 25;
+
+    const terrainInstanceId = Object.values(match.state.players.p1.terrains).find(
+      (t) => t.cardId === 'fx-shield-nullifier-terrain'
+    )!.instanceId;
+    await drive(match, 'p1', { kind: 'play-terrain', terrainInstanceId });
+
+    await drive(match, 'p1', {
+      kind: 'attack',
+      characterInstanceId: match.state.players.p1.activeCharacterInstanceId!,
+      attackId: 'strike',
+    });
+
+    const p2Active = match.state.players.p2.characters[p2ActiveId]!;
+    expect(p2Active.shield).toBe(25); // value untouched -- it just stops absorbing
+    expect(getCurrentHP(p2Active)).toBe(300 - 40); // full damage goes through, unblocked
+  });
 });
 
 describe('HP model -- through the engine', () => {
@@ -189,5 +215,44 @@ describe('Heal amount modifiers -- through the engine', () => {
     await drive(match, 'p1', { kind: 'pass' }); // playing a single object doesn't end the turn on its own
     await drive(match, 'p2', { kind: 'play-object', objectInstanceId: p2ObjectInstanceId });
     expect(p2.characters[p2ActiveId]!.damage).toBe(50 - 15); // p1's terrain does not boost p2's heals
+  });
+});
+
+describe('Death ward -- through the engine', () => {
+  it('clamps ordinary damage so current HP never drops below 1', async () => {
+    const match = await createReadyMatch({ p1Name: 'A', p2Name: 'B', p1Roster: TINY_ROSTER, p2Roster: TINY_ROSTER, seed: 13 });
+    const attackerId = match.state.activePlayerId;
+    const defenderId = attackerId === 'p1' ? 'p2' : 'p1';
+    const defenderActiveId = match.state.players[defenderId].activeCharacterInstanceId!;
+    match.state.players[defenderId].characters[defenderActiveId]!.statuses.push({
+      statusId: 'death-ward',
+      label: 'Death Ward',
+      remainingTurns: 1,
+    });
+
+    await drive(match, attackerId, {
+      kind: 'attack',
+      characterInstanceId: match.state.players[attackerId].activeCharacterInstanceId!,
+      attackId: 'shatter', // fx-glass: 10HP, deals 10 -- would KO without the ward
+    });
+
+    const defenderActive = match.state.players[defenderId].characters[defenderActiveId]!;
+    expect(getCurrentHP(defenderActive)).toBe(1);
+    expect(match.state.players[defenderId].graveyardCharacterInstanceIds).not.toContain(defenderActiveId);
+  });
+
+  it('without the status, the same hit KOs as normal', async () => {
+    const match = await createReadyMatch({ p1Name: 'A', p2Name: 'B', p1Roster: TINY_ROSTER, p2Roster: TINY_ROSTER, seed: 13 });
+    const attackerId = match.state.activePlayerId;
+    const defenderId = attackerId === 'p1' ? 'p2' : 'p1';
+    const defenderActiveId = match.state.players[defenderId].activeCharacterInstanceId!;
+
+    await drive(match, attackerId, {
+      kind: 'attack',
+      characterInstanceId: match.state.players[attackerId].activeCharacterInstanceId!,
+      attackId: 'shatter',
+    });
+
+    expect(match.state.players[defenderId].graveyardCharacterInstanceIds).toContain(defenderActiveId);
   });
 });

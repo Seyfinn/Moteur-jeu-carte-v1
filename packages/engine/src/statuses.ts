@@ -39,6 +39,18 @@ export function isCritical(char: CharacterInstance): boolean {
 }
 
 /**
+ * "Death ward": while present, ordinary damage (dealDamage, not Valeur Lock)
+ * can never bring the bearer's current HP below 1. Checked directly in
+ * match.ts's dealDamage handler -- like atk-boost/atk-reduction, this is a
+ * generic engine-recognized status rather than a per-card modifier, since a
+ * one-shot object card's own `modifiers` stop being scanned the instant it
+ * leaves play (see match.ts::handlePlayObject).
+ */
+export function hasDeathWard(char: CharacterInstance): boolean {
+  return hasStatus(char, 'death-ward');
+}
+
+/**
  * Esquive: every character has a base 5% chance to fully negate an incoming
  * attack/ability (damage or status application), no status required. The
  * 'evasive' status raises that to 33% while it's present (it replaces the

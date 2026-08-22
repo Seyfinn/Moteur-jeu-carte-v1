@@ -199,3 +199,8 @@ export function getEffectiveATK(state: GameState, characterInstanceId: string, b
   const transformed = evaluateTransform(state, 'getEffectiveATK', { characterInstanceId }, baseATK);
   return Math.max(0, transformed + getAtkBoostTotal(char) - getAtkReductionTotal(char));
 }
+
+/** Defaults to the base x2 critical multiplier; a card (e.g. a terrain) can transform it for a specific attacker. */
+export function getCriticalMultiplier(state: GameState, characterInstanceId: string): number {
+  return evaluateTransform(state, 'getCriticalMultiplier', { characterInstanceId }, 2);
+}

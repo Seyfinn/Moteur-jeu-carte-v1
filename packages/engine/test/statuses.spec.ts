@@ -170,6 +170,46 @@ describe('Critique & Esquive (section 6)', () => {
     expect(dodges).toBeLessThan(trials * 0.2); // innate 5%, generous margin
   });
 
+  it('a terrain overriding the crit multiplier only boosts its own owner\'s crits, not the opponent\'s', async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: FX_ROSTER, p2Roster: FX_ROSTER, seed: 33 },
+      { p1ActiveCardId: 'fx-striker', p2ActiveCardId: 'fx-tank' }
+    );
+    const ownerId = match.state.activePlayerId;
+    const otherId = ownerId === 'p1' ? 'p2' : 'p1';
+    const ownerTerrainInstanceId = Object.values(match.state.players[ownerId].terrains).find(
+      (t) => t.cardId === 'fx-crit-boost-terrain'
+    )!.instanceId;
+    await drive(match, ownerId, { kind: 'play-terrain', terrainInstanceId: ownerTerrainInstanceId });
+
+    const ownerChar = match.state.players[ownerId].characters[match.state.players[ownerId].activeCharacterInstanceId!]!;
+    const otherChar = match.state.players[otherId].characters[match.state.players[otherId].activeCharacterInstanceId!]!;
+    ownerChar.statuses.push({ statusId: 'critical', label: 'Critique' });
+    otherChar.statuses.push({ statusId: 'critical', label: 'Critique' });
+    const api = match['api'] as EngineApi;
+    const trials = 200;
+
+    const ownerDamages = new Set<number>();
+    for (let i = 0; i < trials; i++) {
+      otherChar.damage = 0;
+      const ctx = api.buildEffectContext(ownerChar.instanceId, ownerId);
+      await ctx.dealDamage(otherChar.instanceId, 10);
+      ownerDamages.add(otherChar.damage);
+    }
+    expect(ownerDamages.has(30)).toBe(true); // owner's crits hit for the boosted x3
+    expect(ownerDamages.has(20)).toBe(false); // never falls back to the default x2 while the terrain is up
+
+    const otherDamages = new Set<number>();
+    for (let i = 0; i < trials; i++) {
+      ownerChar.damage = 0;
+      const ctx = api.buildEffectContext(otherChar.instanceId, otherId);
+      await ctx.dealDamage(ownerChar.instanceId, 10);
+      otherDamages.add(ownerChar.damage);
+    }
+    expect(otherDamages.has(20)).toBe(true); // opponent's crits stay at the default x2
+    expect(otherDamages.has(30)).toBe(false); // opponent never benefits from the owner's terrain
+  });
+
   it('evasive status: negates damage roughly a third of the time and never fully consumes the status', async () => {
     const match = await createReadyMatch(
       { p1Name: 'A', p2Name: 'B', p1Roster: FX_ROSTER, p2Roster: FX_ROSTER, seed: 31 },

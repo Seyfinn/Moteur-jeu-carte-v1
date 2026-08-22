@@ -1,8 +1,10 @@
 import type { EffectContext } from './cards/types.js';
 import type { EngineApi } from './engine-api.js';
 import { isKO } from './hp.js';
-import { findCharacter, getEffectiveATK } from './queries.js';
-import { rollCritical, rollEvasion } from './statuses.js';
+import { findCharacter, getCriticalMultiplier, getEffectiveATK } from './queries.js';
+import { getStatus, hasStatus, rollCritical, rollEvasion } from './statuses.js';
+import { chancePercent } from './rng.js';
+import { findCharacterOwner } from './zones.js';
 import { otherPlayer, type EngineEvent, type GameState, type PlayerId } from './types.js';
 
 export function buildEffectContext(
@@ -11,9 +13,19 @@ export function buildEffectContext(
   ownerId: PlayerId,
   api: EngineApi,
   event?: EngineEvent,
-  isAttackOrAbility = true
+  damageSource: 'attack' | 'ability' | 'other' = 'ability'
 ): EffectContext {
   const opponentId = otherPlayer(ownerId);
+  const isAttackOrAbility = damageSource !== 'other';
+
+  /** "Concentration" ratée : consomme le statut, inflige 0 et empêche d'attaquer au tour suivant. */
+  function consumeMissedConcentration(char: ReturnType<typeof findCharacter>): void {
+    api.removeStatus(char.instanceId, 'concentration');
+    api.applyStatus(char.instanceId, { statusId: 'disarmed', label: 'Concentration ratée', remainingTurns: 2 });
+    api.log(`${char.cardId} rate sa Concentration : aucun dégât, ne pourra pas attaquer au prochain tour`, {
+      characterInstanceId: char.instanceId,
+    });
+  }
 
   function getActive(playerId: PlayerId) {
     const p = state.players[playerId];
@@ -88,25 +100,58 @@ export function buildEffectContext(
     isKO(characterInstanceId) {
       return isKO(findCharacter(state, characterInstanceId));
     },
+    async koCharacter(characterInstanceId) {
+      await api.koCharacter(characterInstanceId);
+    },
+    async reviveCharacter(characterInstanceId, hp, placement) {
+      await api.reviveCharacter(characterInstanceId, hp, placement);
+    },
 
     async dealDamage(targetInstanceId, amount, options) {
+      const selfInflicted = targetInstanceId === sourceInstanceId;
+      const source = isAttackOrAbility && !selfInflicted ? state.players[ownerId].characters[sourceInstanceId] : undefined;
+      // "Concentration" only arms on a literal attack (not an ability's damage) -- see damageSource above.
+      const concentration = damageSource === 'attack' && source ? getStatus(source, 'concentration') : undefined;
+
       // Critique/esquive (innate or status-driven) only apply to attacks and
       // abilities, never to object-card effects, self-inflicted damage, or
       // poison/burn ticks (those call api.dealDamage directly, bypassing this
       // context entirely).
-      if (!options?.skipEvasionRoll && isAttackOrAbility && targetInstanceId !== sourceInstanceId) {
+      if (!options?.skipEvasionRoll && isAttackOrAbility && !selfInflicted) {
         const target = findCharacter(state, targetInstanceId);
         if (rollEvasion(state, target)) {
           api.log(`${target.cardId} esquive l'attaque`, { targetInstanceId, sourceInstanceId });
+          if (concentration) consumeMissedConcentration(source!);
           return;
         }
       }
 
       let finalAmount = amount;
-      const source = isAttackOrAbility ? state.players[ownerId].characters[sourceInstanceId] : undefined;
-      if (source && rollCritical(state, source)) {
-        finalAmount = amount * 2;
-        api.log(`${source.cardId} inflige un coup critique !`, { sourceInstanceId, targetInstanceId, baseAmount: amount, amount: finalAmount });
+      if (concentration) {
+        const percent = Number(concentration.data?.['percent'] ?? 70);
+        if (chancePercent(state.rng, percent)) {
+          api.removeStatus(source!.instanceId, 'concentration');
+          const multiplier = getCriticalMultiplier(state, sourceInstanceId);
+          finalAmount = amount * multiplier;
+          api.log(`${source!.cardId} se concentre et critique (x${multiplier}) !`, { sourceInstanceId, targetInstanceId, baseAmount: amount, amount: finalAmount });
+        } else {
+          consumeMissedConcentration(source!);
+          finalAmount = 0;
+        }
+      } else if (source && rollCritical(state, source)) {
+        const multiplier = getCriticalMultiplier(state, sourceInstanceId);
+        finalAmount = amount * multiplier;
+        api.log(`${source.cardId} inflige un coup critique (x${multiplier}) !`, { sourceInstanceId, targetInstanceId, baseAmount: amount, amount: finalAmount });
+      }
+
+      // "Couteau dans le dos" : double les dégâts de n'importe lequel de vos personnages
+      // contre le banc ennemi (statut posé sur chaque personnage à la pose de l'objet).
+      if (source && hasStatus(source, 'couteau-dans-le-dos')) {
+        const targetOwner = findCharacterOwner(state, targetInstanceId);
+        if (targetOwner !== ownerId && state.players[targetOwner].benchCharacterInstanceIds.includes(targetInstanceId)) {
+          finalAmount *= 2;
+          api.log(`${source.cardId} frappe dans le dos : dégâts au banc doublés`, { sourceInstanceId, targetInstanceId, amount: finalAmount });
+        }
       }
 
       await api.dealDamage(targetInstanceId, finalAmount, options);
@@ -173,6 +218,9 @@ export function buildEffectContext(
     async shortenTerrain(terrainInstanceId, turns) {
       await api.shortenTerrain(terrainInstanceId, turns);
     },
+    async destroyTerrain(terrainInstanceId) {
+      await api.destroyTerrain(terrainInstanceId);
+    },
 
     async forceSwitch(playerId, newActiveInstanceId) {
       await api.switchActive(playerId, newActiveInstanceId);
@@ -181,6 +229,9 @@ export function buildEffectContext(
     cloneCharacter(sourceCharInstanceId, hp, placement) {
       const cloneOwner = findCharacter(state, sourceCharInstanceId).ownerId;
       return api.cloneCharacter(cloneOwner, sourceCharInstanceId, hp, placement);
+    },
+    createObject(cardId) {
+      return api.createObject(ownerId, cardId);
     },
   };
 }
