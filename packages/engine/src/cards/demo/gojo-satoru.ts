@@ -2,6 +2,7 @@ import type { CharacterCardDef } from '../types.js';
 
 const BLACKFLASH_ATK = 55;
 const BLACKFLASH_CRIT_PERCENT = 33;
+const INFINI_EVASION_PERCENT = 33;
 
 // Ciblé sur l'ennemi pendant le tour de Gojo -> +1 (même correction que le Silence
 // Ultime de Zoé, voir zoe.ts : le premier tick du statut a lieu au tout début du tour
@@ -25,19 +26,6 @@ export const gojoSatoru: CharacterCardDef = {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
 
-        // Applique la chance de critique élevée dès le premier Blackflash (pas de
-        // trigger 'onGameStart' fiable dans le moteur -- init paresseuse ici, comme
-        // "Execution" de Caitlyn, voir CLAUDE.md).
-        const self = ctx.getCharacter(ctx.sourceInstanceId);
-        if (!self.statuses.some((s) => s.statusId === 'critical')) {
-          ctx.applyStatus(ctx.sourceInstanceId, {
-            statusId: 'critical',
-            label: 'Critique (Blackflash)',
-            sourceCardInstanceId: ctx.sourceInstanceId,
-            data: { percent: BLACKFLASH_CRIT_PERCENT },
-          });
-        }
-
         const atk = ctx.getEffectiveATK(ctx.sourceInstanceId, BLACKFLASH_ATK);
         await ctx.dealDamage(target.instanceId, atk);
       },
@@ -50,26 +38,11 @@ export const gojoSatoru: CharacterCardDef = {
       kind: 'passive',
       description:
         "Gojo bénéficie en permanence de l'effet Esquive (statut 'evasive', 33% au lieu de 5% de base), que Gojo soit actif ou au banc.",
-      trigger: 'onTurnStart',
-      // Doit rester déclenchable même si Gojo est au banc, puisque l'effet doit
-      // s'appliquer indépendamment de sa position (voir description).
-      usableFromBench: true,
-      condition(ctx) {
-        return ctx.event?.playerId === ctx.ownerId;
-      },
-      async execute(ctx) {
-        // Pas de trigger 'onGameStart' fiable dans le moteur (voir CLAUDE.md) --
-        // applique le statut au tout premier tour du possesseur si absent, puis ne
-        // fait plus rien (le statut, sans remainingTurns, ne s'efface jamais tout
-        // seul via tickStatusesAtTurnStart).
-        const self = ctx.getCharacter(ctx.sourceInstanceId);
-        if (self.statuses.some((s) => s.statusId === 'evasive')) return;
-        ctx.applyStatus(ctx.sourceInstanceId, {
-          statusId: 'evasive',
-          label: "Esquive (L'Infini)",
-          sourceCardInstanceId: ctx.sourceInstanceId,
-        });
-      },
+      // Purement descriptive : implémentée par le modifier 'getEvasionPercent' plus bas.
+      // Un modifier vit tant que la carte est en jeu, donc l'esquive est acquise dès le
+      // premier coup de la partie, ne peut pas être dissipée comme un statut, et
+      // survit à une résurrection (reviveCharacter vide les statuts).
+      async execute() {},
     },
     {
       id: 'extension-du-territoire',
@@ -87,6 +60,24 @@ export const gojoSatoru: CharacterCardDef = {
           sourceCardInstanceId: ctx.sourceInstanceId,
           remainingTurns: STUN_REMAINING_TURNS,
         });
+      },
+    },
+  ],
+  modifiers: [
+    {
+      // "L'Infini" : esquive innée permanente, actif ou au banc.
+      query: 'getEvasionPercent',
+      transform(ctx, current) {
+        if (ctx.query['characterInstanceId'] !== ctx.sourceInstanceId) return current;
+        return Math.max(current as number, INFINI_EVASION_PERCENT);
+      },
+    },
+    {
+      // "Blackflash" : chance de critique innée, sans statut à poser.
+      query: 'getCriticalPercent',
+      transform(ctx, current) {
+        if (ctx.query['characterInstanceId'] !== ctx.sourceInstanceId) return current;
+        return Math.max(current as number, BLACKFLASH_CRIT_PERCENT);
       },
     },
   ],

@@ -20,10 +20,15 @@ export function dealDamage(char: CharacterInstance, amount: number): void {
   char.damage += amount;
 }
 
-/** "Valeur lock": permanently reduces max HP. Never healable. Can push HP to/below 0 (KO). */
+/**
+ * "Valeur lock": permanently reduces max HP. Never healable. Can push HP to/below 0 (KO).
+ * Floored at 0 so the ceiling never goes negative -- a negative ceiling has no extra
+ * mechanical meaning (the bearer is already KO at 0) but leaks into every "x / y HP"
+ * readout and into any modifier doing arithmetic on currentMaxHP.
+ */
 export function applyValeurLock(char: CharacterInstance, amount: number): void {
   if (amount <= 0) return;
-  char.currentMaxHP -= amount;
+  char.currentMaxHP = Math.max(0, char.currentMaxHP - amount);
 }
 
 /** Restores ordinary damage only, capped so current HP never exceeds currentMaxHP. */

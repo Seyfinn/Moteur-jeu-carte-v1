@@ -1,5 +1,5 @@
 import { randomUUID } from './uuid.js';
-import type { CharacterInstance, GameState, PlayerId, TerrainInstance } from './types.js';
+import { otherPlayer, type CharacterInstance, type GameState, type PlayerId, type PlayerState, type TerrainInstance } from './types.js';
 import type { EngineApi } from './engine-api.js';
 import { getCharacterCard } from './cards/registry.js';
 
@@ -8,6 +8,14 @@ export function findCharacterOwner(state: GameState, instanceId: string): Player
     if (state.players[playerId].characters[instanceId]) return playerId;
   }
   throw new Error(`Unknown character instance "${instanceId}"`);
+}
+
+/** Non-throwing variant, for optional/attribution lookups where a missing instance is fine. */
+export function safeFindCharacterOwner(state: GameState, instanceId: string): PlayerId | undefined {
+  for (const playerId of ['p1', 'p2'] as PlayerId[]) {
+    if (state.players[playerId].characters[instanceId]) return playerId;
+  }
+  return undefined;
 }
 
 function countOnBoard(state: GameState, playerId: PlayerId): number {
@@ -40,7 +48,12 @@ export function checkWinCondition(state: GameState): void {
  * to destroy any attached objects, and (section 2) forces an immediate free
  * replacement from the bench if the KO'd character was active.
  */
-export async function koCharacter(state: GameState, characterInstanceId: string, api: EngineApi): Promise<void> {
+export async function koCharacter(
+  state: GameState,
+  characterInstanceId: string,
+  api: EngineApi,
+  killerInstanceId?: string
+): Promise<void> {
   const ownerId = findCharacterOwner(state, characterInstanceId);
   const player = state.players[ownerId];
   const wasActive = player.activeCharacterInstanceId === characterInstanceId;
@@ -61,8 +74,16 @@ export async function koCharacter(state: GameState, characterInstanceId: string,
   }
   char.attachedObjectInstanceIds = [];
 
-  api.log(`${char.cardId} is KO'd`, { characterInstanceId, ownerId });
-  await api.emitEvent({ name: 'onCharacterKO', playerId: ownerId, data: { characterInstanceId } });
+  api.log(`${char.cardId} is KO'd`, { characterInstanceId, ownerId, killerInstanceId }, ownerId);
+  await api.emitEvent({
+    name: 'onCharacterKO',
+    playerId: ownerId,
+    data: {
+      characterInstanceId,
+      killerInstanceId,
+      killerOwnerId: killerInstanceId ? safeFindCharacterOwner(state, killerInstanceId) : undefined,
+    },
+  });
 
   if (wasActive && player.activeCharacterInstanceId === null && player.benchCharacterInstanceIds.length > 0) {
     const answer = await api.chooseFor(ownerId, {
@@ -72,12 +93,20 @@ export async function koCharacter(state: GameState, characterInstanceId: string,
       min: 1,
       max: 1,
     });
+    // Re-read the bench: the choice suspends this function, and anything can have
+    // happened in between (another KO, a forced switch, a revive filling the slot).
+    if (player.activeCharacterInstanceId !== null || player.benchCharacterInstanceIds.length === 0) return;
     const chosen = answer.kind === 'select-characters' ? answer.selected[0] : undefined;
-    const newActiveId = chosen ?? player.benchCharacterInstanceIds[0]!;
+    const newActiveId =
+      chosen && player.benchCharacterInstanceIds.includes(chosen) ? chosen : player.benchCharacterInstanceIds[0]!;
     const idx = player.benchCharacterInstanceIds.indexOf(newActiveId);
     if (idx !== -1) player.benchCharacterInstanceIds.splice(idx, 1);
     player.activeCharacterInstanceId = newActiveId;
-    await api.emitEvent({ name: 'onBecomeActive', playerId: ownerId, data: { characterInstanceId: newActiveId } });
+    await api.emitEvent({
+      name: 'onBecomeActive',
+      playerId: ownerId,
+      data: { characterInstanceId: newActiveId, reason: 'ko-replacement' },
+    });
   }
 
   // Deliberately not checking the win condition here: a single effect can KO
@@ -96,8 +125,11 @@ export function reviveCharacter(state: GameState, characterInstanceId: string, h
   player.graveyardCharacterInstanceIds.splice(idx, 1);
 
   const char = player.characters[characterInstanceId]!;
-  char.currentMaxHP = Math.max(char.currentMaxHP, hp);
-  char.damage = Math.max(0, char.currentMaxHP - hp);
+  // A revive at 0 (or less) would put a character back on the board already KO'd, which
+  // nothing would then clean up. One HP is the floor.
+  const reviveHP = Math.max(1, Math.round(hp));
+  char.currentMaxHP = Math.max(char.currentMaxHP, reviveHP);
+  char.damage = Math.max(0, char.currentMaxHP - reviveHP);
   char.shield = 0;
   char.statuses = [];
 
@@ -126,7 +158,8 @@ export function createCharacterClone(
     cardId: source.cardId,
     ownerId,
     baseMaxHP: cardDef.baseMaxHP,
-    currentMaxHP: hp,
+    // Same reasoning as reviveCharacter: a clone summoned at 0 HP would be born KO'd.
+    currentMaxHP: Math.max(1, Math.round(hp)),
     damage: 0,
     shield: 0,
     statuses: [],
@@ -154,9 +187,17 @@ export async function switchActive(state: GameState, playerId: PlayerId, newActi
   if (previousActiveId) player.benchCharacterInstanceIds.push(previousActiveId);
   player.activeCharacterInstanceId = newActiveInstanceId;
 
-  api.log(`${playerId} switches active character`, { newActiveInstanceId, previousActiveId });
-  await api.emitEvent({ name: 'onSwitch', playerId, data: { newActiveInstanceId, previousActiveId } });
-  await api.emitEvent({ name: 'onBecomeActive', playerId, data: { characterInstanceId: newActiveInstanceId } });
+  api.log(`${playerId} switches active character`, { newActiveInstanceId, previousActiveInstanceId: previousActiveId }, playerId);
+  await api.emitEvent({
+    name: 'onSwitch',
+    playerId,
+    data: { newActiveInstanceId, previousActiveInstanceId: previousActiveId },
+  });
+  await api.emitEvent({
+    name: 'onBecomeActive',
+    playerId,
+    data: { characterInstanceId: newActiveInstanceId, reason: 'switch' },
+  });
 }
 
 export function swapBenchCharacters(
@@ -186,18 +227,48 @@ export function swapBenchCharacters(
 
   ownPlayer.benchCharacterInstanceIds[ownIdx] = enemyBenchInstanceId;
   enemyPlayer.benchCharacterInstanceIds[enemyIdx] = ownBenchInstanceId;
+
+  // Equipped objects live in their owner's `objects`/`inPlayObjectInstanceIds`. A
+  // character changing sides has to bring them along, otherwise they end up orphaned
+  // (still listed on the character, but unreachable from the player who now controls
+  // it -- destroyObject/getInPlaySources would both silently skip them).
+  moveAttachedObjects(ownChar, ownPlayer, enemyPlayer);
+  moveAttachedObjects(enemyChar, enemyPlayer, ownPlayer);
 }
 
-export function attachObjectToCharacter(state: GameState, objectInstanceId: string, targetCharacterInstanceId: string): void {
-  const ownerId = findCharacterOwner(state, targetCharacterInstanceId);
-  const player = state.players[ownerId];
-  const obj = player.objects[objectInstanceId];
-  if (!obj) throw new Error(`Object "${objectInstanceId}" not found for ${ownerId}`);
-  obj.attachedToCharacterInstanceId = targetCharacterInstanceId;
-  if (!player.inPlayObjectInstanceIds.includes(objectInstanceId)) {
-    player.inPlayObjectInstanceIds.push(objectInstanceId);
+function moveAttachedObjects(char: CharacterInstance, from: PlayerState, to: PlayerState): void {
+  for (const objectInstanceId of char.attachedObjectInstanceIds) {
+    const obj = from.objects[objectInstanceId];
+    if (!obj) continue;
+    delete from.objects[objectInstanceId];
+    const idx = from.inPlayObjectInstanceIds.indexOf(objectInstanceId);
+    if (idx !== -1) from.inPlayObjectInstanceIds.splice(idx, 1);
+    obj.ownerId = to.id;
+    to.objects[objectInstanceId] = obj;
+    if (!to.inPlayObjectInstanceIds.includes(objectInstanceId)) {
+      to.inPlayObjectInstanceIds.push(objectInstanceId);
+    }
   }
-  const char = player.characters[targetCharacterInstanceId]!;
+}
+
+/**
+ * The object and the character it attaches to don't have to belong to the same player
+ * (an effect can equip an enemy), so each is looked up through its own owner.
+ */
+export function attachObjectToCharacter(state: GameState, objectInstanceId: string, targetCharacterInstanceId: string): void {
+  const charOwnerId = findCharacterOwner(state, targetCharacterInstanceId);
+  const objectOwnerId = findObjectOwner(state, objectInstanceId);
+  const objectPlayer = state.players[objectOwnerId];
+  const obj = objectPlayer.objects[objectInstanceId]!;
+
+  obj.attachedToCharacterInstanceId = targetCharacterInstanceId;
+  const unplayedIdx = objectPlayer.unplayedObjectInstanceIds.indexOf(objectInstanceId);
+  if (unplayedIdx !== -1) objectPlayer.unplayedObjectInstanceIds.splice(unplayedIdx, 1);
+  if (!objectPlayer.inPlayObjectInstanceIds.includes(objectInstanceId)) {
+    objectPlayer.inPlayObjectInstanceIds.push(objectInstanceId);
+  }
+
+  const char = state.players[charOwnerId].characters[targetCharacterInstanceId]!;
   if (!char.attachedObjectInstanceIds.includes(objectInstanceId)) {
     char.attachedObjectInstanceIds.push(objectInstanceId);
   }
@@ -213,8 +284,12 @@ export function moveObjectFromPoolToInPlay(state: GameState, playerId: PlayerId,
 
 export function moveObjectToGraveyard(state: GameState, playerId: PlayerId, objectInstanceId: string): void {
   const player = state.players[playerId];
-  const idx = player.inPlayObjectInstanceIds.indexOf(objectInstanceId);
-  if (idx !== -1) player.inPlayObjectInstanceIds.splice(idx, 1);
+  const inPlayIdx = player.inPlayObjectInstanceIds.indexOf(objectInstanceId);
+  if (inPlayIdx !== -1) player.inPlayObjectInstanceIds.splice(inPlayIdx, 1);
+  // Also clear the unplayed pool: destroying a card still in hand used to leave it
+  // listed there *and* in the graveyard, so it stayed playable after being destroyed.
+  const unplayedIdx = player.unplayedObjectInstanceIds.indexOf(objectInstanceId);
+  if (unplayedIdx !== -1) player.unplayedObjectInstanceIds.splice(unplayedIdx, 1);
   if (!player.graveyardObjectInstanceIds.includes(objectInstanceId)) {
     player.graveyardObjectInstanceIds.push(objectInstanceId);
   }
@@ -234,7 +309,9 @@ export function destroyObject(state: GameState, objectInstanceId: string): void 
   const obj = player.objects[objectInstanceId];
   if (!obj) return;
   if (obj.attachedToCharacterInstanceId) {
-    const char = player.characters[obj.attachedToCharacterInstanceId];
+    const attachedTo = obj.attachedToCharacterInstanceId;
+    const char =
+      player.characters[attachedTo] ?? state.players[otherPlayer(ownerId)].characters[attachedTo];
     if (char) {
       const idx = char.attachedObjectInstanceIds.indexOf(objectInstanceId);
       if (idx !== -1) char.attachedObjectInstanceIds.splice(idx, 1);
@@ -244,26 +321,49 @@ export function destroyObject(state: GameState, objectInstanceId: string): void 
   moveObjectToGraveyard(state, ownerId, objectInstanceId);
 }
 
-/** Section 8: posing a new terrain sends the previous one to the graveyard. */
-export function moveTerrainFromPoolToActive(state: GameState, playerId: PlayerId, terrainInstanceId: string): TerrainInstance | undefined {
+/**
+ * Section 8: posing a new terrain sends the previous one to the graveyard -- and that
+ * counts as a removal, so `onTerrainRemoved` fires for it exactly like an expiry or a
+ * destruction would (otherwise a card reacting to "my terrain left play" would silently
+ * miss the most common way terrains leave play).
+ */
+export async function moveTerrainFromPoolToActive(
+  state: GameState,
+  playerId: PlayerId,
+  terrainInstanceId: string,
+  api: EngineApi
+): Promise<TerrainInstance | undefined> {
   const player = state.players[playerId];
   const idx = player.unplayedTerrainInstanceIds.indexOf(terrainInstanceId);
   if (idx === -1) throw new Error(`Terrain "${terrainInstanceId}" is not in ${playerId}'s unplayed pool`);
   player.unplayedTerrainInstanceIds.splice(idx, 1);
 
   let replaced: TerrainInstance | undefined;
-  if (player.activeTerrainInstanceId) {
-    replaced = player.terrains[player.activeTerrainInstanceId];
-    player.graveyardTerrainInstanceIds.push(player.activeTerrainInstanceId);
+  const replacedId = player.activeTerrainInstanceId;
+  if (replacedId) {
+    replaced = player.terrains[replacedId];
+    removeActiveTerrain(state, playerId);
   }
   player.activeTerrainInstanceId = terrainInstanceId;
+
+  if (replacedId) {
+    api.log(`${replaced?.cardId} is replaced and goes to the graveyard`, { terrainInstanceId: replacedId }, playerId);
+    await api.emitEvent({
+      name: 'onTerrainRemoved',
+      playerId,
+      data: { terrainInstanceId: replacedId, reason: 'replaced' },
+    });
+  }
   return replaced;
 }
 
 export function removeActiveTerrain(state: GameState, playerId: PlayerId): void {
   const player = state.players[playerId];
-  if (!player.activeTerrainInstanceId) return;
-  player.graveyardTerrainInstanceIds.push(player.activeTerrainInstanceId);
+  const terrainInstanceId = player.activeTerrainInstanceId;
+  if (!terrainInstanceId) return;
+  if (!player.graveyardTerrainInstanceIds.includes(terrainInstanceId)) {
+    player.graveyardTerrainInstanceIds.push(terrainInstanceId);
+  }
   player.activeTerrainInstanceId = null;
 }
 
@@ -275,9 +375,10 @@ async function expireTerrainIfDepleted(
   api: EngineApi
 ): Promise<void> {
   if (terrain.remainingTurns === undefined || terrain.remainingTurns > 0) return;
+  if (state.players[playerId].activeTerrainInstanceId !== terrainInstanceId) return;
   removeActiveTerrain(state, playerId);
-  api.log(`Terrain expires`, { terrainInstanceId });
-  await api.emitEvent({ name: 'onTerrainRemoved', playerId, data: { terrainInstanceId } });
+  api.log(`${terrain.cardId} expires`, { terrainInstanceId }, playerId);
+  await api.emitEvent({ name: 'onTerrainRemoved', playerId, data: { terrainInstanceId, reason: 'expired' } });
 }
 
 /**

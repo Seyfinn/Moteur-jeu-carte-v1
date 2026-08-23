@@ -5,6 +5,7 @@ import { getStatus } from '../../statuses.js';
 const RAIKIRI_ATK = 60;
 
 const LAST_ENEMY_ATTACK_STATUS_ID = 'kakashi-last-enemy-attack';
+const SHARINGAN_EVASION_PERCENT = 33;
 
 export const kakashi: CharacterCardDef = {
   type: 'character',
@@ -32,26 +33,9 @@ export const kakashi: CharacterCardDef = {
       kind: 'passive',
       description:
         "Kakashi bénéficie en permanence de l'effet Esquive (statut 'evasive', 33% au lieu de 5% de base), que Kakashi soit actif ou au banc.",
-      trigger: 'onTurnStart',
-      // Doit rester déclenchable même si Kakashi est au banc, l'effet s'appliquant
-      // indépendamment de sa position (même mécanisme que L'Infini de Gojo).
-      usableFromBench: true,
-      condition(ctx) {
-        return ctx.event?.playerId === ctx.ownerId;
-      },
-      async execute(ctx) {
-        // Pas de trigger 'onGameStart' fiable dans le moteur (voir CLAUDE.md) --
-        // applique le statut au tout premier tour du possesseur si absent, puis ne
-        // fait plus rien (le statut, sans remainingTurns, ne s'efface jamais tout
-        // seul via tickStatusesAtTurnStart).
-        const self = ctx.getCharacter(ctx.sourceInstanceId);
-        if (self.statuses.some((s) => s.statusId === 'evasive')) return;
-        ctx.applyStatus(ctx.sourceInstanceId, {
-          statusId: 'evasive',
-          label: 'Esquive (Sharingan)',
-          sourceCardInstanceId: ctx.sourceInstanceId,
-        });
-      },
+      // Purement descriptive : implémentée par le modifier 'getEvasionPercent' plus bas
+      // (même mécanisme que L'Infini de Gojo).
+      async execute() {},
     },
     {
       // Bookkeeping pur : mémorise la dernière attaque de l'ennemi pour Copie de
@@ -101,6 +85,16 @@ export const kakashi: CharacterCardDef = {
 
         ctx.log(`Copie de Technique : Kakashi utilise ${stolenAttack.name}`, { attackId, stolenFrom: characterInstanceId });
         await stolenAttack.execute(ctx);
+      },
+    },
+  ],
+  modifiers: [
+    {
+      // "Sharingan" : esquive innée permanente, actif ou au banc.
+      query: 'getEvasionPercent',
+      transform(ctx, current) {
+        if (ctx.query['characterInstanceId'] !== ctx.sourceInstanceId) return current;
+        return Math.max(current as number, SHARINGAN_EVASION_PERCENT);
       },
     },
   ],

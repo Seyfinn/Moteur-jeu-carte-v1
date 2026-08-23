@@ -13,7 +13,10 @@ export const miroirDeRenvoi: ObjectCardDef = {
     if (!active) return;
     ctx.attachSelfTo(active.instanceId);
     ctx.applyStatus(active.instanceId, {
-      statusId: 'miroir-de-renvoi',
+      // Statut générique du moteur ('damage-reflect', cf types.ts) : le pipeline de
+      // dégâts renvoie le pourcentage et détruit l'objet porteur, la carte ne fait
+      // que le poser.
+      statusId: 'damage-reflect',
       label: 'Miroir de Renvoi',
       sourceCardInstanceId: ctx.sourceInstanceId,
       data: { percent: REFLECT_PERCENT, objectInstanceId: ctx.sourceInstanceId },

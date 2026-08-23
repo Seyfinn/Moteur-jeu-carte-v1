@@ -24,12 +24,24 @@ export type BuiltinStatusId =
   | 'silence-ultimate'
   | 'atk-reduction'
   | 'atk-boost'
+  /** Multiplies effective ATK. `data: { multiplier: number }`. Stacks multiplicatively. */
+  | 'atk-multiplier'
   | 'burn'
   | 'poison'
   | 'bleed'
   | 'evasive'
   | 'critical'
-  | 'chained';
+  | 'chained'
+  /** Ordinary damage can never bring the bearer below 1 HP while present. */
+  | 'death-ward'
+  /** Next attack crits at `data.percent`% or deals 0 and disarms the bearer. */
+  | 'concentration'
+  /** Reflects `data.percent`% of an incoming hit back at the attacker, once. Optional `data.objectInstanceId` is destroyed with it. */
+  | 'damage-reflect'
+  /** Bearer's damage against the enemy BENCH is multiplied by `data.multiplier` (default 2). */
+  | 'bench-damage-bonus'
+  /** The first attack that really lands on the bearer grants `data.bonusMaxHP` max HP to its attacker, then the status is consumed. */
+  | 'hit-bounty';
 
 export interface DealDamageOptions {
   /** Bypasses shield entirely: damage hits `damage` directly, ignoring any current `shield` value. */
@@ -51,6 +63,19 @@ export interface DealDamageOptions {
    * of the resulting number changes.
    */
   asValeurLock?: boolean;
+  /**
+   * Engine-internal: the character credited with this damage instance. Filled in by
+   * `EffectContext.dealDamage` so `beforeDamage`/`afterDamage`/`onCharacterKO` can name
+   * the attacker; cards never need to pass it themselves.
+   */
+  attackerInstanceId?: string;
+  /**
+   * Engine-internal: the player whose effect is dealing this damage -- set even for
+   * self-inflicted damage and for object/terrain effects, where `attackerInstanceId` is
+   * absent. Lets a card tell hostile damage from a cost its own side is paying.
+   * Undefined for status ticks (poison/burn/bleed), which have no acting side.
+   */
+  attackerOwnerId?: PlayerId;
 }
 
 export interface StatusInstance {
@@ -143,6 +168,7 @@ export interface PlayerState {
   graveyardTerrainInstanceIds: string[];
 
   objectsPlayedThisTurn: number;
+  terrainsPlayedThisTurn: number;
   hasHadFirstTurn: boolean;
   /** Once true, getPlayerView (section 1) stops redacting the OPPONENT's unplayed object/terrain instances for this player -- e.g. Kirigiri's "Ultimate Détective". Never reset once set. */
   revealsOpponentUnplayedCards: boolean;
@@ -191,6 +217,13 @@ export interface PendingChoice {
 // Events
 // ---------------------------------------------------------------------------
 
+/**
+ * Every name here is emitted by the engine except `onStatusApplied` and `onCoinFlip`:
+ * both would have to be awaited from `applyStatus`/`flipCoin`, which are deliberately
+ * synchronous on `EffectContext` (nearly every card calls them without `await`). They
+ * stay declared for a future async status pipeline -- a `trigger` on either simply
+ * never fires today, so don't build a card on one.
+ */
 export type EventName =
   | 'onGameStart'
   | 'onTurnStart'
@@ -215,6 +248,46 @@ export interface EngineEvent {
   /** The player whose action/turn produced this event, when meaningful. */
   playerId?: PlayerId;
   data: Record<string, unknown>;
+}
+
+/**
+ * Payload shapes emitted by the engine, for cards reading `ctx.event.data`.
+ * Documented as an interface rather than enforced in `EngineEvent` so a card
+ * remains free to emit/observe extra keys.
+ */
+export interface EventPayloads {
+  onGameStart: Record<string, never>;
+  onTurnStart: Record<string, never>;
+  onTurnEnd: Record<string, never>;
+  onBecomeActive: { characterInstanceId: string; reason: 'switch' | 'ko-replacement' | 'setup' };
+  onAttackDeclared: { characterInstanceId: string; attackId: string };
+  beforeDamage: DamageEventData;
+  afterDamage: DamageEventData & { shieldAbsorbed: number };
+  onCharacterKO: {
+    characterInstanceId: string;
+    /** The character that dealt the killing blow, when the engine could attribute it. */
+    killerInstanceId?: string;
+    killerOwnerId?: PlayerId;
+  };
+  onCharacterRevived: { characterInstanceId: string };
+  onObjectPlayed: { objectInstanceId: string };
+  onTerrainPlayed: { terrainInstanceId: string };
+  onTerrainRemoved: { terrainInstanceId: string; reason: 'expired' | 'replaced' | 'destroyed' };
+  onStatusApplied: { characterInstanceId: string; statusId: string };
+  onStatusExpired: { characterInstanceId: string; statusId: string };
+  onSwitch: { newActiveInstanceId: string; previousActiveInstanceId?: string };
+  onAbilityUsed: { characterInstanceId: string; abilityId: string };
+  onCoinFlip: { result: 'heads' | 'tails' };
+}
+
+export interface DamageEventData {
+  targetInstanceId: string;
+  amount: number;
+  /** The character that caused this damage, when there is one (absent for status ticks and object effects). */
+  sourceInstanceId?: string;
+  sourceOwnerId?: PlayerId;
+  /** Mirrors DealDamageOptions.source: 'burn' / 'poison' / 'bleed' for status ticks, absent otherwise. */
+  damageSource?: string;
 }
 
 // ---------------------------------------------------------------------------

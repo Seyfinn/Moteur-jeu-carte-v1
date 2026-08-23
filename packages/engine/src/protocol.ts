@@ -9,13 +9,20 @@ import type { PlayerAction, RosterConfig } from './match.js';
 export type ClientMessage =
   | { type: 'create-room'; playerName: string; roster?: RosterConfig }
   | { type: 'join-room'; roomCode: string; playerName: string; roster?: RosterConfig }
+  /** Reclaim a seat after a reload/disconnect, using the token handed out when the seat was taken. */
+  | { type: 'resume-session'; sessionToken: string }
   | { type: 'action'; action: PlayerAction }
   | { type: 'answer-choice'; choiceId: string; answer: ChoiceAnswer };
 
 export type ServerMessage =
-  | { type: 'room-created'; roomCode: string; you: PlayerId }
-  | { type: 'joined'; roomCode: string; you: PlayerId }
+  /** `sessionToken` is the credential for `resume-session`; the client persists it. */
+  | { type: 'room-created'; roomCode: string; you: PlayerId; sessionToken: string }
+  | { type: 'joined'; roomCode: string; you: PlayerId; sessionToken: string }
   | { type: 'waiting-for-opponent' }
-  | { type: 'state'; state: GameState; you: PlayerId }
+  /** `choiceDeadline` (epoch ms) is present while a choice is pending and will be auto-answered. */
+  | { type: 'state'; state: GameState; you: PlayerId; choiceDeadline?: number }
   | { type: 'opponent-disconnected' }
+  | { type: 'opponent-reconnected' }
+  /** A seat the client tried to resume is gone (room reaped, match over and cleaned up...). */
+  | { type: 'session-expired' }
   | { type: 'error'; message: string };

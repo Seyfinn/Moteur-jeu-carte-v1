@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { getCharacterCard, type CharacterInstance } from 'engine';
+import { getCharacterCard, type CharacterInstance, type StatusInstance } from 'engine';
 import { CardFrame } from './CardFrame';
 import { useHoverCard } from './HoverCard';
 import { characterDetailBody } from './cardDetails';
@@ -13,6 +13,18 @@ function cardName(cardId: string): string {
   } catch {
     return cardId;
   }
+}
+
+/**
+ * Statuses carry a human `label` written by the card that applied them ("Brûlure (La
+ * flamme)"); the raw `statusId` is an internal key and reads as noise on the board, so
+ * it moves to the tooltip instead.
+ */
+export function statusBadgeText(status: StatusInstance): string {
+  const name = status.label || status.statusId;
+  if (status.remainingTurns !== undefined) return `${name} (${status.remainingTurns})`;
+  if (status.statusId === 'bleed') return `${name} x${Number(status.data?.['stacks'] ?? 1)}`;
+  return name;
 }
 
 interface DamageFloater {
@@ -44,6 +56,7 @@ export function CharacterCard({
   const [flashing, setFlashing] = useState(false);
   const [floaters, setFloaters] = useState<DamageFloater[]>([]);
 
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => {
     const delta = char.damage - prevDamageRef.current;
     prevDamageRef.current = char.damage;
@@ -52,13 +65,16 @@ export function CharacterCard({
     const id = ++floaterSeqRef.current;
     setFloaters((list) => [...list, { id, amount: delta }]);
     setFlashing(true);
-    const flashTimer = setTimeout(() => setFlashing(false), 400);
-    const floatTimer = setTimeout(() => setFloaters((list) => list.filter((f) => f.id !== id)), 1000);
-    return () => {
-      clearTimeout(flashTimer);
-      clearTimeout(floatTimer);
-    };
+    // Timers are collected and cleared on unmount only. Clearing them in the effect's
+    // own cleanup (i.e. on the *next* hit) cancelled the pending removal, so rapid
+    // successive hits left their floaters stuck on the card forever.
+    timersRef.current.push(
+      setTimeout(() => setFlashing(false), 400),
+      setTimeout(() => setFloaters((list) => list.filter((f) => f.id !== id)), 1000)
+    );
   }, [char.damage]);
+
+  useEffect(() => () => timersRef.current.forEach(clearTimeout), []);
 
   return (
     <CardFrame
@@ -104,9 +120,8 @@ export function CharacterCard({
           {char.statuses.length > 0 && (
             <div className="statuses">
               {char.statuses.map((s, i) => (
-                <span key={i} className="status-badge" title={s.label}>
-                  {s.statusId}
-                  {s.remainingTurns !== undefined ? ` (${s.remainingTurns})` : ''}
+                <span key={i} className="status-badge" title={`${s.label} (${s.statusId})`}>
+                  {statusBadgeText(s)}
                 </span>
               ))}
             </div>

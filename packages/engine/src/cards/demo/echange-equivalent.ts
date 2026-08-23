@@ -25,13 +25,22 @@ export const echangeEquivalent: ObjectCardDef = {
     ];
     if (sacrificePool.length < SACRIFICE_COUNT) return;
 
-    const chosenIds = await ctx.choose({
-      kind: 'select-characters',
-      prompt: `Echange équivalent : choisissez ${SACRIFICE_COUNT} cartes (objet ou terrain) de votre réserve à sacrifier`,
-      options: sacrificePool.map((c) => c.instanceId),
-      min: SACRIFICE_COUNT,
-      max: SACRIFICE_COUNT,
-    });
+    // Une par une via chooseOption : `choose({kind:'select-characters'})` ne sait
+    // afficher que des personnages côté client -- lui passer des instances d'objet ou
+    // de terrain donnerait une modale vide et bloquerait la partie.
+    const chosenIds: string[] = [];
+    const remaining = [...sacrificePool];
+    for (let i = 0; i < SACRIFICE_COUNT; i++) {
+      const chosenId = await ctx.chooseOption(
+        `Echange équivalent : choisissez la carte à sacrifier (${i + 1}/${SACRIFICE_COUNT})`,
+        remaining.map((c) => ({ key: c.instanceId, label: `${c.name} (${c.kind === 'object' ? 'objet' : 'terrain'})` }))
+      );
+      const pickedIndex = remaining.findIndex((c) => c.instanceId === chosenId);
+      const picked = pickedIndex === -1 ? remaining[0] : remaining[pickedIndex];
+      if (!picked) return;
+      remaining.splice(pickedIndex === -1 ? 0 : pickedIndex, 1);
+      chosenIds.push(picked.instanceId);
+    }
 
     for (const instanceId of chosenIds) {
       const sacrificed = sacrificePool.find((c) => c.instanceId === instanceId);

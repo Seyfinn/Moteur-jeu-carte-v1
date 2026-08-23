@@ -1,6 +1,5 @@
 import type { CharacterInstance, GameState, PlayerId, StatusInstance } from './types.js';
 import type { EngineApi } from './engine-api.js';
-import { chancePercent } from './rng.js';
 
 /** Fixed damage-per-tick formulas -- not customizable via a status's `data`. */
 const BURN_DAMAGE = 50;
@@ -10,11 +9,11 @@ const BLEED_PERCENT_PER_STACK = 0.1;
 const BLEED_MAX_STACKS = 10;
 
 /** Innate rates every character has on their attacks/abilities, with no status required. */
-const BASE_EVASION_CHANCE_PERCENT = 5;
-const BASE_CRITICAL_CHANCE_PERCENT = 2;
+export const BASE_EVASION_CHANCE_PERCENT = 5;
+export const BASE_CRITICAL_CHANCE_PERCENT = 2;
 /** Rates while the 'evasive'/'critical' status is present -- replaces the base rate, doesn't stack with it. */
-const EVASIVE_STATUS_CHANCE_PERCENT = 33;
-const CRITICAL_STATUS_CHANCE_PERCENT = 33;
+export const EVASIVE_STATUS_CHANCE_PERCENT = 33;
+export const CRITICAL_STATUS_CHANCE_PERCENT = 33;
 
 export function hasStatus(char: CharacterInstance, statusId: string): boolean {
   return char.statuses.some((s) => s.statusId === statusId);
@@ -50,31 +49,6 @@ export function isCritical(char: CharacterInstance): boolean {
  */
 export function hasDeathWard(char: CharacterInstance): boolean {
   return hasStatus(char, 'death-ward');
-}
-
-/**
- * Esquive: every character has a base 5% chance to fully negate an incoming
- * attack/ability (damage or status application), no status required. The
- * 'evasive' status raises that to 33% while it's present (it replaces the
- * base rate rather than stacking with it). Never consumed on a successful roll.
- */
-export function rollEvasion(state: GameState, char: CharacterInstance): boolean {
-  const percent = isEvasive(char) ? EVASIVE_STATUS_CHANCE_PERCENT : BASE_EVASION_CHANCE_PERCENT;
-  return chancePercent(state.rng, percent);
-}
-
-/**
- * Critique: every character has a base 2% chance for an attack/ability they
- * deal damage with to double. The 'critical' status raises that to 33% while
- * it's present (replaces the base rate, doesn't stack with it) -- unless the
- * status carries its own `data.percent` (e.g. Caitlyn's "Execution" granting
- * herself a custom rate instead of the generic 33%), in which case that value
- * is used instead.
- */
-export function rollCritical(state: GameState, char: CharacterInstance): boolean {
-  const status = char.statuses.find((s) => s.statusId === 'critical');
-  const percent = status ? Number(status.data?.['percent'] ?? CRITICAL_STATUS_CHANCE_PERCENT) : BASE_CRITICAL_CHANCE_PERCENT;
-  return chancePercent(state.rng, percent);
 }
 
 export function isSilencedActive(char: CharacterInstance): boolean {
@@ -158,6 +132,15 @@ export async function tickStatusesAtTurnStart(state: GameState, playerId: Player
     let bledThisTurn = false;
 
     for (const status of [...char.statuses]) {
+      // A tick can KO the bearer (burn finishing off a low-HP character) -- once it has
+      // left the board, the remaining statuses must not keep hitting the corpse or
+      // counting down. Re-checked every iteration since ticks resolve asynchronously.
+      if (!api.isOnBoard(instanceId)) break;
+      // Another effect resolved during an awaited tick may have removed this status
+      // (a heal curing bleed, a cleanse); don't tick or decrement a status that is
+      // no longer on the character.
+      if (!char.statuses.includes(status)) continue;
+
       const tickAlwaysOnBench = status.statusId === 'burn' || status.statusId === 'poison' || status.statusId === 'bleed';
       if (!isActive && !tickAlwaysOnBench) continue; // suspended while benched
 
@@ -191,7 +174,16 @@ export async function tickStatusesAtTurnStart(state: GameState, playerId: Player
       }
     }
 
+    const expired = char.statuses.filter((s) => s.remainingTurns !== undefined && s.remainingTurns <= 0);
     char.statuses = char.statuses.filter((s) => s.remainingTurns === undefined || s.remainingTurns > 0);
     if (bledThisTurn) removeStatus(char, 'bleed');
+
+    for (const status of expired) {
+      await api.emitEvent({
+        name: 'onStatusExpired',
+        playerId,
+        data: { characterInstanceId: instanceId, statusId: status.statusId },
+      });
+    }
   }
 }

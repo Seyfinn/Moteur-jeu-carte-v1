@@ -16,7 +16,7 @@ describe('"Couteau dans le dos" mechanism (bench-damage doubling from any of the
     const attackerId = match.state.activePlayerId;
     const defenderId = attackerId === 'p1' ? 'p2' : 'p1';
     const attacker = match.state.players[attackerId].characters[match.state.players[attackerId].activeCharacterInstanceId!]!;
-    attacker.statuses.push({ statusId: 'couteau-dans-le-dos', label: 'Couteau dans le dos', remainingTurns: 2 });
+    attacker.statuses.push({ statusId: 'bench-damage-bonus', label: 'Couteau dans le dos', remainingTurns: 2, data: { multiplier: 2 } });
 
     const defenderActiveId = match.state.players[defenderId].activeCharacterInstanceId!;
     const defenderBenchId = match.state.players[defenderId].benchCharacterInstanceIds[0]!;
@@ -39,9 +39,10 @@ describe('"Couteau dans le dos" mechanism (bench-damage doubling from any of the
     const defenderId = attackerId === 'p1' ? 'p2' : 'p1';
     const benchAllyId = match.state.players[attackerId].benchCharacterInstanceIds[0]!;
     match.state.players[attackerId].characters[benchAllyId]!.statuses.push({
-      statusId: 'couteau-dans-le-dos',
+      statusId: 'bench-damage-bonus',
       label: 'Couteau dans le dos',
       remainingTurns: 2,
+      data: { multiplier: 2 },
     });
 
     const defenderBenchId = match.state.players[defenderId].benchCharacterInstanceIds[0]!;

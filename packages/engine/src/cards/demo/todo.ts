@@ -18,19 +18,6 @@ export const todo: CharacterCardDef = {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
 
-        // Applique la chance de critique élevée dès le premier Black Flash (pas de
-        // trigger 'onGameStart' fiable dans le moteur -- init paresseuse ici, comme
-        // "Execution" de Caitlyn, voir CLAUDE.md).
-        const self = ctx.getCharacter(ctx.sourceInstanceId);
-        if (!self.statuses.some((s) => s.statusId === 'critical')) {
-          ctx.applyStatus(ctx.sourceInstanceId, {
-            statusId: 'critical',
-            label: 'Critique (Black Flash)',
-            sourceCardInstanceId: ctx.sourceInstanceId,
-            data: { percent: BLACK_FLASH_CRIT_PERCENT },
-          });
-        }
-
         const atk = ctx.getEffectiveATK(ctx.sourceInstanceId, BLACK_FLASH_ATK);
         await ctx.dealDamage(target.instanceId, atk);
       },
@@ -57,6 +44,17 @@ export const todo: CharacterCardDef = {
         });
         if (!targetId) return;
         await ctx.forceSwitch(ctx.ownerId, targetId);
+      },
+    },
+  ],
+  modifiers: [
+    {
+      // Chance de critique innée de Black Flash : un modifier plutôt qu'un statut posé
+      // paresseusement, donc actif dès le premier coup et impossible à dissiper.
+      query: 'getCriticalPercent',
+      transform(ctx, current) {
+        if (ctx.query['characterInstanceId'] !== ctx.sourceInstanceId) return current;
+        return Math.max(current as number, BLACK_FLASH_CRIT_PERCENT);
       },
     },
   ],

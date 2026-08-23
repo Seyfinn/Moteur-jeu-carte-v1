@@ -33,6 +33,13 @@ const STATUS_VISUALS: Record<string, StatusVisual> = {
   'silence-active': { className: 'fx-silence', particles: 'mute' },
   'silence-passive': { className: 'fx-silence', particles: 'mute' },
   'silence-ultimate': { className: 'fx-silence', particles: 'mute' },
+  // Other engine-recognized statuses (see BuiltinStatusId in engine/src/types.ts).
+  'death-ward': { className: 'fx-shield', particles: 'shield' },
+  'atk-multiplier': { className: 'fx-atk-boost', particles: 'arrow-up' },
+  concentration: { className: 'fx-critical', particles: 'target' },
+  'damage-reflect': { className: 'fx-shield', particles: 'shield' },
+  'bench-damage-bonus': { className: 'fx-atk-boost', particles: 'arrow-up' },
+  'hit-bounty': { className: 'fx-critical', particles: 'target' },
   // Card-specific statuses whose semantics (shield / ability lock) match an existing
   // built-in visual closely enough to reuse it, rather than falling back to the generic one.
   'blitzcrank-mana-barrier-shield': { className: 'fx-shield', particles: 'shield' },

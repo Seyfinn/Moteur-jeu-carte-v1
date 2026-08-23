@@ -12,8 +12,26 @@ function updateMark(ctx: EffectContext): void {
   const opponentActive = ctx.getActive(ctx.opponentId);
   const previouslyMarked = terrain.data?.['markedInstanceId'] as string | undefined;
 
+  // La charge est matérialisée par le statut générique 'hit-bounty' posé sur la cible :
+  // c'est le pipeline de dégâts du moteur qui l'encaisse et le consomme (voir types.ts).
+  // Tant qu'elle n'est pas chargée, la marque n'est qu'une donnée du terrain.
+  if (previouslyMarked && previouslyMarked !== opponentActive?.instanceId) {
+    ctx.removeStatus(previouslyMarked, 'hit-bounty');
+  }
+
   if (previouslyMarked && opponentActive && previouslyMarked === opponentActive.instanceId) {
     terrain.data = { ...terrain.data, charged: true };
+    ctx.applyStatus(
+      opponentActive.instanceId,
+      {
+        statusId: 'hit-bounty',
+        label: 'Coeur Acier (marque chargée)',
+        sourcePlayerId: ctx.ownerId,
+        sourceCardInstanceId: ctx.sourceInstanceId,
+        data: { bonusMaxHP: BONUS_MAX_HP, forOwnerId: ctx.ownerId },
+      },
+      { skipEvasionRoll: true }
+    );
     ctx.log(`Coeur Acier : la marque sur ${opponentActive.cardId} est chargée`, {
       terrainInstanceId: terrain.instanceId,
       markedInstanceId: opponentActive.instanceId,
@@ -21,7 +39,7 @@ function updateMark(ctx: EffectContext): void {
     return;
   }
 
-  terrain.data = { markedInstanceId: opponentActive?.instanceId, charged: false, bonusMaxHP: BONUS_MAX_HP };
+  terrain.data = { markedInstanceId: opponentActive?.instanceId, charged: false };
   if (opponentActive) {
     ctx.log(`Coeur Acier marque ${opponentActive.cardId}`, {
       terrainInstanceId: terrain.instanceId,
@@ -69,6 +87,20 @@ export const coeurAcier: TerrainCardDef = {
       },
       async execute(ctx) {
         updateMark(ctx);
+      },
+    },
+    {
+      id: 'coeur-acier-cleanup',
+      name: 'Coeur acier',
+      kind: 'passive',
+      description: 'Retire la marque chargée quand le terrain quitte le jeu (expiration, remplacement ou destruction).',
+      trigger: 'onTerrainRemoved',
+      condition(ctx) {
+        return ctx.event?.data['terrainInstanceId'] === ctx.sourceInstanceId;
+      },
+      async execute(ctx) {
+        const marked = ctx.getTerrain(ctx.sourceInstanceId).data?.['markedInstanceId'] as string | undefined;
+        if (marked) ctx.removeStatus(marked, 'hit-bounty');
       },
     },
   ],

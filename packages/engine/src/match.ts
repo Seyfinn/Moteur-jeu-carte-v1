@@ -21,8 +21,10 @@ import * as zones from './zones.js';
 import {
   canAttack,
   canPlayObject,
+  canPlayTerrain,
   canSwitchStandard,
   canUseAbility,
+  describeDenials,
   evaluatePermission,
   evaluateTransform,
   findCharacter,
@@ -109,6 +111,7 @@ function createPlayerState(id: PlayerId, displayName: string, roster: RosterConf
     activeTerrainInstanceId: null,
     graveyardTerrainInstanceIds: [],
     objectsPlayedThisTurn: 0,
+    terrainsPlayedThisTurn: 0,
     hasHadFirstTurn: false,
     revealsOpponentUnplayedCards: false,
   };
@@ -152,7 +155,7 @@ export class Match {
 
     const startingPlayerId: PlayerId = rngFlipCoin(state.rng) === 'heads' ? 'p1' : 'p2';
     state.startingPlayerId = startingPlayerId;
-    match.api.log(`Coin flip for initiative: ${startingPlayerId} starts`, { startingPlayerId });
+    match.api.log(`Coin flip for initiative: ${startingPlayerId} starts`, { startingPlayerId }, startingPlayerId);
 
     match.inFlight = match
       .runSetup()
@@ -187,6 +190,24 @@ export class Match {
     state.phase = 'main';
     state.turnNumber = 1;
     state.activePlayerId = state.startingPlayerId;
+
+    // Emitted once both starting actives are on the board and before the very first
+    // turn starts, so a card whose effect is meant to be live "from the start of the
+    // game" (an innate esquive, a permanent aura...) has a reliable hook instead of
+    // having to lazily self-initialise inside its first attack/turn trigger.
+    await this.api.emitEvent({ name: 'onGameStart', data: {} });
+    if (state.result) return;
+    for (const playerId of ['p1', 'p2'] as PlayerId[]) {
+      const activeId = state.players[playerId].activeCharacterInstanceId;
+      if (!activeId) continue;
+      await this.api.emitEvent({
+        name: 'onBecomeActive',
+        playerId,
+        data: { characterInstanceId: activeId, reason: 'setup' },
+      });
+      if (state.result) return;
+    }
+
     await startTurn(state, this.api);
   }
 
@@ -223,10 +244,10 @@ export class Match {
 
   applyAction(playerId: PlayerId, action: PlayerAction): ActionResult {
     const state = this.state;
-    if (state.phase !== 'main') return { ok: false, error: 'Game is not in progress' };
-    if (state.pendingChoice) return { ok: false, error: 'A choice is pending; call answerChoice' };
-    if (this.inFlight) return { ok: false, error: 'Another action is already resolving' };
-    if (playerId !== state.activePlayerId) return { ok: false, error: "It is not this player's turn" };
+    if (state.phase !== 'main') return { ok: false, error: "La partie n'est pas en cours" };
+    if (state.pendingChoice) return { ok: false, error: 'Un choix est en attente de réponse' };
+    if (this.inFlight) return { ok: false, error: 'Une autre action est en cours de résolution' };
+    if (playerId !== state.activePlayerId) return { ok: false, error: "Ce n'est pas votre tour" };
 
     const validation = this.validateAction(playerId, action);
     if (!validation.ok) return validation;
@@ -244,12 +265,12 @@ export class Match {
 
   answerChoice(playerId: PlayerId, choiceId: string, answer: ChoiceAnswer): ActionResult {
     const pending = this.state.pendingChoice;
-    if (!pending) return { ok: false, error: 'No pending choice' };
-    if (pending.id !== choiceId) return { ok: false, error: 'Choice id mismatch' };
-    if (pending.playerId !== playerId) return { ok: false, error: 'Not your choice to answer' };
-    if (answer.kind !== pending.spec.kind) return { ok: false, error: 'Answer kind mismatch' };
+    if (!pending) return { ok: false, error: 'Aucun choix en attente' };
+    if (pending.id !== choiceId) return { ok: false, error: 'Ce choix a déjà été remplacé' };
+    if (pending.playerId !== playerId) return { ok: false, error: "Ce choix n'est pas le vôtre" };
+    if (answer.kind !== pending.spec.kind) return { ok: false, error: 'Réponse incompatible avec le choix demandé' };
     const resolve = this.resolvers.get(choiceId);
-    if (!resolve) return { ok: false, error: 'Choice already answered' };
+    if (!resolve) return { ok: false, error: 'Choix déjà répondu' };
     this.resolvers.delete(choiceId);
     this.state.pendingChoice = undefined;
     resolve(answer);
@@ -258,6 +279,12 @@ export class Match {
   }
 
   private requestChoice(playerId: PlayerId, spec: ChoiceSpec): Promise<ChoiceAnswer> {
+    // The protocol carries exactly one pending choice. Overwriting a live one would
+    // strand its resolver and hang the match forever, so fail loudly instead: a card
+    // must await its prompts one at a time, never in parallel.
+    if (this.state.pendingChoice) {
+      throw new Error('A choice is already pending -- card effects must await prompts sequentially');
+    }
     const id = randomUUID();
     this.state.pendingChoice = { id, playerId, spec };
     this.notify();
@@ -272,76 +299,85 @@ export class Match {
     switch (action.kind) {
       case 'play-object': {
         if (!player.unplayedObjectInstanceIds.includes(action.objectInstanceId)) {
-          return { ok: false, error: 'Object not available to play' };
+          return { ok: false, error: "Cet objet n'est pas disponible" };
         }
         const permission = canPlayObject(state, playerId);
         if (!permission.allow) {
-          return { ok: false, error: `Cannot play object (${permission.votes.map((v) => v.source).join(', ')})` };
+          return { ok: false, error: `Impossible de jouer un objet : ${describeDenials(permission.votes)}` };
         }
         const obj = player.objects[action.objectInstanceId];
         const def = obj ? getObjectCard(obj.cardId) : undefined;
         if (def?.condition) {
           const ctx = this.api.buildEffectContext(action.objectInstanceId, playerId, undefined, 'other');
           if (!def.condition(ctx)) {
-            return { ok: false, error: `Object condition not met (${def.name})` };
+            return { ok: false, error: `Conditions non remplies pour ${def.name}` };
           }
         }
         return { ok: true };
       }
       case 'play-terrain': {
         if (!player.unplayedTerrainInstanceIds.includes(action.terrainInstanceId)) {
-          return { ok: false, error: 'Terrain not available to play' };
+          return { ok: false, error: "Ce terrain n'est pas disponible" };
+        }
+        const permission = canPlayTerrain(state, playerId);
+        if (!permission.allow) {
+          return { ok: false, error: `Impossible de poser un terrain : ${describeDenials(permission.votes)}` };
         }
         return { ok: true };
       }
       case 'use-ability': {
         const char = player.characters[action.characterInstanceId];
-        if (!char) return { ok: false, error: 'Unknown character' };
+        if (!char) return { ok: false, error: 'Personnage inconnu' };
         const def = getCharacterCard(char.cardId);
         const ability = def.abilities.find((a) => a.id === action.abilityId);
-        if (!ability) return { ok: false, error: 'Unknown ability' };
-        if (ability.trigger) return { ok: false, error: 'This ability triggers automatically' };
+        if (!ability) return { ok: false, error: 'Capacité inconnue' };
+        // Only `kind: 'active'` abilities are player-activated. A passive either reacts to
+        // an event (`trigger`) or is purely descriptive text for a mechanic implemented in
+        // a modifier/attack -- "using" one would burn a use and log an activation for an
+        // empty execute().
+        if (ability.trigger) return { ok: false, error: 'Cette capacité se déclenche automatiquement' };
+        if (ability.kind !== 'active') return { ok: false, error: 'Cette capacité est passive' };
         const permission = canUseAbility(state, action.characterInstanceId, ability);
         if (!permission.allow) {
-          return { ok: false, error: `Ability not usable (${permission.votes.map((v) => v.source).join(', ')})` };
+          return { ok: false, error: `${ability.name} inutilisable : ${describeDenials(permission.votes)}` };
         }
         if (ability.condition) {
           const ctx = this.api.buildEffectContext(action.characterInstanceId, playerId);
           if (!ability.condition(ctx)) {
-            return { ok: false, error: `Ability condition not met (${ability.name})` };
+            return { ok: false, error: `Conditions non remplies pour ${ability.name}` };
           }
         }
         return { ok: true };
       }
       case 'attack': {
         if (player.activeCharacterInstanceId !== action.characterInstanceId) {
-          return { ok: false, error: 'Only the active character can attack' };
+          return { ok: false, error: 'Seul le personnage actif peut attaquer' };
         }
         const char = player.characters[action.characterInstanceId];
-        if (!char) return { ok: false, error: 'Unknown character' };
+        if (!char) return { ok: false, error: 'Personnage inconnu' };
         const def = getCharacterCard(char.cardId);
         const attack = def.attacks.find((a) => a.id === action.attackId);
-        if (!attack) return { ok: false, error: 'Unknown attack' };
+        if (!attack) return { ok: false, error: 'Attaque inconnue' };
         const permission = canAttack(state, action.characterInstanceId);
         if (!permission.allow) {
-          return { ok: false, error: `Cannot attack (${permission.votes.map((v) => v.source).join(', ')})` };
+          return { ok: false, error: `Impossible d'attaquer : ${describeDenials(permission.votes)}` };
         }
         if (attack.condition) {
           const ctx = this.api.buildEffectContext(action.characterInstanceId, playerId);
           if (!attack.condition(ctx)) {
-            return { ok: false, error: `Attack condition not met (${attack.name})` };
+            return { ok: false, error: `Conditions non remplies pour ${attack.name}` };
           }
         }
         return { ok: true };
       }
       case 'switch': {
         if (!player.benchCharacterInstanceIds.includes(action.newActiveInstanceId)) {
-          return { ok: false, error: 'Target is not on the bench' };
+          return { ok: false, error: "Cette cible n'est pas sur le banc" };
         }
-        if (!player.activeCharacterInstanceId) return { ok: false, error: 'No active character to switch from' };
+        if (!player.activeCharacterInstanceId) return { ok: false, error: 'Aucun personnage actif' };
         const permission = canSwitchStandard(state, player.activeCharacterInstanceId);
         if (!permission.allow) {
-          return { ok: false, error: `Cannot switch (${permission.votes.map((v) => v.source).join(', ')})` };
+          return { ok: false, error: `Switch impossible : ${describeDenials(permission.votes)}` };
         }
         return { ok: true };
       }
@@ -372,7 +408,7 @@ export class Match {
         endsTurn = true;
         break;
       case 'pass':
-        this.api.log(`${playerId} passes`, {});
+        this.api.log(`${playerId} passes`, {}, playerId);
         endsTurn = true;
         break;
     }
@@ -392,28 +428,38 @@ export class Match {
     zones.moveObjectFromPoolToInPlay(state, playerId, objectInstanceId);
     player.objectsPlayedThisTurn += 1;
 
-    this.api.log(`${playerId} plays object ${def.name}`, { objectInstanceId, cardId: def.id });
+    this.api.log(`${playerId} plays object ${def.name}`, { objectInstanceId, cardId: def.id }, playerId);
     await this.api.emitEvent({ name: 'onObjectPlayed', playerId, data: { objectInstanceId } });
 
     const ctx = this.api.buildEffectContext(objectInstanceId, playerId, undefined, 'other'); // object effect, not an attack/ability
-    await def.execute(ctx);
-
-    if (!obj.attachedToCharacterInstanceId) {
-      zones.moveObjectToGraveyard(state, playerId, objectInstanceId);
+    try {
+      await def.execute(ctx);
+    } finally {
+      // A one-shot object always leaves play, including when its effect threw -- left in
+      // `inPlayObjectInstanceIds` it would keep contributing its modifiers for the rest
+      // of the game.
+      if (!obj.attachedToCharacterInstanceId) {
+        zones.moveObjectToGraveyard(state, playerId, objectInstanceId);
+      }
     }
 
+    // Section 3: playing a second object in a turn is a *final* action. The second
+    // player gets one free pass on their very first turn to make up for the initiative
+    // -- scoped to the second object exactly, so the exception can't be re-claimed by a
+    // third, fourth... object (the per-turn cap in validateAction backs this up).
     const isSecondPlayerFirstTurnException =
-      isSecondObject && playerId !== state.startingPlayerId && !player.hasHadFirstTurn;
+      player.objectsPlayedThisTurn === 2 && playerId !== state.startingPlayerId && !player.hasHadFirstTurn;
     return isSecondObject && !isSecondPlayerFirstTurnException;
   }
 
   private async handlePlayTerrain(playerId: PlayerId, terrainInstanceId: string): Promise<void> {
     const state = this.state;
-    zones.moveTerrainFromPoolToActive(state, playerId, terrainInstanceId);
+    await zones.moveTerrainFromPoolToActive(state, playerId, terrainInstanceId, this.api);
     const terrain = state.players[playerId].terrains[terrainInstanceId]!;
     const def = getTerrainCard(terrain.cardId);
     terrain.remainingTurns = def.durationTurns;
-    this.api.log(`${playerId} plays terrain ${def.name}`, { terrainInstanceId });
+    state.players[playerId].terrainsPlayedThisTurn += 1;
+    this.api.log(`${playerId} plays terrain ${def.name}`, { terrainInstanceId, cardId: def.id }, playerId);
     await this.api.emitEvent({ name: 'onTerrainPlayed', playerId, data: { terrainInstanceId } });
   }
 
@@ -423,7 +469,7 @@ export class Match {
     const def = getCharacterCard(char.cardId);
     const ability = def.abilities.find((a) => a.id === abilityId)!;
     recordAbilityUse(char, abilityId);
-    this.api.log(`${playerId} uses ability ${ability.name}`, { characterInstanceId, abilityId });
+    this.api.log(`${playerId} uses ability ${ability.name}`, { characterInstanceId, abilityId }, playerId);
     const ctx = this.api.buildEffectContext(characterInstanceId, playerId);
     await ability.execute(ctx);
     await this.api.emitEvent({ name: 'onAbilityUsed', playerId, data: { characterInstanceId, abilityId } });
@@ -435,7 +481,7 @@ export class Match {
     const def = getCharacterCard(char.cardId);
     const attack = def.attacks.find((a) => a.id === attackId)!;
 
-    this.api.log(`${playerId} attacks with ${attack.name}`, { characterInstanceId, attackId });
+    this.api.log(`${playerId} attacks with ${attack.name}`, { characterInstanceId, attackId }, playerId);
     await this.api.emitEvent({ name: 'onAttackDeclared', playerId, data: { characterInstanceId, attackId } });
     if (state.result) return true;
 
@@ -454,10 +500,29 @@ export class Match {
       rng: state.rng,
 
       async dealDamage(targetInstanceId, amount, options) {
+        // A character already in the graveyard is out of the game: further damage
+        // instances aimed at it (a lingering AoE loop, a status tick resolved after a
+        // KO, a chain of triggers) must be no-ops rather than piling damage onto a
+        // corpse and re-emitting afterDamage/onCharacterKO for it.
+        if (!api.isOnBoard(targetInstanceId)) return;
         const target = findCharacter(state, targetInstanceId);
+        const attribution = {
+          sourceInstanceId: options?.attackerInstanceId,
+          sourceOwnerId: options?.attackerInstanceId
+            ? zones.safeFindCharacterOwner(state, options.attackerInstanceId)
+            : undefined,
+          damageSource: options?.source,
+        };
+
+        const damageQuery = {
+          targetInstanceId,
+          source: options?.source,
+          attackerInstanceId: options?.attackerInstanceId,
+          attackerOwnerId: options?.attackerOwnerId,
+        };
         const reduced = options?.ignoreDamageReduction
           ? amount
-          : evaluateTransform(state, 'getIncomingDamageAmount', { targetInstanceId, source: options?.source }, amount);
+          : evaluateTransform(state, 'getIncomingDamageAmount', damageQuery, amount);
         let finalAmount = Math.max(0, reduced);
 
         let shieldAbsorbed = 0;
@@ -480,13 +545,22 @@ export class Match {
 
         hp.dealDamage(target, finalAmount);
         api.log(`${target.cardId} takes ${finalAmount} damage`, { targetInstanceId, amount: finalAmount });
-        await api.emitEvent({ name: 'afterDamage', data: { targetInstanceId, amount: finalAmount, shieldAbsorbed } });
-        if (hp.isKO(target)) await api.koCharacter(targetInstanceId);
+        await api.emitEvent({
+          name: 'afterDamage',
+          data: { targetInstanceId, amount: finalAmount, shieldAbsorbed, ...attribution },
+        });
+        if (hp.isKO(target)) await api.koCharacter(targetInstanceId, options?.attackerInstanceId);
       },
 
-      async applyValeurLock(targetInstanceId, amount) {
+      async applyValeurLock(targetInstanceId, amount, options) {
+        if (!api.isOnBoard(targetInstanceId)) return;
         const target = findCharacter(state, targetInstanceId);
-        const reduced = evaluateTransform(state, 'getIncomingValeurLockAmount', { targetInstanceId }, amount);
+        const reduced = evaluateTransform(
+          state,
+          'getIncomingValeurLockAmount',
+          { targetInstanceId, attackerInstanceId: options?.attackerInstanceId, attackerOwnerId: options?.attackerOwnerId },
+          amount
+        );
         const finalAmount = Math.max(0, reduced);
         hp.applyValeurLock(target, finalAmount);
         api.log(`${target.cardId} loses ${finalAmount} max HP (valeur lock)`, { targetInstanceId, amount: finalAmount });
@@ -498,12 +572,17 @@ export class Match {
       },
 
       heal(targetInstanceId, amount) {
+        if (!api.isOnBoard(targetInstanceId)) return;
         const target = findCharacter(state, targetInstanceId);
         const boosted = evaluateTransform(state, 'getIncomingHealAmount', { targetInstanceId }, amount);
         const finalAmount = Math.max(0, boosted);
+        if (finalAmount <= 0) return;
+        // Report what was actually restored, not what was requested: healing a character
+        // that is already (nearly) full otherwise logs a number nothing on the board matches.
+        const restored = Math.min(finalAmount, target.damage);
         hp.heal(target, finalAmount);
-        api.log(`${target.cardId} heals ${finalAmount}`, { targetInstanceId, amount: finalAmount });
-        if (finalAmount > 0 && statusesMod.hasStatus(target, 'bleed')) {
+        api.log(`${target.cardId} heals ${restored}`, { targetInstanceId, amount: restored, requested: finalAmount });
+        if (statusesMod.hasStatus(target, 'bleed')) {
           statusesMod.removeStatus(target, 'bleed');
           api.log(`${target.cardId}'s bleed is cured by healing`, { targetInstanceId });
         }
@@ -538,8 +617,8 @@ export class Match {
         statusesMod.removeStatus(target, statusId);
       },
 
-      async koCharacter(characterInstanceId) {
-        await zones.koCharacter(state, characterInstanceId, api);
+      async koCharacter(characterInstanceId, killerInstanceId) {
+        await zones.koCharacter(state, characterInstanceId, api, killerInstanceId);
       },
 
       async reviveCharacter(characterInstanceId, hp, placement) {
@@ -593,8 +672,8 @@ export class Match {
         if (player.activeTerrainInstanceId !== terrainInstanceId) return;
         const cardId = player.terrains[terrainInstanceId]?.cardId;
         zones.removeActiveTerrain(state, owner);
-        api.log(`${cardId} is destroyed`, { terrainInstanceId });
-        await api.emitEvent({ name: 'onTerrainRemoved', playerId: owner, data: { terrainInstanceId } });
+        api.log(`${cardId} is destroyed`, { terrainInstanceId }, owner);
+        await api.emitEvent({ name: 'onTerrainRemoved', playerId: owner, data: { terrainInstanceId, reason: 'destroyed' } });
       },
 
       async switchActive(playerId, newActiveInstanceId) {
@@ -622,12 +701,21 @@ export class Match {
         return self.requestChoice(playerId, spec);
       },
 
-      log(message, data) {
-        state.log.push({ id: randomUUID(), turnNumber: state.turnNumber, message, data });
+      log(message, data, playerId) {
+        state.log.push({ id: randomUUID(), turnNumber: state.turnNumber, message, data, playerId });
       },
 
       flipCoin() {
         return rngFlipCoin(state.rng);
+      },
+
+      isOnBoard(characterInstanceId) {
+        for (const playerId of ['p1', 'p2'] as PlayerId[]) {
+          const player = state.players[playerId];
+          if (player.activeCharacterInstanceId === characterInstanceId) return true;
+          if (player.benchCharacterInstanceIds.includes(characterInstanceId)) return true;
+        }
+        return false;
       },
 
       buildEffectContext(sourceInstanceId, ownerId, event, damageSource) {

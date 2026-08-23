@@ -1,18 +1,10 @@
-import { Match, type ChoiceAnswer, type MatchConfig, type PendingChoice, type PlayerAction, type PlayerId } from '../src/index.js';
+import { Match, defaultChoiceAnswer, type ChoiceAnswer, type MatchConfig, type PendingChoice, type PlayerAction, type PlayerId } from '../src/index.js';
 
 export type AutoAnswerFn = (choice: PendingChoice, match: Match) => ChoiceAnswer;
 
+/** Same fallback the server uses when a prompt times out -- keeps tests honest about it. */
 export function defaultAnswer(choice: PendingChoice): ChoiceAnswer {
-  switch (choice.spec.kind) {
-    case 'select-characters':
-      return { kind: 'select-characters', selected: choice.spec.options.slice(0, choice.spec.min) };
-    case 'select-option':
-      return { kind: 'select-option', key: choice.spec.options[0]!.key };
-    case 'yes-no':
-      return { kind: 'yes-no', value: true };
-    case 'order':
-      return { kind: 'order', orderedKeys: choice.spec.items.map((i) => i.key) };
-  }
+  return defaultChoiceAnswer(choice.spec);
 }
 
 /** Drives a match through every pending choice (using `autoAnswer`, falling back to a sane default) until idle. */

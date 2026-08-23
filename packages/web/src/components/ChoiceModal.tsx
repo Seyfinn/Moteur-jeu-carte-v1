@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getCharacterCard, type ChoiceAnswer, type ChoiceOption, type CharacterInstance, type GameState, type PendingChoice } from 'engine';
 import { CardFrame } from './CardFrame';
 import { useHoverCard } from './HoverCard';
@@ -28,6 +28,11 @@ function SelectCharacters({
   const [selected, setSelected] = useState<string[]>([]);
   const hover = useHoverCard();
 
+  // Consecutive choices reuse this component instance, so the previous answer's
+  // selection would otherwise carry over into the next prompt (and could contain ids
+  // that aren't even offered any more).
+  useEffect(() => setSelected([]), [spec]);
+
   function toggle(id: string) {
     if (spec.max === 1) {
       setSelected([id]);
@@ -41,7 +46,22 @@ function SelectCharacters({
       <div className="modal-card-grid">
         {spec.options.map((id) => {
           const instance = findCharacterInstance(state, id);
-          if (!instance) return null;
+          // A card can technically hand any instance id to a 'select-characters' choice.
+          // Rendering nothing for the ones we can't resolve used to leave an empty modal
+          // whose "Valider" button could never be enabled -- an unrecoverable game lock.
+          // Show a plain selectable placeholder instead.
+          if (!instance) {
+            return (
+              <button
+                key={id}
+                type="button"
+                className={selected.includes(id) ? 'option-button selected' : 'option-button'}
+                onClick={() => toggle(id)}
+              >
+                Carte inconnue
+              </button>
+            );
+          }
           const name = cardName(instance.cardId);
           const currentHP = Math.max(0, instance.currentMaxHP - instance.damage);
           return (
@@ -118,6 +138,7 @@ function OrderChoice({
   onAnswer: (answer: ChoiceAnswer) => void;
 }) {
   const [order, setOrder] = useState<string[]>(spec.items.map((i) => i.key));
+  useEffect(() => setOrder(spec.items.map((i) => i.key)), [spec]);
   return (
     <>
       <ol className="order-list">
@@ -145,19 +166,53 @@ function OrderChoice({
   );
 }
 
+/** Shared clock so both the acting player and the one waiting see the same deadline. */
+function useRemainingMs(deadline: number): number {
+  const [remaining, setRemaining] = useState(() => Math.max(0, deadline - Date.now()));
+  useEffect(() => {
+    setRemaining(Math.max(0, deadline - Date.now()));
+    const timer = setInterval(() => setRemaining(Math.max(0, deadline - Date.now())), 1000);
+    return () => clearInterval(timer);
+  }, [deadline]);
+  return remaining;
+}
+
+/** The waiting player's version: just the seconds left before the prompt auto-resolves. */
+export function ChoiceCountdownBadge({ deadline }: { deadline: number }) {
+  const seconds = Math.ceil(useRemainingMs(deadline) / 1000);
+  return <span className="waiting-countdown">{seconds > 0 ? `${seconds} s` : '…'}</span>;
+}
+
+/**
+ * Counts down to the server's auto-answer deadline. An abandoned prompt would otherwise
+ * freeze the match, so the server answers it with a neutral default -- showing the clock
+ * makes that predictable instead of surprising.
+ */
+function ChoiceCountdown({ deadline }: { deadline: number }) {
+  const seconds = Math.ceil(useRemainingMs(deadline) / 1000);
+  return (
+    <p className={seconds <= 15 ? 'modal-countdown urgent' : 'modal-countdown'}>
+      {seconds > 0 ? `Réponse automatique dans ${seconds} s` : 'Réponse automatique…'}
+    </p>
+  );
+}
+
 export function ChoiceModal({
   state,
   choice,
+  deadline,
   onAnswer,
 }: {
   state: GameState;
   choice: PendingChoice;
+  deadline: number | null;
   onAnswer: (answer: ChoiceAnswer) => void;
 }) {
   return (
     <div className="modal-backdrop">
       <div className="modal">
         <p className="modal-prompt">{choice.spec.prompt}</p>
+        {deadline !== null && <ChoiceCountdown deadline={deadline} />}
         {choice.spec.kind === 'select-characters' && <SelectCharacters state={state} spec={choice.spec} onAnswer={onAnswer} />}
         {choice.spec.kind === 'select-option' && <SelectOption spec={choice.spec} onAnswer={onAnswer} />}
         {choice.spec.kind === 'yes-no' && <YesNo onAnswer={onAnswer} />}
