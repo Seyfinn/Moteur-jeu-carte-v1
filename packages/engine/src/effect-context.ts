@@ -126,6 +126,39 @@ export function buildEffectContext(
         }
       }
 
+      // "Hypnose Absolue" (Aizen) : sur une attaque/ability adverse qui le touche, 40% de
+      // chance que les dégâts soient entièrement redirigés vers un allié du banc choisi
+      // par le joueur d'Aizen. Vérifié via cardId plutôt qu'un statut posé en lazy-init :
+      // Aizen doit être protégé dès le tout premier coup subi, avant même d'avoir pu agir
+      // une seule fois -- onGameStart/onBecomeActive ne se déclenchent pas à la mise en
+      // place initiale (voir CLAUDE.md), donc aucun trigger fiable n'existe pour poser un
+      // statut à temps.
+      let resolvedTargetId = targetInstanceId;
+      if (isAttackOrAbility && !selfInflicted) {
+        const hypnoseTarget = findCharacter(state, resolvedTargetId);
+        if (hypnoseTarget.cardId === 'aizen' && chancePercent(state.rng, 40)) {
+          const targetOwnerId = findCharacterOwner(state, resolvedTargetId);
+          const aliveBench = state.players[targetOwnerId].benchCharacterInstanceIds.filter(
+            (id) => id !== resolvedTargetId && !isKO(state.players[targetOwnerId].characters[id]!)
+          );
+          if (aliveBench.length > 0) {
+            const answer = await api.chooseFor(targetOwnerId, {
+              kind: 'select-characters',
+              prompt: "Hypnose Absolue : choisissez le personnage du banc qui subit les dégâts à la place d'Aizen",
+              options: aliveBench,
+              min: 1,
+              max: 1,
+            });
+            if (answer.kind !== 'select-characters') throw new Error('Unexpected choice answer kind');
+            const chosen = answer.selected[0];
+            if (chosen) {
+              api.log(`Hypnose Absolue redirects the attack to ${chosen}`, { from: resolvedTargetId, to: chosen });
+              resolvedTargetId = chosen;
+            }
+          }
+        }
+      }
+
       let finalAmount = amount;
       if (concentration) {
         const percent = Number(concentration.data?.['percent'] ?? 70);
@@ -133,7 +166,7 @@ export function buildEffectContext(
           api.removeStatus(source!.instanceId, 'concentration');
           const multiplier = getCriticalMultiplier(state, sourceInstanceId);
           finalAmount = amount * multiplier;
-          api.log(`${source!.cardId} se concentre et critique (x${multiplier}) !`, { sourceInstanceId, targetInstanceId, baseAmount: amount, amount: finalAmount });
+          api.log(`${source!.cardId} se concentre et critique (x${multiplier}) !`, { sourceInstanceId, targetInstanceId: resolvedTargetId, baseAmount: amount, amount: finalAmount });
         } else {
           consumeMissedConcentration(source!);
           finalAmount = 0;
@@ -141,16 +174,16 @@ export function buildEffectContext(
       } else if (source && rollCritical(state, source)) {
         const multiplier = getCriticalMultiplier(state, sourceInstanceId);
         finalAmount = amount * multiplier;
-        api.log(`${source.cardId} inflige un coup critique (x${multiplier}) !`, { sourceInstanceId, targetInstanceId, baseAmount: amount, amount: finalAmount });
+        api.log(`${source.cardId} inflige un coup critique (x${multiplier}) !`, { sourceInstanceId, targetInstanceId: resolvedTargetId, baseAmount: amount, amount: finalAmount });
       }
 
       // "Couteau dans le dos" : double les dégâts de n'importe lequel de vos personnages
       // contre le banc ennemi (statut posé sur chaque personnage à la pose de l'objet).
       if (source && hasStatus(source, 'couteau-dans-le-dos')) {
-        const targetOwner = findCharacterOwner(state, targetInstanceId);
-        if (targetOwner !== ownerId && state.players[targetOwner].benchCharacterInstanceIds.includes(targetInstanceId)) {
+        const targetOwner = findCharacterOwner(state, resolvedTargetId);
+        if (targetOwner !== ownerId && state.players[targetOwner].benchCharacterInstanceIds.includes(resolvedTargetId)) {
           finalAmount *= 2;
-          api.log(`${source.cardId} frappe dans le dos : dégâts au banc doublés`, { sourceInstanceId, targetInstanceId, amount: finalAmount });
+          api.log(`${source.cardId} frappe dans le dos : dégâts au banc doublés`, { sourceInstanceId, targetInstanceId: resolvedTargetId, amount: finalAmount });
         }
       }
 
@@ -161,7 +194,7 @@ export function buildEffectContext(
       // afterDamage ne la porte pas dans son payload (même limite documentée pour
       // onCharacterKO dans CLAUDE.md).
       if (source && finalAmount > 0) {
-        const target = findCharacter(state, targetInstanceId);
+        const target = findCharacter(state, resolvedTargetId);
         const mirror = getStatus(target, 'miroir-de-renvoi');
         if (mirror) {
           api.removeStatus(target.instanceId, 'miroir-de-renvoi');
@@ -179,11 +212,36 @@ export function buildEffectContext(
         }
       }
 
+      // "Coeur Acier" (terrain) : si le personnage qui vient d'être touché est la cible
+      // chargée du terrain "Coeur Acier" du camp de l'attaquant, celui-ci gagne du HP max
+      // (sans soin), puis la marque se réinitialise. Comme "Miroir de Renvoi"/"Couteau
+      // dans le dos", géré directement ici (pas via un trigger) car l'identité de
+      // l'attaquant n'est disponible qu'à ce point précis du pipeline. "Attaquer" au sens
+      // strict de la carte : seule une Attack literal arme l'effet, jamais une ability.
+      if (damageSource === 'attack' && source && finalAmount > 0) {
+        const terrainId = state.players[ownerId].activeTerrainInstanceId;
+        const terrain = terrainId ? state.players[ownerId].terrains[terrainId] : undefined;
+        if (
+          terrain &&
+          terrain.cardId === 'coeur-acier' &&
+          terrain.data?.['charged'] &&
+          terrain.data?.['markedInstanceId'] === resolvedTargetId
+        ) {
+          const bonus = Number(terrain.data?.['bonusMaxHP'] ?? 150);
+          api.raiseMaxHP(source.instanceId, bonus);
+          terrain.data = { ...terrain.data, charged: false };
+          api.log(`Coeur Acier : ${source.cardId} gagne ${bonus} HP max`, {
+            sourceInstanceId: source.instanceId,
+            targetInstanceId: resolvedTargetId,
+          });
+        }
+      }
+
       if (options?.asValeurLock) {
-        await api.applyValeurLock(targetInstanceId, finalAmount);
+        await api.applyValeurLock(resolvedTargetId, finalAmount);
         return;
       }
-      await api.dealDamage(targetInstanceId, finalAmount, options);
+      await api.dealDamage(resolvedTargetId, finalAmount, options);
     },
     async applyValeurLock(targetInstanceId, amount) {
       await api.applyValeurLock(targetInstanceId, amount);

@@ -1,5 +1,6 @@
 import type { RosterConfig } from '../../match.js';
 import { registerCard } from '../registry.js';
+import { aizen } from './aizen.js';
 import { blitzcrank } from './blitzcrank.js';
 import { caitlyn } from './caitlyn.js';
 import { guts } from './guts.js';
@@ -14,6 +15,7 @@ import { confiscation } from './confiscation.js';
 import { destruction } from './destruction.js';
 import { regulationThermique } from './regulation-thermique.js';
 import { bouclierUltime } from './bouclier-ultime.js';
+import { coeurAcier } from './coeur-acier.js';
 import { autelDemoniaque } from './autel-demoniaque.js';
 import { extensionDuTerritoire } from './extension-du-territoire.js';
 import { poupeeVoodoo } from './poupee-voodoo.js';
@@ -40,6 +42,7 @@ import { soraka } from './soraka.js';
 import { todo } from './todo.js';
 import { gojoSatoru } from './gojo-satoru.js';
 import { muzan } from './muzan.js';
+import { mundo } from './mundo.js';
 import { killua } from './killua.js';
 import { chopper } from './chopper.js';
 import { kakashi } from './kakashi.js';
@@ -52,6 +55,7 @@ import { bakugo } from './bakugo.js';
 import { roiDesEsprits } from './roi-des-esprits.js';
 
 export {
+  aizen,
   blitzcrank,
   caitlyn,
   guts,
@@ -66,6 +70,7 @@ export {
   destruction,
   regulationThermique,
   bouclierUltime,
+  coeurAcier,
   autelDemoniaque,
   extensionDuTerritoire,
   poupeeVoodoo,
@@ -92,6 +97,7 @@ export {
   todo,
   gojoSatoru,
   muzan,
+  mundo,
   killua,
   chopper,
   kakashi,
@@ -110,6 +116,7 @@ export function registerDemoCards(): void {
   if (registered) return;
   registered = true;
 
+  registerCard(aizen);
   registerCard(blitzcrank);
   registerCard(caitlyn);
   registerCard(guts);
@@ -124,6 +131,7 @@ export function registerDemoCards(): void {
   registerCard(destruction);
   registerCard(regulationThermique);
   registerCard(bouclierUltime);
+  registerCard(coeurAcier);
   registerCard(autelDemoniaque);
   registerCard(extensionDuTerritoire);
   registerCard(poupeeVoodoo);
@@ -150,6 +158,7 @@ export function registerDemoCards(): void {
   registerCard(todo);
   registerCard(gojoSatoru);
   registerCard(muzan);
+  registerCard(mundo);
   registerCard(killua);
   registerCard(chopper);
   registerCard(kakashi);
@@ -164,6 +173,7 @@ export function registerDemoCards(): void {
 
 export const DEMO_ROSTER: RosterConfig = {
   characterCardIds: [
+    aizen.id,
     blitzcrank.id,
     caitlyn.id,
     guts.id,
@@ -179,6 +189,7 @@ export const DEMO_ROSTER: RosterConfig = {
     todo.id,
     gojoSatoru.id,
     muzan.id,
+    mundo.id,
     killua.id,
     chopper.id,
     kakashi.id,
@@ -213,6 +224,7 @@ export const DEMO_ROSTER: RosterConfig = {
     destruction.id,
     regulationThermique.id,
     bouclierUltime.id,
+    coeurAcier.id,
     autelDemoniaque.id,
     pointFaible.id,
     protectionDivine.id,
