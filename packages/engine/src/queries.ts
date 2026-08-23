@@ -1,16 +1,22 @@
 import type { CharacterInstance, GameState, PlayerId } from './types.js';
 import type { AbilityDef, ModifierDef, ModifierEvalContext, QueryName, Vote } from './cards/types.js';
-import { getCharacterCard, getObjectCard, getTerrainCard } from './cards/registry.js';
+import { getCard, getCharacterCard, getObjectCard, getTerrainCard } from './cards/registry.js';
 import {
+  BASE_CRITICAL_CHANCE_PERCENT,
+  BASE_EVASION_CHANCE_PERCENT,
+  CRITICAL_STATUS_CHANCE_PERCENT,
+  EVASIVE_STATUS_CHANCE_PERCENT,
   getAtkBoostTotal,
   getAtkMultiplierTotal,
   getAtkReductionTotal,
   hasStatus,
   isDisarmed,
+  isEvasive,
   isSilencedActive,
   isSilencedPassive,
   isStunned,
 } from './statuses.js';
+import { chancePercent } from './rng.js';
 
 export function findCharacter(state: GameState, instanceId: string): CharacterInstance {
   for (const playerId of ['p1', 'p2'] as PlayerId[]) {
@@ -71,6 +77,45 @@ function getInPlaySources(state: GameState, queryName: QueryName): ModifierSourc
 export interface PermissionResult {
   allow: boolean;
   votes: Vote[];
+}
+
+/**
+ * Human-readable French labels for the engine's own denial sources. Cards vote with a
+ * `"<kind>:<cardId>"` source instead, which is resolved to the card's display name.
+ * Shared by the server's rejection messages and by the client's "why is this greyed
+ * out?" tooltips, so both always say the same thing.
+ */
+const VOTE_LABELS: Record<string, string> = {
+  'status:stun': 'étourdi',
+  'status:disarmed': 'désarmé',
+  'status:chained': 'enchaîné',
+  'status:silence-active': 'capacités actives réduites au silence',
+  'status:silence-passive': 'capacités passives réduites au silence',
+  'default:active-only': 'réservé au personnage actif',
+  'default:per-turn-limit': 'déjà utilisée ce tour',
+  'default:per-game-limit': 'quota de la partie épuisé',
+  'default:objects-per-turn-limit': "plus d'objet jouable ce tour",
+  'default:terrains-per-turn-limit': 'un seul terrain par tour',
+};
+
+function labelForSource(source: string): string {
+  const known = VOTE_LABELS[source];
+  if (known) return known;
+  const [, cardId] = source.split(':');
+  if (cardId) {
+    try {
+      return getCard(cardId).name;
+    } catch {
+      /* not a card id -- fall through to the raw source */
+    }
+  }
+  return source;
+}
+
+/** Comma-separated reasons a permission was denied, ready to show to a player. */
+export function describeDenials(votes: Vote[]): string {
+  const reasons = votes.filter((v) => !v.allow).map((v) => v.reason ?? labelForSource(v.source));
+  return [...new Set(reasons)].join(', ');
 }
 
 /**
@@ -191,8 +236,43 @@ export function canTargetBench(
   return evaluatePermission(state, 'canTargetBench', { sourceInstanceId, targetInstanceId }, allowedBySource);
 }
 
+/**
+ * Section 3: two object cards per turn (the second one being a final action). Cards
+ * are free to raise or lower it -- e.g. a terrain granting a third object per turn.
+ */
+export const DEFAULT_MAX_OBJECTS_PER_TURN = 2;
+
+export function getMaxObjectsPerTurn(state: GameState, playerId: PlayerId): number {
+  return evaluateTransform(state, 'getMaxObjectsPerTurn', { playerId }, DEFAULT_MAX_OBJECTS_PER_TURN);
+}
+
 export function canPlayObject(state: GameState, playerId: PlayerId): PermissionResult {
-  return evaluatePermission(state, 'canPlayObject', { playerId }, true);
+  const extra: Vote[] = [];
+  const player = state.players[playerId];
+  if (player.objectsPlayedThisTurn >= getMaxObjectsPerTurn(state, playerId)) {
+    extra.push({ allow: false, source: 'default:objects-per-turn-limit' });
+  }
+  return evaluatePermission(state, 'canPlayObject', { playerId }, true, extra);
+}
+
+/**
+ * Section 8: one terrain per turn. Without a cap, a player could chain-play terrains in
+ * a single turn purely to re-fire their "on play" effects (Autel Démoniaque's damage,
+ * Protection Divine's shield...) while each one immediately buries the previous.
+ */
+export const DEFAULT_MAX_TERRAINS_PER_TURN = 1;
+
+export function getMaxTerrainsPerTurn(state: GameState, playerId: PlayerId): number {
+  return evaluateTransform(state, 'getMaxTerrainsPerTurn', { playerId }, DEFAULT_MAX_TERRAINS_PER_TURN);
+}
+
+export function canPlayTerrain(state: GameState, playerId: PlayerId): PermissionResult {
+  const extra: Vote[] = [];
+  const player = state.players[playerId];
+  if (player.terrainsPlayedThisTurn >= getMaxTerrainsPerTurn(state, playerId)) {
+    extra.push({ allow: false, source: 'default:terrains-per-turn-limit' });
+  }
+  return evaluatePermission(state, 'canPlayTerrain', { playerId }, true, extra);
 }
 
 export function getEffectiveATK(state: GameState, characterInstanceId: string, baseATK: number): number {
@@ -205,4 +285,47 @@ export function getEffectiveATK(state: GameState, characterInstanceId: string, b
 /** Defaults to the base x2 critical multiplier; a card (e.g. a terrain) can transform it for a specific attacker. */
 export function getCriticalMultiplier(state: GameState, characterInstanceId: string): number {
   return evaluateTransform(state, 'getCriticalMultiplier', { characterInstanceId }, 2);
+}
+
+/**
+ * Esquive: every character has a base 5% chance to fully negate an incoming
+ * attack/ability (damage or status application), no status required. The
+ * 'evasive' status raises that to 33% while it's present (it replaces the
+ * base rate rather than stacking with it), and any card in play can push it
+ * further with a `getEvasionPercent` modifier -- which is how a permanent innate
+ * esquive (Gojo's "L'Infini", Kakashi's Sharingan) is declared, so it holds from
+ * the very first hit of the game and survives a revive, with no status to
+ * (re-)apply. Never consumed on a successful roll.
+ */
+export function getEvasionPercent(state: GameState, char: CharacterInstance): number {
+  const base = isEvasive(char) ? EVASIVE_STATUS_CHANCE_PERCENT : BASE_EVASION_CHANCE_PERCENT;
+  const percent = Number(
+    evaluateTransform(state, 'getEvasionPercent', { characterInstanceId: char.instanceId }, base)
+  );
+  return Math.max(0, Math.min(100, percent));
+}
+
+export function rollEvasion(state: GameState, char: CharacterInstance): boolean {
+  return chancePercent(state.rng, getEvasionPercent(state, char));
+}
+
+/**
+ * Critique: every character has a base 2% chance for an attack/ability they
+ * deal damage with to double. The 'critical' status raises that to 33% while
+ * it's present (replaces the base rate, doesn't stack with it) -- unless the
+ * status carries its own `data.percent` (e.g. Killua's Godspeed arming a
+ * guaranteed 100% for a single hit). A `getCriticalPercent` modifier is the
+ * static counterpart, for a character whose kit simply crits more often.
+ */
+export function getCriticalPercent(state: GameState, char: CharacterInstance): number {
+  const status = char.statuses.find((s) => s.statusId === 'critical');
+  const base = status ? Number(status.data?.['percent'] ?? CRITICAL_STATUS_CHANCE_PERCENT) : BASE_CRITICAL_CHANCE_PERCENT;
+  const percent = Number(
+    evaluateTransform(state, 'getCriticalPercent', { characterInstanceId: char.instanceId }, base)
+  );
+  return Math.max(0, Math.min(100, percent));
+}
+
+export function rollCritical(state: GameState, char: CharacterInstance): boolean {
+  return chancePercent(state.rng, getCriticalPercent(state, char));
 }

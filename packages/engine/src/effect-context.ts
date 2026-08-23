@@ -1,8 +1,8 @@
 import type { EffectContext } from './cards/types.js';
 import type { EngineApi } from './engine-api.js';
 import { isKO } from './hp.js';
-import { findCharacter, getCriticalMultiplier, getEffectiveATK } from './queries.js';
-import { getStatus, hasStatus, rollCritical, rollEvasion } from './statuses.js';
+import { evaluateTransform, findCharacter, getCriticalMultiplier, getEffectiveATK, rollCritical, rollEvasion } from './queries.js';
+import { getStatus } from './statuses.js';
 import { chancePercent } from './rng.js';
 import { findCharacterOwner } from './zones.js';
 import { otherPlayer, type EngineEvent, type GameState, type PlayerId } from './types.js';
@@ -33,7 +33,20 @@ export function buildEffectContext(
   }
   function getBench(playerId: PlayerId) {
     const p = state.players[playerId];
-    return p.benchCharacterInstanceIds.map((id) => p.characters[id]!);
+    return p.benchCharacterInstanceIds
+      .map((id) => p.characters[id])
+      .filter((c): c is NonNullable<typeof c> => c !== undefined);
+  }
+
+  /**
+   * Esquive/critique only ever come into play between opposing sides. An effect
+   * touching one of its own owner's characters -- a friendly heal-by-damage, a terrain
+   * locking down its own active, a self-buff -- must never be "dodged" by the very
+   * player who cast it.
+   */
+  function canRollAgainst(targetInstanceId: string): boolean {
+    if (!isAttackOrAbility || targetInstanceId === sourceInstanceId) return false;
+    return findCharacterOwner(state, targetInstanceId) !== ownerId;
   }
 
   return {
@@ -42,6 +55,11 @@ export function buildEffectContext(
     opponentId,
     sourceInstanceId,
     event,
+    // Fresh per built context. match.ts hands the *same* context object to an attack's
+    // execute() and to its endsTurn(), so this is the safe place for an attack to stash
+    // "what happened while I resolved" -- unlike a module-level variable, which would be
+    // shared by every match running in the same server process.
+    scratch: {},
 
     log(message, data) {
       api.log(message, data);
@@ -101,23 +119,28 @@ export function buildEffectContext(
       return isKO(findCharacter(state, characterInstanceId));
     },
     async koCharacter(characterInstanceId) {
-      await api.koCharacter(characterInstanceId);
+      // Credit the kill to the effect's own character source when there is one, so
+      // onCharacterKO listeners can tell who did it (an object/terrain source has no
+      // character to attribute it to and stays anonymous).
+      const killer = state.players[ownerId].characters[sourceInstanceId]?.instanceId;
+      await api.koCharacter(characterInstanceId, killer);
     },
     async reviveCharacter(characterInstanceId, hp, placement) {
       await api.reviveCharacter(characterInstanceId, hp, placement);
     },
 
     async dealDamage(targetInstanceId, amount, options) {
+      if (!api.isOnBoard(targetInstanceId)) return;
       const selfInflicted = targetInstanceId === sourceInstanceId;
       const source = isAttackOrAbility && !selfInflicted ? state.players[ownerId].characters[sourceInstanceId] : undefined;
       // "Concentration" only arms on a literal attack (not an ability's damage) -- see damageSource above.
       const concentration = damageSource === 'attack' && source ? getStatus(source, 'concentration') : undefined;
 
       // Critique/esquive (innate or status-driven) only apply to attacks and
-      // abilities, never to object-card effects, self-inflicted damage, or
-      // poison/burn ticks (those call api.dealDamage directly, bypassing this
-      // context entirely).
-      if (!options?.skipEvasionRoll && isAttackOrAbility && !selfInflicted) {
+      // abilities aimed at the OTHER side, never to object-card effects, friendly
+      // fire / self-inflicted damage, or poison/burn ticks (those call
+      // api.dealDamage directly, bypassing this context entirely).
+      if (!options?.skipEvasionRoll && canRollAgainst(targetInstanceId)) {
         const target = findCharacter(state, targetInstanceId);
         if (rollEvasion(state, target)) {
           api.log(`${target.cardId} esquive l'attaque`, { targetInstanceId, sourceInstanceId });
@@ -126,33 +149,35 @@ export function buildEffectContext(
         }
       }
 
-      // "Hypnose Absolue" (Aizen) : sur une attaque/ability adverse qui le touche, 40% de
-      // chance que les dégâts soient entièrement redirigés vers un allié du banc choisi
-      // par le joueur d'Aizen. Vérifié via cardId plutôt qu'un statut posé en lazy-init :
-      // Aizen doit être protégé dès le tout premier coup subi, avant même d'avoir pu agir
-      // une seule fois -- onGameStart/onBecomeActive ne se déclenchent pas à la mise en
-      // place initiale (voir CLAUDE.md), donc aucun trigger fiable n'existe pour poser un
-      // statut à temps.
+      // Redirection (e.g. Aizen's "Hypnose Absolue"): any card in play can declare a
+      // `getDamageRedirectPercent` modifier for one of its characters; on a successful
+      // roll, that character's owner picks which of their benched allies eats the hit
+      // instead. Driven entirely by the card's own modifier -- the engine knows nothing
+      // about which card it is.
       let resolvedTargetId = targetInstanceId;
       if (isAttackOrAbility && !selfInflicted) {
-        const hypnoseTarget = findCharacter(state, resolvedTargetId);
-        if (hypnoseTarget.cardId === 'aizen' && chancePercent(state.rng, 40)) {
-          const targetOwnerId = findCharacterOwner(state, resolvedTargetId);
+        const redirectPercent = Number(
+          evaluateTransform(state, 'getDamageRedirectPercent', { targetInstanceId, sourceInstanceId }, 0)
+        );
+        if (redirectPercent > 0 && chancePercent(state.rng, redirectPercent)) {
+          const targetOwnerId = findCharacterOwner(state, targetInstanceId);
           const aliveBench = state.players[targetOwnerId].benchCharacterInstanceIds.filter(
-            (id) => id !== resolvedTargetId && !isKO(state.players[targetOwnerId].characters[id]!)
+            (id) => id !== targetInstanceId && !isKO(state.players[targetOwnerId].characters[id]!)
           );
           if (aliveBench.length > 0) {
             const answer = await api.chooseFor(targetOwnerId, {
               kind: 'select-characters',
-              prompt: "Hypnose Absolue : choisissez le personnage du banc qui subit les dégâts à la place d'Aizen",
+              prompt: 'Redirection : choisissez le personnage du banc qui subit les dégâts à la place',
               options: aliveBench,
               min: 1,
               max: 1,
             });
-            if (answer.kind !== 'select-characters') throw new Error('Unexpected choice answer kind');
-            const chosen = answer.selected[0];
-            if (chosen) {
-              api.log(`Hypnose Absolue redirects the attack to ${chosen}`, { from: resolvedTargetId, to: chosen });
+            const chosen = answer.kind === 'select-characters' ? answer.selected[0] : undefined;
+            if (chosen && api.isOnBoard(chosen)) {
+              api.log(`Les dégâts sont redirigés vers ${findCharacter(state, chosen).cardId}`, {
+                from: targetInstanceId,
+                to: chosen,
+              });
               resolvedTargetId = chosen;
             }
           }
@@ -177,33 +202,36 @@ export function buildEffectContext(
         api.log(`${source.cardId} inflige un coup critique (x${multiplier}) !`, { sourceInstanceId, targetInstanceId: resolvedTargetId, baseAmount: amount, amount: finalAmount });
       }
 
-      // "Couteau dans le dos" : double les dégâts de n'importe lequel de vos personnages
-      // contre le banc ennemi (statut posé sur chaque personnage à la pose de l'objet).
-      if (source && hasStatus(source, 'couteau-dans-le-dos')) {
-        const targetOwner = findCharacterOwner(state, resolvedTargetId);
-        if (targetOwner !== ownerId && state.players[targetOwner].benchCharacterInstanceIds.includes(resolvedTargetId)) {
-          finalAmount *= 2;
-          api.log(`${source.cardId} frappe dans le dos : dégâts au banc doublés`, { sourceInstanceId, targetInstanceId: resolvedTargetId, amount: finalAmount });
+      // 'bench-damage-bonus' (e.g. "Couteau dans le dos"): the bearer's damage against
+      // the ENEMY bench is multiplied. Generic engine-recognised status, like
+      // death-ward/atk-boost -- the attacker's identity only exists at this exact point
+      // of the pipeline, so it can't live in a per-card trigger.
+      if (source && finalAmount > 0) {
+        const benchBonus = getStatus(source, 'bench-damage-bonus');
+        if (benchBonus) {
+          const targetOwner = findCharacterOwner(state, resolvedTargetId);
+          if (targetOwner !== ownerId && state.players[targetOwner].benchCharacterInstanceIds.includes(resolvedTargetId)) {
+            const multiplier = Number(benchBonus.data?.['multiplier'] ?? 2);
+            finalAmount = Math.round(finalAmount * multiplier);
+            api.log(`${source.cardId} frappe dans le dos : dégâts au banc x${multiplier}`, { sourceInstanceId, targetInstanceId: resolvedTargetId, amount: finalAmount });
+          }
         }
       }
 
-      // "Miroir de Renvoi" : le porteur renvoie un pourcentage des dégâts subis à
-      // l'attaquant (une fois), puis l'objet qui portait l'effet se détruit. Statut
-      // générique reconnu par le moteur ici, comme "couteau-dans-le-dos" -- l'identité
-      // de l'attaquant (via `source`) n'est disponible qu'à ce point précis du pipeline,
-      // afterDamage ne la porte pas dans son payload (même limite documentée pour
-      // onCharacterKO dans CLAUDE.md).
+      // 'damage-reflect' (e.g. "Miroir de Renvoi"): the bearer bounces a percentage of
+      // this hit straight back at the attacker, once, then the status (and the object
+      // carrying it, if any) is consumed.
       if (source && finalAmount > 0) {
         const target = findCharacter(state, resolvedTargetId);
-        const mirror = getStatus(target, 'miroir-de-renvoi');
+        const mirror = getStatus(target, 'damage-reflect');
         if (mirror) {
-          api.removeStatus(target.instanceId, 'miroir-de-renvoi');
+          api.removeStatus(target.instanceId, 'damage-reflect');
           const objectInstanceId = mirror.data?.['objectInstanceId'] as string | undefined;
           if (objectInstanceId) api.destroyObject(objectInstanceId);
           const percent = Number(mirror.data?.['percent'] ?? 50);
           const reflected = Math.round(finalAmount * (percent / 100));
           if (reflected > 0) {
-            api.log(`${target.cardId} renvoie ${reflected} dégâts via Miroir de Renvoi`, {
+            api.log(`${target.cardId} renvoie ${reflected} dégâts à ${source.cardId}`, {
               targetInstanceId: source.instanceId,
               amount: reflected,
             });
@@ -212,39 +240,38 @@ export function buildEffectContext(
         }
       }
 
-      // "Coeur Acier" (terrain) : si le personnage qui vient d'être touché est la cible
-      // chargée du terrain "Coeur Acier" du camp de l'attaquant, celui-ci gagne du HP max
-      // (sans soin), puis la marque se réinitialise. Comme "Miroir de Renvoi"/"Couteau
-      // dans le dos", géré directement ici (pas via un trigger) car l'identité de
-      // l'attaquant n'est disponible qu'à ce point précis du pipeline. "Attaquer" au sens
-      // strict de la carte : seule une Attack literal arme l'effet, jamais une ability.
+      // 'hit-bounty' (e.g. the "Coeur Acier" terrain's charged mark): the first attack
+      // that really lands on the bearer pays its attacker in permanent max HP, then the
+      // mark is consumed. `data.forOwnerId` restricts who can collect it.
       if (damageSource === 'attack' && source && finalAmount > 0) {
-        const terrainId = state.players[ownerId].activeTerrainInstanceId;
-        const terrain = terrainId ? state.players[ownerId].terrains[terrainId] : undefined;
-        if (
-          terrain &&
-          terrain.cardId === 'coeur-acier' &&
-          terrain.data?.['charged'] &&
-          terrain.data?.['markedInstanceId'] === resolvedTargetId
-        ) {
-          const bonus = Number(terrain.data?.['bonusMaxHP'] ?? 150);
-          api.raiseMaxHP(source.instanceId, bonus);
-          terrain.data = { ...terrain.data, charged: false };
-          api.log(`Coeur Acier : ${source.cardId} gagne ${bonus} HP max`, {
-            sourceInstanceId: source.instanceId,
-            targetInstanceId: resolvedTargetId,
-          });
+        const target = findCharacter(state, resolvedTargetId);
+        const bounty = getStatus(target, 'hit-bounty');
+        const forOwnerId = bounty?.data?.['forOwnerId'] as PlayerId | undefined;
+        if (bounty && (forOwnerId === undefined || forOwnerId === ownerId)) {
+          api.removeStatus(target.instanceId, 'hit-bounty');
+          const bonus = Number(bounty.data?.['bonusMaxHP'] ?? 0);
+          if (bonus > 0) {
+            api.raiseMaxHP(source.instanceId, bonus);
+            api.log(`${source.cardId} encaisse la prime : +${bonus} HP max`, {
+              sourceInstanceId: source.instanceId,
+              targetInstanceId: resolvedTargetId,
+            });
+          }
         }
       }
 
+      // `source` is deliberately undefined for self-inflicted damage (no crit on
+      // yourself), so ownership is taken from the effect's owner instead -- a card must
+      // still be able to recognise "this damage comes from my own side".
+      const withAttribution = { ...options, attackerInstanceId: source?.instanceId, attackerOwnerId: ownerId };
       if (options?.asValeurLock) {
-        await api.applyValeurLock(resolvedTargetId, finalAmount);
+        await api.applyValeurLock(resolvedTargetId, finalAmount, withAttribution);
         return;
       }
-      await api.dealDamage(resolvedTargetId, finalAmount, options);
+      await api.dealDamage(resolvedTargetId, finalAmount, withAttribution);
     },
     async applyValeurLock(targetInstanceId, amount) {
-      await api.applyValeurLock(targetInstanceId, amount);
+      await api.applyValeurLock(targetInstanceId, amount, { attackerOwnerId: ownerId });
     },
     heal(targetInstanceId, amount) {
       api.heal(targetInstanceId, amount);
@@ -260,8 +287,8 @@ export function buildEffectContext(
     },
 
     applyStatus(targetInstanceId, status, options) {
-      // Same esquive scoping as dealDamage: attacks/abilities only, never self-applied.
-      if (!options?.skipEvasionRoll && isAttackOrAbility && targetInstanceId !== sourceInstanceId) {
+      // Same esquive scoping as dealDamage: hostile attacks/abilities only.
+      if (!options?.skipEvasionRoll && canRollAgainst(targetInstanceId)) {
         const target = findCharacter(state, targetInstanceId);
         if (rollEvasion(state, target)) {
           api.log(`${target.cardId} esquive l'altération ${status.statusId}`, { targetInstanceId, statusId: status.statusId, sourceInstanceId });
@@ -271,7 +298,7 @@ export function buildEffectContext(
       api.applyStatus(targetInstanceId, status);
     },
     rollEvasion(targetInstanceId) {
-      if (!isAttackOrAbility || targetInstanceId === sourceInstanceId) return false;
+      if (!canRollAgainst(targetInstanceId)) return false;
       const target = findCharacter(state, targetInstanceId);
       const evaded = rollEvasion(state, target);
       if (evaded) {

@@ -13,9 +13,12 @@ const DISARM_EFFECTIVE_TURNS = 1;
 // filtre, avant que le joueur actif ne puisse agir ce tour-là).
 const DISARM_REMAINING_TURNS = DISARM_EFFECTIVE_TURNS + 1;
 
-// Partagé entre execute() et endsTurn() de "Shunpo" -- voir CLAUDE.md, pattern
-// "peut agir de nouveau ce tour si condition remplie pendant l'attaque" (Voracity).
-let killedThisAttack = false;
+// Clé de ctx.scratch partagée entre execute() et endsTurn() de "Shunpo" -- voir
+// CLAUDE.md, pattern "peut agir de nouveau ce tour si condition remplie pendant
+// l'attaque" (Voracity). Le scratch appartient au contexte d'effet de CETTE résolution :
+// contrairement à une variable de module, deux parties jouées en parallèle sur le même
+// serveur ne peuvent pas se marcher dessus.
+const KILLED_THIS_ATTACK = 'katarina:killedThisAttack';
 
 export const katarina: CharacterCardDef = {
   type: 'character',
@@ -28,11 +31,11 @@ export const katarina: CharacterCardDef = {
       name: 'Shunpo',
       baseATK: BASE_ATK,
       description: `Inflige ${BASE_ATK} dégâts à l'actif adverse. Si des dégâts passent réellement (pas d'esquive), ${DISARM_CHANCE_PERCENT}% de chance de désarmer la cible pendant ${DISARM_EFFECTIVE_TURNS} tour.`,
-      endsTurn() {
-        return !killedThisAttack;
+      endsTurn(ctx) {
+        return !ctx.scratch[KILLED_THIS_ATTACK];
       },
       async execute(ctx) {
-        killedThisAttack = false;
+        ctx.scratch[KILLED_THIS_ATTACK] = false;
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
 
@@ -41,7 +44,7 @@ export const katarina: CharacterCardDef = {
         await ctx.dealDamage(target.instanceId, atk);
 
         if (ctx.isKO(target.instanceId)) {
-          killedThisAttack = true; // Voracity : Katarina peut immédiatement attaquer de nouveau
+          ctx.scratch[KILLED_THIS_ATTACK] = true; // Voracity : Katarina peut immédiatement attaquer de nouveau
           return;
         }
 

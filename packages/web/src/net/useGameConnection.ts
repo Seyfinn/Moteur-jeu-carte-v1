@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChoiceAnswer, ClientMessage, GameState, PlayerAction, PlayerId, RosterConfig, ServerMessage } from 'engine';
 
 const WS_URL =
@@ -11,6 +11,36 @@ const WS_URL =
 const MAX_CONNECT_RETRIES = 4;
 const RETRY_DELAY_MS = 2000;
 
+/**
+ * Seat credential handed out by the server. Reloading the page tears down the socket but
+ * not the seat, so it is kept and replayed on mount to walk straight back into the game
+ * instead of dropping the player on the lobby with a lost match.
+ *
+ * `sessionStorage`, not `localStorage`, on purpose: it is scoped to the tab. Testing (or
+ * playing) locally means two tabs on the same origin, and a shared credential would have
+ * each tab overwrite the other's seat, so a reload would drop you into your opponent's
+ * game. The trade-off is that closing the tab loses the seat -- which is the right scope
+ * anyway, since a closed tab isn't a reload.
+ */
+const SESSION_KEY = 'ctg-session-v1';
+
+function readSessionToken(): string | null {
+  try {
+    return sessionStorage.getItem(SESSION_KEY);
+  } catch {
+    return null; // private mode / storage disabled -- resume simply won't be available
+  }
+}
+
+function writeSessionToken(token: string | null): void {
+  try {
+    if (token) sessionStorage.setItem(SESSION_KEY, token);
+    else sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export type ConnectionStatus = 'idle' | 'connecting' | 'waiting' | 'playing' | 'error';
 
 export interface GameConnection {
@@ -20,11 +50,17 @@ export interface GameConnection {
   state: GameState | null;
   error: string | null;
   opponentDisconnected: boolean;
+  /** Epoch ms at which the pending choice will be auto-answered by the server, if any. */
+  choiceDeadline: number | null;
+  /** True while an interrupted session is being reclaimed on page load. */
+  resuming: boolean;
   createRoom(playerName: string, roster: RosterConfig): void;
   joinRoom(roomCode: string, playerName: string, roster: RosterConfig): void;
   applyAction(action: PlayerAction): void;
   answerChoice(choiceId: string, answer: ChoiceAnswer): void;
   clearError(): void;
+  /** Closes the socket and returns to the lobby (used once a game is over). */
+  leave(): void;
 }
 
 export function useGameConnection(): GameConnection {
@@ -34,11 +70,22 @@ export function useGameConnection(): GameConnection {
   const [state, setState] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [opponentDisconnected, setOpponentDisconnected] = useState(false);
+  const [choiceDeadline, setChoiceDeadline] = useState<number | null>(null);
+  const [resuming, setResuming] = useState(() => readSessionToken() !== null);
   const socketRef = useRef<WebSocket | null>(null);
 
   const ensureSocket = useCallback((onOpen: () => void) => {
     setStatus('connecting');
     setError(null);
+
+    // Every call opens a fresh socket; without closing the previous one, a second
+    // "Créer un salon"/"Rejoindre" click would leave an orphaned connection still
+    // holding a seat on the server.
+    const previous = socketRef.current;
+    if (previous && previous.readyState !== WebSocket.CLOSED) {
+      previous.onclose = null;
+      previous.close();
+    }
 
     const attemptConnect = (attempt: number) => {
       const socket = new WebSocket(WS_URL);
@@ -51,29 +98,52 @@ export function useGameConnection(): GameConnection {
       });
 
       socket.addEventListener('message', (event) => {
-        const message: ServerMessage = JSON.parse(event.data as string);
+        let message: ServerMessage;
+        try {
+          message = JSON.parse(event.data as string);
+        } catch {
+          // Anything that isn't valid JSON isn't ours -- ignore it rather than letting
+          // the exception escape the listener and break the connection.
+          return;
+        }
         switch (message.type) {
           case 'room-created':
+            writeSessionToken(message.sessionToken);
             setRoomCode(message.roomCode);
             setYou(message.you);
             setStatus('waiting');
+            setResuming(false);
             break;
           case 'joined':
+            writeSessionToken(message.sessionToken);
             setRoomCode(message.roomCode);
             setYou(message.you);
             setStatus('playing');
+            setResuming(false);
             break;
           case 'waiting-for-opponent':
             setStatus('waiting');
+            setResuming(false);
             break;
           case 'state':
             setState(message.state);
             setYou(message.you);
+            setChoiceDeadline(message.choiceDeadline ?? null);
             setStatus('playing');
+            setResuming(false);
             setError(null);
             break;
           case 'opponent-disconnected':
             setOpponentDisconnected(true);
+            break;
+          case 'opponent-reconnected':
+            setOpponentDisconnected(false);
+            break;
+          case 'session-expired':
+            // The room is gone for good -- drop the stale credential and show the lobby.
+            writeSessionToken(null);
+            setResuming(false);
+            setStatus('idle');
             break;
           case 'error':
             setError(message.message);
@@ -82,20 +152,39 @@ export function useGameConnection(): GameConnection {
       });
 
       socket.addEventListener('close', () => {
+        // A socket replaced by a newer attempt must not touch shared state any more.
+        if (socketRef.current !== socket) return;
         if (!opened && attempt < MAX_CONNECT_RETRIES) {
           setTimeout(() => attemptConnect(attempt + 1), RETRY_DELAY_MS);
           return;
         }
         if (!opened) setError('Connexion au serveur impossible.');
-        setStatus((prev) => (prev === 'playing' ? prev : 'error'));
+        else setError('Connexion au serveur perdue.');
+        setStatus('error');
+        // Never leave the lobby stuck behind a "reprise en cours" spinner.
+        setResuming(false);
       });
     };
 
     attemptConnect(0);
   }, []);
 
+  useEffect(
+    () => () => {
+      const socket = socketRef.current;
+      socketRef.current = null;
+      socket?.close();
+    },
+    []
+  );
+
   const send = useCallback((message: ClientMessage) => {
-    socketRef.current?.send(JSON.stringify(message));
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      setError('Pas de connexion au serveur.');
+      return;
+    }
+    socket.send(JSON.stringify(message));
   }, []);
 
   const createRoom = useCallback(
@@ -112,12 +201,38 @@ export function useGameConnection(): GameConnection {
     [ensureSocket, send]
   );
 
+  // If a seat credential survived the reload, walk straight back into the game instead
+  // of showing the lobby. Deliberately *not* guarded by a "ran once" ref: React
+  // StrictMode mounts, unmounts and remounts in dev, and the unmount cleanup above closes
+  // the socket -- a ref that survives the remount would leave the resume permanently
+  // half-done. `ensureSocket`/`send` are stable, so this still runs once in production.
+  useEffect(() => {
+    const token = readSessionToken();
+    if (!token) return;
+    ensureSocket(() => send({ type: 'resume-session', sessionToken: token }));
+  }, [ensureSocket, send]);
+
   const applyAction = useCallback((action: PlayerAction) => send({ type: 'action', action }), [send]);
   const answerChoice = useCallback(
     (choiceId: string, answer: ChoiceAnswer) => send({ type: 'answer-choice', choiceId, answer }),
     [send]
   );
   const clearError = useCallback(() => setError(null), []);
+
+  const leave = useCallback(() => {
+    writeSessionToken(null);
+    const socket = socketRef.current;
+    socketRef.current = null;
+    socket?.close();
+    setChoiceDeadline(null);
+    setResuming(false);
+    setState(null);
+    setYou(null);
+    setRoomCode(null);
+    setOpponentDisconnected(false);
+    setError(null);
+    setStatus('idle');
+  }, []);
 
   return {
     status,
@@ -131,5 +246,8 @@ export function useGameConnection(): GameConnection {
     applyAction,
     answerChoice,
     clearError,
+    leave,
+    choiceDeadline,
+    resuming,
   };
 }

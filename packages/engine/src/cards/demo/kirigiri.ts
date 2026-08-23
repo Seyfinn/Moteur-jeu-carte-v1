@@ -21,6 +21,9 @@ export const kirigiri: CharacterCardDef = {
       usesPerGame: 1,
       async execute(ctx) {
         ctx.state.players[ctx.ownerId].revealsOpponentUnplayedCards = true;
+        ctx.log("Ultimate Détective : les cartes non jouées de l'adversaire sont révélées", {
+          characterInstanceId: ctx.sourceInstanceId,
+        });
       },
     },
   ],

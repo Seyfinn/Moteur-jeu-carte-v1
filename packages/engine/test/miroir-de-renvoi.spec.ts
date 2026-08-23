@@ -21,7 +21,7 @@ describe('"Miroir de Renvoi" mechanism (attached object reflects the next hit ba
 
     const mirrorObjectId = Object.values(bearer.objects).find((o) => o.cardId === 'fx-mirror-object')!.instanceId;
     await drive(match, bearerId, { kind: 'play-object', objectInstanceId: mirrorObjectId });
-    expect(bearer.characters[bearerActiveId]!.statuses.some((s) => s.statusId === 'miroir-de-renvoi')).toBe(true);
+    expect(bearer.characters[bearerActiveId]!.statuses.some((s) => s.statusId === 'damage-reflect')).toBe(true);
     expect(bearer.inPlayObjectInstanceIds).toContain(mirrorObjectId); // attached, not discarded
     await drive(match, bearerId, { kind: 'pass' }); // playing a single object doesn't end the turn on its own
 
@@ -29,7 +29,7 @@ describe('"Miroir de Renvoi" mechanism (attached object reflects the next hit ba
     await drive(match, attackerId, { kind: 'attack', characterInstanceId: attackerActiveId, attackId: 'strike' });
     expect(bearer.characters[bearerActiveId]!.damage).toBe(40);
     expect(attacker.characters[attackerActiveId]!.damage).toBe(20);
-    expect(bearer.characters[bearerActiveId]!.statuses.some((s) => s.statusId === 'miroir-de-renvoi')).toBe(false);
+    expect(bearer.characters[bearerActiveId]!.statuses.some((s) => s.statusId === 'damage-reflect')).toBe(false);
     expect(bearer.inPlayObjectInstanceIds).not.toContain(mirrorObjectId);
     expect(bearer.graveyardObjectInstanceIds).toContain(mirrorObjectId); // one-shot, self-destroyed
 

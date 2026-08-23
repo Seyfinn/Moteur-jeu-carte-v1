@@ -14,7 +14,7 @@ export interface EngineApi {
   rng: RngState;
 
   dealDamage(targetInstanceId: string, amount: number, options?: DealDamageOptions): Promise<void>;
-  applyValeurLock(targetInstanceId: string, amount: number): Promise<void>;
+  applyValeurLock(targetInstanceId: string, amount: number, options?: DealDamageOptions): Promise<void>;
   /** Lets a card's modifier (query 'poisonTicksAsValeurLock') redirect a poison tick into an unhealable max-HP loss instead of ordinary damage -- checked fresh at every tick. */
   poisonTicksAsValeurLock(targetInstanceId: string): boolean;
   heal(targetInstanceId: string, amount: number): void;
@@ -24,7 +24,8 @@ export interface EngineApi {
   applyStatus(targetInstanceId: string, status: StatusInstance): void;
   removeStatus(targetInstanceId: string, statusId: string): void;
 
-  koCharacter(characterInstanceId: string): Promise<void>;
+  /** `killerInstanceId` is forwarded to the onCharacterKO payload when the kill can be attributed. */
+  koCharacter(characterInstanceId: string, killerInstanceId?: string): Promise<void>;
   /** Pulls a character back out of its own graveyard, at `hp` (clamped to its current ceiling), statuses/shield cleared, placed active or bench. Emits onCharacterRevived. */
   reviveCharacter(characterInstanceId: string, hp: number, placement: 'active' | 'bench'): Promise<void>;
   swapBenchCharacters(forPlayer: PlayerId, ownBenchInstanceId: string, enemyBenchInstanceId: string): void;
@@ -40,8 +41,11 @@ export interface EngineApi {
 
   emitEvent(event: EngineEvent): Promise<void>;
   chooseFor(playerId: PlayerId, spec: ChoiceSpec): Promise<ChoiceAnswer>;
-  log(message: string, data?: Record<string, unknown>): void;
+  log(message: string, data?: Record<string, unknown>, playerId?: PlayerId): void;
   flipCoin(): CoinResult;
+
+  /** True once a character has left the board (graveyard) -- guards effects from hitting a corpse. */
+  isOnBoard(characterInstanceId: string): boolean;
 
   /**
    * `damageSource` gates critique/esquive (both innate and status-driven) --

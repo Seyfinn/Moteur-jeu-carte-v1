@@ -2,6 +2,7 @@ import type { CharacterCardDef } from '../types.js';
 
 const BASE_HP = 300;
 const HADO_BASE_ATK = 70;
+const REDIRECT_PERCENT = 40;
 
 export const aizen: CharacterCardDef = {
   type: 'character',
@@ -31,13 +32,12 @@ export const aizen: CharacterCardDef = {
       name: 'Hypnose Absolue',
       kind: 'passive',
       description:
-        "Quand Aizen est attaqué (attaque ou ability adverse), 40 % de chance que les dégâts soient " +
+        `Quand Aizen est attaqué (attaque ou ability adverse), ${REDIRECT_PERCENT} % de chance que les dégâts soient ` +
         "entièrement redirigés vers un personnage du banc allié, désigné par le joueur d'Aizen.",
-      // Purement descriptive : le mécanisme réel vit directement dans le pipeline de dégâts
-      // (effect-context.ts::dealDamage, identifié par cardId === 'aizen'), pas ici. Aizen doit
-      // être protégé dès le tout premier coup subi, avant même d'avoir pu agir une seule fois --
-      // onGameStart/onBecomeActive ne se déclenchent pas à la mise en place initiale (voir
-      // CLAUDE.md), donc aucun trigger de ce système ne serait fiable pour armer l'effet à temps.
+      // Purement descriptive : le mécanisme vit dans le modifier 'getDamageRedirectPercent'
+      // ci-dessous. Un modifier est scanné en continu tant que la carte est en jeu, donc
+      // l'effet est actif dès le tout premier coup subi -- sans dépendre d'un trigger de
+      // mise en place, et il suit automatiquement les clones et les Métamorphes.
       async execute() {},
     },
     {
@@ -58,6 +58,17 @@ export const aizen: CharacterCardDef = {
           sourceInstanceId: self.instanceId,
           targetInstanceId: opponentActive.instanceId,
         });
+      },
+    },
+  ],
+  modifiers: [
+    {
+      // "Hypnose Absolue" : requête générique du moteur -- le pipeline de dégâts tire le
+      // pourcentage et demande au camp d'Aizen quel personnage du banc encaisse à sa place.
+      query: 'getDamageRedirectPercent',
+      transform(ctx, current) {
+        if (ctx.query['targetInstanceId'] !== ctx.sourceInstanceId) return current;
+        return Math.max(current as number, REDIRECT_PERCENT);
       },
     },
   ],

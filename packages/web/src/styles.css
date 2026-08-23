@@ -282,7 +282,7 @@ input::placeholder {
 }
 .result-banner {
   text-align: center;
-  margin-top: 15vh;
+  margin-top: 12vh;
   font-size: 2rem;
   font-weight: 800;
   background: linear-gradient(90deg, var(--accent), #b98cff);
@@ -1164,14 +1164,30 @@ input::placeholder {
   padding: 7px 9px;
   transition: background-color 0.12s var(--ease);
 }
-.menu-dropdown-option:hover {
+.menu-dropdown-option:hover:not(:disabled) {
   background: var(--accent-soft);
   border-color: transparent;
+}
+.menu-dropdown-option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .menu-dropdown-option-detail {
   font-size: 0.78rem;
   color: var(--text-dim);
   white-space: nowrap;
+}
+/* Why an action is greyed out (stun, per-turn limit, a terrain forbidding it...). */
+.menu-dropdown-option-detail.blocked {
+  color: var(--danger);
+  font-style: italic;
+  white-space: normal;
+  max-width: 190px;
+  text-align: right;
+}
+/* Every option under this menu is currently blocked. */
+.menu-button-blocked {
+  opacity: 0.62;
 }
 .menu-dropdown-empty {
   margin: 0;
@@ -1302,6 +1318,11 @@ input::placeholder {
 }
 .option-button {
   text-align: left;
+}
+.option-button.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 .order-list {
   padding-left: 20px;
@@ -1634,4 +1655,40 @@ textarea {
   .center-row {
     gap: 8px;
   }
+}
+
+/* Result screen: the "back to lobby" button sits under the banner. */
+.board > .result-banner + .primary {
+  display: block;
+  margin: 0 auto 24px;
+}
+
+/* Error boundary fallback. */
+.error-details {
+  background: var(--panel-raised);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  color: var(--danger);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 40vh;
+  overflow: auto;
+}
+
+/* Auto-answer countdown on a pending choice. */
+.modal-countdown {
+  margin: -8px 0 12px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+.modal-countdown.urgent {
+  color: var(--danger);
+  font-weight: 600;
+}
+.waiting-countdown {
+  margin-left: 8px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
 }

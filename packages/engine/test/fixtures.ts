@@ -187,7 +187,7 @@ const fxMirrorObject: ObjectCardDef = {
     if (!active) return;
     ctx.attachSelfTo(active.instanceId);
     ctx.applyStatus(active.instanceId, {
-      statusId: 'miroir-de-renvoi',
+      statusId: 'damage-reflect',
       label: 'Fixture Mirror',
       sourceCardInstanceId: ctx.sourceInstanceId,
       data: { percent: 50, objectInstanceId: ctx.sourceInstanceId },
@@ -309,6 +309,129 @@ const fxPoisonCurse: CharacterCardDef = {
   ],
 };
 
+
+/** Test-only: counts how many times its onTurnStart passive actually fired, in a status. */
+const fxTicker: CharacterCardDef = {
+  type: 'character',
+  id: 'fx-ticker',
+  name: 'Fixture Ticker',
+  baseMaxHP: 100,
+  attacks: [],
+  abilities: [
+    {
+      id: 'tick',
+      name: 'Tick',
+      kind: 'passive',
+      description: 'Increments a counter status at the start of its owner turn.',
+      trigger: 'onTurnStart',
+      usableFromBench: true,
+      usesPerTurn: Infinity,
+      condition(ctx) {
+        return ctx.event?.playerId === ctx.ownerId;
+      },
+      async execute(ctx) {
+        const self = ctx.getCharacter(ctx.sourceInstanceId);
+        const count = Number(self.statuses.find((st) => st.statusId === 'fx-tick-count')?.data?.['count'] ?? 0) + 1;
+        ctx.removeStatus(ctx.sourceInstanceId, 'fx-tick-count');
+        ctx.applyStatus(ctx.sourceInstanceId, { statusId: 'fx-tick-count', label: 'ticks', data: { count } });
+      },
+    },
+  ],
+};
+
+/**
+ * Test-only: reacts to damage on its OWN active by poking the enemy active for 0, which
+ * makes the opposing copy react in turn -- an endless alternating trigger chain unless
+ * the engine caps event depth.
+ */
+const fxEcho: CharacterCardDef = {
+  type: 'character',
+  id: 'fx-echo',
+  name: 'Fixture Echo',
+  baseMaxHP: 500,
+  attacks: [
+    {
+      id: 'tap',
+      name: 'Tap',
+      baseATK: 1,
+      description: 'Deals 1 to the opponent active.',
+      async execute(ctx) {
+        const target = ctx.getActive(ctx.opponentId);
+        if (target) await ctx.dealDamage(target.instanceId, 1, { skipEvasionRoll: true });
+      },
+    },
+  ],
+  abilities: [
+    {
+      id: 'echo',
+      name: 'Echo',
+      kind: 'passive',
+      description: 'Pokes the enemy active whenever our own active takes damage.',
+      trigger: 'afterDamage',
+      usableFromBench: true,
+      usesPerTurn: Infinity,
+      condition(ctx) {
+        const ownActive = ctx.getActive(ctx.ownerId);
+        return !!ownActive && ctx.event?.data['targetInstanceId'] === ownActive.instanceId;
+      },
+      async execute(ctx) {
+        const target = ctx.getActive(ctx.opponentId);
+        if (target) await ctx.dealDamage(target.instanceId, 0, { skipEvasionRoll: true });
+      },
+    },
+  ],
+};
+
+/** Test-only: declares a 100% evasion rate through the getEvasionPercent query (no status involved). */
+const fxUntouchable: CharacterCardDef = {
+  type: 'character',
+  id: 'fx-untouchable',
+  name: 'Fixture Untouchable',
+  baseMaxHP: 100,
+  attacks: [],
+  abilities: [],
+  modifiers: [
+    {
+      query: 'getEvasionPercent',
+      transform(ctx, current) {
+        if (ctx.query['characterInstanceId'] !== ctx.sourceInstanceId) return current;
+        return 100;
+      },
+    },
+  ],
+};
+
+/** Test-only: always redirects incoming hostile damage onto a benched ally (100% rate). */
+const fxDecoy: CharacterCardDef = {
+  type: 'character',
+  id: 'fx-decoy',
+  name: 'Fixture Decoy',
+  baseMaxHP: 200,
+  attacks: [],
+  abilities: [],
+  modifiers: [
+    {
+      query: 'getDamageRedirectPercent',
+      transform(ctx, current) {
+        if (ctx.query['targetInstanceId'] !== ctx.sourceInstanceId) return current;
+        return 100;
+      },
+    },
+  ],
+};
+
+/** Test-only object that stays attached to the owner active -- for zone-transfer checks. */
+const fxStickyObject: ObjectCardDef = {
+  type: 'object',
+  id: 'fx-sticky-object',
+  name: 'Fixture Sticky Object',
+  description: 'Attaches to the owner active and stays in play.',
+  async execute(ctx) {
+    const active = ctx.getActive(ctx.ownerId);
+    if (active) ctx.attachSelfTo(active.instanceId);
+  },
+};
+
 let registered = false;
 
 export function registerTestFixtures(): void {
@@ -327,6 +450,11 @@ export function registerTestFixtures(): void {
   registerCard(fxPoisonCurse);
   registerCard(fxMirrorObject);
   registerCard(fxAdrenalineObject);
+  registerCard(fxTicker);
+  registerCard(fxEcho);
+  registerCard(fxUntouchable);
+  registerCard(fxStickyObject);
+  registerCard(fxDecoy);
 }
 
 export const FX_ROSTER: RosterConfig = {
@@ -370,6 +498,34 @@ export const ADRENALINE_ROSTER: RosterConfig = {
   terrainCardIds: [],
 };
 
+/** Two tickers per side: both react to onTurnStart, which forces the resolution-order prompt. */
+export const TICKER_ROSTER: RosterConfig = {
+  characterCardIds: [fxTicker.id, fxTicker.id],
+  objectCardIds: [],
+  terrainCardIds: [],
+};
+
+/** Mirrored echo cards -- an unbounded trigger chain if the engine doesn't cap event depth. */
+export const ECHO_ROSTER: RosterConfig = {
+  characterCardIds: [fxEcho.id],
+  objectCardIds: [],
+  terrainCardIds: [],
+};
+
+/** A decoy active with two possible bench targets, for damage-redirection checks. */
+export const DECOY_ROSTER: RosterConfig = {
+  characterCardIds: [fxDecoy.id, fxTank.id, fxStunner.id],
+  objectCardIds: [],
+  terrainCardIds: [],
+};
+
+/** A striker plus an always-evading ally, for friendly-fire / evasion-scoping checks. */
+export const UNTOUCHABLE_ROSTER: RosterConfig = {
+  characterCardIds: [fxStriker.id, fxUntouchable.id],
+  objectCardIds: [],
+  terrainCardIds: [],
+};
+
 export {
   fxStriker,
   fxTank,
@@ -381,4 +537,9 @@ export {
   fxAdrenalineObject,
   fxHealObject,
   fxAuraTerrain,
+  fxTicker,
+  fxEcho,
+  fxUntouchable,
+  fxStickyObject,
+  fxDecoy,
 };

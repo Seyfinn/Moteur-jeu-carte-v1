@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { listDeckPool, type DeckPoolEntry } from 'engine';
 import type { GameConnection } from '../net/useGameConnection';
-import { deckToRoster, isDeckPlayable, loadDecks, type Deck } from '../decks';
+import { deckIssue, deckToRoster, loadDecks, type Deck } from '../decks';
 import { DeckContentsPanel, type CardKind } from './DeckContentsPanel';
 
 export function Lobby({
@@ -36,14 +36,17 @@ export function Lobby({
   }, []);
 
   const selectedDeck = decks.find((d) => d.id === selectedDeckId) ?? null;
-  const canPlay = Boolean(selectedDeck && isDeckPlayable(selectedDeck));
-  const busy = conn.status === 'connecting';
+  const issue = selectedDeck ? deckIssue(selectedDeck) : null;
+  const canPlay = Boolean(selectedDeck) && issue === null;
+  const busy = conn.status === 'connecting' || conn.resuming;
 
   return (
     <div className="lobby-layout">
       <div className="lobby">
         <h1>Moteur de jeu de cartes</h1>
         <p className="subtitle">Cartes de démonstration -- créez un salon et partagez le code avec votre adversaire.</p>
+
+        {conn.resuming && <p className="subtitle">Reprise de la partie en cours...</p>}
 
         <label className="field">
           Votre nom
@@ -78,7 +81,7 @@ export function Lobby({
           </button>
         </div>
 
-        {selectedDeck && !canPlay && <p className="error">Ce deck n'a aucune carte personnage jouable.</p>}
+        {selectedDeck && issue && <p className="error">Deck injouable : {issue}</p>}
 
         <div className="lobby-actions">
           <button

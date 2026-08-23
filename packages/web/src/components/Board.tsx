@@ -1,8 +1,23 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { getCharacterCard, getObjectCard, getTerrainCard, otherPlayer, type GameState, type PlayerId, type PlayerState } from 'engine';
+import {
+  canAttack,
+  canPlayObject,
+  canPlayTerrain,
+  canSwitchStandard,
+  canUseAbility,
+  describeDenials,
+  getCharacterCard,
+  getObjectCard,
+  getTerrainCard,
+  otherPlayer,
+  type GameState,
+  type PlayerId,
+  type PlayerState,
+  type Vote,
+} from 'engine';
 import { CharacterCard } from './CharacterCard';
 import { CardFrame, FaceDownCard } from './CardFrame';
-import { ChoiceModal } from './ChoiceModal';
+import { ChoiceCountdownBadge, ChoiceModal } from './ChoiceModal';
 import { EventLog } from './EventLog';
 import { useHoverCard } from './HoverCard';
 import { hiddenCardDetailBody, objectDetailBody, terrainDetailBody } from './cardDetails';
@@ -234,6 +249,8 @@ interface MenuOption {
   label: string;
   detail?: string;
   hover?: { title: string; subtitle?: string; body: ReactNode };
+  /** Non-null when the engine would reject this action right now -- shown instead of firing it. */
+  disabledReason?: string | null;
   run: () => void;
 }
 
@@ -257,9 +274,14 @@ function ActionMenuButton({
   const hover = useHoverCard();
   if (options.length === 0 && !emptyMessage) return null;
 
+  const playable = options.filter((opt) => !opt.disabledReason);
+  const allBlocked = options.length > 0 && playable.length === 0;
+
   const handleClick = () => {
-    if (autoFireSingle && options.length === 1) {
-      options[0]!.run();
+    // Auto-firing only makes sense when there is exactly one *playable* option; with a
+    // single blocked one, open the menu so the player can read why it's blocked.
+    if (autoFireSingle && playable.length === 1 && options.length === 1) {
+      playable[0]!.run();
       return;
     }
     isOpen ? onClose() : onOpen();
@@ -267,7 +289,10 @@ function ActionMenuButton({
 
   return (
     <div className="menu-item">
-      <button className={`menu-button${isOpen ? ' menu-button-open' : ''}`} onClick={handleClick}>
+      <button
+        className={`menu-button${isOpen ? ' menu-button-open' : ''}${allBlocked ? ' menu-button-blocked' : ''}`}
+        onClick={handleClick}
+      >
         {label}
       </button>
       {isOpen && (
@@ -277,6 +302,8 @@ function ActionMenuButton({
             <button
               key={opt.key}
               className="menu-dropdown-option"
+              disabled={Boolean(opt.disabledReason)}
+              title={opt.disabledReason ?? undefined}
               onClick={() => {
                 opt.run();
                 onClose();
@@ -285,7 +312,11 @@ function ActionMenuButton({
               onMouseLeave={hover.hide}
             >
               <span>{opt.label}</span>
-              {opt.detail && <span className="menu-dropdown-option-detail">{opt.detail}</span>}
+              {opt.disabledReason ? (
+                <span className="menu-dropdown-option-detail blocked">{opt.disabledReason}</span>
+              ) : (
+                opt.detail && <span className="menu-dropdown-option-detail">{opt.detail}</span>
+              )}
             </button>
           ))}
         </div>
@@ -315,56 +346,89 @@ function ActionMenu({ state, you, conn }: { state: GameState; you: PlayerId; con
   const activeChar = activeId ? player.characters[activeId] : undefined;
   const activeDef = activeChar ? getCharacterCard(activeChar.cardId) : undefined;
 
+  /**
+   * The same permission queries the server runs, so a blocked action is greyed out with
+   * its reason instead of bouncing back as an error. Evaluated against the redacted
+   * player view, so it is wrapped: a query that can't resolve something client-side must
+   * degrade to "allowed" (the server stays the authority) rather than crash the board.
+   */
+  const denial = (evaluate: () => { allow: boolean; votes: Vote[] }): string | null => {
+    try {
+      const result = evaluate();
+      return result.allow ? null : describeDenials(result.votes) || 'action impossible';
+    } catch {
+      return null;
+    }
+  };
+
+  const attackDenial = activeId ? denial(() => canAttack(state, activeId)) : 'aucun personnage actif';
   const attackOptions: MenuOption[] =
     activeDef && activeId
       ? activeDef.attacks.map((attack) => ({
           key: attack.id,
           label: attack.name,
           detail: `${attack.baseATK} ATK`,
+          disabledReason: attackDenial,
           hover: { title: attack.name, subtitle: `${attack.baseATK} ATK`, body: <p>{attack.description}</p> },
           run: () => conn.applyAction({ kind: 'attack', characterInstanceId: activeId, attackId: attack.id }),
         }))
       : [];
 
-  const abilityOptions: MenuOption[] =
-    activeDef && activeId
-      ? activeDef.abilities
-          .filter((a) => !a.trigger)
-          .map((ability) => ({
-            key: ability.id,
-            label: ability.name,
-            hover: { title: ability.name, subtitle: ability.kind, body: <p>{ability.description}</p> },
-            run: () => conn.applyAction({ kind: 'use-ability', characterInstanceId: activeId, abilityId: ability.id }),
-          }))
-      : [];
+  // Abilities flagged `usableFromBench` are legal from the bench, but only the active
+  // character's menu used to be built -- so cards like Todo's "Boogie Woogie" or
+  // Chopper's "Traque" were simply unreachable while benched.
+  const abilityHolders = [
+    ...(activeId ? [{ id: activeId, benched: false }] : []),
+    ...player.benchCharacterInstanceIds.map((id) => ({ id, benched: true })),
+  ];
+  const abilityOptions: MenuOption[] = abilityHolders.flatMap(({ id, benched }) => {
+    const char = player.characters[id];
+    if (!char) return [];
+    const def = getCharacterCard(char.cardId);
+    return def.abilities
+      .filter((ability) => ability.kind === 'active' && !ability.trigger && (!benched || ability.usableFromBench))
+      .map((ability) => ({
+        key: `${id}:${ability.id}`,
+        label: benched ? `${ability.name} — ${def.name}` : ability.name,
+        disabledReason: denial(() => canUseAbility(state, id, ability)),
+        hover: { title: ability.name, subtitle: `${def.name} · ${ability.kind}`, body: <p>{ability.description}</p> },
+        run: () => conn.applyAction({ kind: 'use-ability', characterInstanceId: id, abilityId: ability.id }),
+      }));
+  });
 
+  const objectDenial = denial(() => canPlayObject(state, you));
   const objectOptions: MenuOption[] = player.unplayedObjectInstanceIds.map((id) => {
     const cardId = player.objects[id]!.cardId;
     const name = objectName(cardId);
     return {
       key: id,
       label: name,
+      disabledReason: objectDenial,
       hover: { title: name, body: objectDetailBody(cardId) },
       run: () => conn.applyAction({ kind: 'play-object', objectInstanceId: id }),
     };
   });
 
+  const terrainDenial = denial(() => canPlayTerrain(state, you));
   const terrainOptions: MenuOption[] = player.unplayedTerrainInstanceIds.map((id) => {
     const cardId = player.terrains[id]!.cardId;
     const name = terrainName(cardId);
     return {
       key: id,
       label: name,
+      disabledReason: terrainDenial,
       hover: { title: name, body: terrainDetailBody(cardId) },
       run: () => conn.applyAction({ kind: 'play-terrain', terrainInstanceId: id }),
     };
   });
 
+  const switchDenial = activeId ? denial(() => canSwitchStandard(state, activeId)) : 'aucun personnage actif';
   const switchOptions: MenuOption[] = player.benchCharacterInstanceIds.map((id) => {
     const name = getCharacterCard(player.characters[id]!.cardId).name;
     return {
       key: id,
       label: name,
+      disabledReason: switchDenial,
       run: () => conn.applyAction({ kind: 'switch', newActiveInstanceId: id }),
     };
   });
@@ -434,6 +498,9 @@ export function Board({ conn }: { conn: GameConnection }) {
     return (
       <div className="board">
         <h1 className="result-banner">{message}</h1>
+        <button className="primary" onClick={conn.leave}>
+          Retour au lobby
+        </button>
         <EventLog log={state.log} />
       </div>
     );
@@ -468,10 +535,18 @@ export function Board({ conn }: { conn: GameConnection }) {
       <ActionMenu state={state} you={you} conn={conn} />
 
       {pendingChoice && pendingChoice.playerId === you && (
-        <ChoiceModal state={state} choice={pendingChoice} onAnswer={(answer) => conn.answerChoice(pendingChoice.id, answer)} />
+        <ChoiceModal
+          state={state}
+          choice={pendingChoice}
+          deadline={conn.choiceDeadline}
+          onAnswer={(answer) => conn.answerChoice(pendingChoice.id, answer)}
+        />
       )}
       {pendingChoice && pendingChoice.playerId !== you && (
-        <div className="waiting-badge">En attente du choix de l'adversaire...</div>
+        <div className="waiting-badge">
+          En attente du choix de l'adversaire...
+          {conn.choiceDeadline !== null && <ChoiceCountdownBadge deadline={conn.choiceDeadline} />}
+        </div>
       )}
     </div>
   );

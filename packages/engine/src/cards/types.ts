@@ -1,5 +1,4 @@
 import type {
-  ChoiceAnswer,
   ChoiceOption,
   CharacterInstance,
   DealDamageOptions,
@@ -32,6 +31,10 @@ export type QueryName =
   | 'canShieldAbsorb'
   | 'getEffectiveATK'
   | 'getCriticalMultiplier'
+  /** Percent chance (0-100) that this character lands a critical hit. Base 2%, or the 'critical' status's rate. */
+  | 'getCriticalPercent'
+  /** Percent chance (0-100) that this character evades an incoming hostile attack/ability. Base 5%, or the 'evasive' status's rate. */
+  | 'getEvasionPercent'
   | 'getAbilityUsesPerTurn'
   | 'getAbilityUsesPerGame'
   | 'getIncomingDamageAmount'
@@ -39,6 +42,11 @@ export type QueryName =
   | 'getIncomingHealAmount'
   | 'getTriggerFireCount'
   | 'canPlayObject'
+  | 'getMaxObjectsPerTurn'
+  | 'canPlayTerrain'
+  | 'getMaxTerrainsPerTurn'
+  /** Percent chance (0-100) that an incoming attack/ability is redirected onto one of the target's own benched allies, chosen by the target's owner. */
+  | 'getDamageRedirectPercent'
   | 'poisonTicksAsValeurLock';
 
 export interface ModifierEvalContext {
@@ -83,6 +91,13 @@ export interface EffectContext {
   sourceInstanceId: string;
   /** Present when this execution was triggered by an engine event. */
   event?: EngineEvent;
+  /**
+   * Scratch space private to this one execution. An attack's `execute()` and its
+   * `endsTurn()` receive the same context object, so this is where an attack records
+   * something that happened mid-resolution and needs to read back afterwards (e.g.
+   * "I killed my target, so I get to act again"). Never persisted into GameState.
+   */
+  scratch: Record<string, unknown>;
 
   log(message: string, data?: Record<string, unknown>): void;
   flipCoin(): CoinResult;

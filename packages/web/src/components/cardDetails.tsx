@@ -1,4 +1,5 @@
 import { getCharacterCard, getObjectCard, getTerrainCard, type CharacterInstance } from 'engine';
+import { statusBadgeText } from './CharacterCard';
 
 export function characterDetailBody(cardId: string, instance?: CharacterInstance) {
   const def = getCharacterCard(cardId);
@@ -19,13 +20,8 @@ export function characterDetailBody(cardId: string, instance?: CharacterInstance
       {instance && instance.statuses.length > 0 && (
         <div className="statuses">
           {instance.statuses.map((s, i) => (
-            <span key={i} className="status-badge" title={s.label}>
-              {s.statusId}
-              {s.remainingTurns !== undefined
-                ? ` (${s.remainingTurns})`
-                : s.statusId === 'bleed'
-                  ? ` (${Number(s.data?.['stacks'] ?? 1)})`
-                  : ''}
+            <span key={i} className="status-badge" title={`${s.label} (${s.statusId})`}>
+              {statusBadgeText(s)}
             </span>
           ))}
         </div>

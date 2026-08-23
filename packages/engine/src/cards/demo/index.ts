@@ -171,6 +171,20 @@ export function registerDemoCards(): void {
   registerCard(roiDesEsprits);
 }
 
+/**
+ * A ready-to-play deck that actually satisfies DECK_LIMITS (6 characters / 6 objects /
+ * 2 terrains, max 2 copies each). DEMO_ROSTER below is the full *pool* of demo cards --
+ * it is deliberately far bigger than a legal deck, so it must never be handed to a
+ * player as their roster (validateRoster rejects it, and the board only has 6 bench
+ * slots). Used as the server-side fallback and as the web client's seeded deck.
+ */
+export const DEMO_STARTER_DECK: RosterConfig = {
+  characterCardIds: [gojoSatoru.id, sukuna.id, guts.id, caitlyn.id, soraka.id, blitzcrank.id],
+  objectCardIds: [potionDeSoin.id, potionDeSoin.id, potionForce.id, potionForce.id, determination.id, poisonMortel.id],
+  terrainCardIds: [hopital.id, protectionDivine.id],
+};
+
+/** Every demo card, grouped by type -- a card *pool* to build decks from, not a legal deck. */
 export const DEMO_ROSTER: RosterConfig = {
   characterCardIds: [
     aizen.id,

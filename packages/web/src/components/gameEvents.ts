@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { getCharacterCard, getObjectCard, getTerrainCard, type GameState, type LogEntry, type PlayerId } from 'engine';
-
-/** Base rates from packages/engine/src/statuses.ts -- duplicated here only for the cosmetic
- * "% chance" shown on crit/evasion badges, never used for any actual roll. */
-const BASE_EVASION_PERCENT = 5;
-const EVASIVE_STATUS_PERCENT = 33;
-const BASE_CRITICAL_PERCENT = 2;
-const CRITICAL_STATUS_PERCENT = 33;
+import {
+  getCharacterCard,
+  getCriticalPercent,
+  getEvasionPercent,
+  getObjectCard,
+  getTerrainCard,
+  type GameState,
+  type LogEntry,
+  type PlayerId,
+} from 'engine';
 
 export type CharacterBadge =
   | { kind: 'attack'; id: number; label: string }
@@ -20,9 +22,16 @@ export type TableEvent =
   | { kind: 'terrain'; id: number; playerName: string; label: string }
   | { kind: 'coin-flip'; id: number; label: string };
 
+/**
+ * A plain `Omit<Union, K>` collapses a discriminated union down to its *common* keys,
+ * which silently threw away every badge/event-specific field here. Distributing over the
+ * union preserves each member's own shape.
+ */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
 type Classified =
-  | { anchor: 'character'; characterInstanceId: string; badge: Omit<CharacterBadge, 'id'> }
-  | { anchor: 'table'; event: Omit<TableEvent, 'id'> };
+  | { anchor: 'character'; characterInstanceId: string; badge: DistributiveOmit<CharacterBadge, 'id'> }
+  | { anchor: 'table'; event: DistributiveOmit<TableEvent, 'id'> };
 
 function findCharacter(state: GameState, instanceId: string | undefined) {
   if (!instanceId) return undefined;
@@ -34,19 +43,19 @@ function findTerrain(state: GameState, instanceId: string | undefined) {
   return state.players.p1.terrains[instanceId] ?? state.players.p2.terrains[instanceId];
 }
 
-function characterHasStatus(state: GameState, instanceId: string | undefined, statusId: string): boolean {
-  return findCharacter(state, instanceId)?.statuses.some((s) => s.statusId === statusId) ?? false;
-}
-
 function playerName(state: GameState, playerId: PlayerId | undefined): string {
   return playerId ? state.players[playerId].displayName : '';
 }
 
-/** engine-api's log() never fills LogEntry.playerId (see match.ts) -- the acting player is only
- * ever embedded as a literal "p1 "/"p2 " prefix in the message text itself, so parse it from there. */
-function messagePlayerId(message: string): PlayerId | undefined {
-  if (message.startsWith('p1 ')) return 'p1';
-  if (message.startsWith('p2 ')) return 'p2';
+/**
+ * The engine fills LogEntry.playerId for every player-attributed entry. The old
+ * "p1 "/"p2 " message-prefix parsing is kept purely as a fallback for log entries
+ * produced before that field existed (a client can be handed an older state).
+ */
+function entryPlayerId(entry: LogEntry): PlayerId | undefined {
+  if (entry.playerId) return entry.playerId;
+  if (entry.message.startsWith('p1 ')) return 'p1';
+  if (entry.message.startsWith('p2 ')) return 'p2';
   return undefined;
 }
 
@@ -80,7 +89,7 @@ function classifyLogEntry(entry: LogEntry, state: GameState): Classified | null 
     } catch {
       /* unknown card id -- keep fallback label */
     }
-    return { anchor: 'table', event: { kind: 'object', playerName: playerName(state, messagePlayerId(msg)), label } };
+    return { anchor: 'table', event: { kind: 'object', playerName: playerName(state, entryPlayerId(entry)), label } };
   }
 
   if (msg.includes('plays terrain')) {
@@ -92,7 +101,7 @@ function classifyLogEntry(entry: LogEntry, state: GameState): Classified | null 
     } catch {
       /* unknown card id -- keep fallback label */
     }
-    return { anchor: 'table', event: { kind: 'terrain', playerName: playerName(state, messagePlayerId(msg)), label } };
+    return { anchor: 'table', event: { kind: 'terrain', playerName: playerName(state, entryPlayerId(entry)), label } };
   }
 
   if (msg.startsWith('Coin flip for initiative')) {
@@ -107,16 +116,26 @@ function classifyLogEntry(entry: LogEntry, state: GameState): Classified | null 
 
   if (msg.includes('coup critique')) {
     const sourceInstanceId = d['sourceInstanceId'] as string | undefined;
-    if (!sourceInstanceId) return null;
-    const percent = characterHasStatus(state, sourceInstanceId, 'critical') ? CRITICAL_STATUS_PERCENT : BASE_CRITICAL_PERCENT;
-    return { anchor: 'character', characterInstanceId: sourceInstanceId, badge: { kind: 'critical', percent } };
+    const char = findCharacter(state, sourceInstanceId);
+    if (!sourceInstanceId || !char) return null;
+    // Asks the engine for the real rate (statuses *and* any card modifier in play)
+    // rather than re-deriving it from the 'critical' status alone.
+    return {
+      anchor: 'character',
+      characterInstanceId: sourceInstanceId,
+      badge: { kind: 'critical', percent: Math.round(getCriticalPercent(state, char)) },
+    };
   }
 
   if (msg.includes('esquive')) {
     const targetInstanceId = d['targetInstanceId'] as string | undefined;
-    if (!targetInstanceId) return null;
-    const percent = characterHasStatus(state, targetInstanceId, 'evasive') ? EVASIVE_STATUS_PERCENT : BASE_EVASION_PERCENT;
-    return { anchor: 'character', characterInstanceId: targetInstanceId, badge: { kind: 'evasion', percent } };
+    const char = findCharacter(state, targetInstanceId);
+    if (!targetInstanceId || !char) return null;
+    return {
+      anchor: 'character',
+      characterInstanceId: targetInstanceId,
+      badge: { kind: 'evasion', percent: Math.round(getEvasionPercent(state, char)) },
+    };
   }
 
   return null;
@@ -133,6 +152,7 @@ export function useGameEvents(state: GameState): { badgesByCharacter: Map<string
   const [characterBadges, setCharacterBadges] = useState<Array<CharacterBadge & { characterInstanceId: string }>>([]);
   const [tableEvents, setTableEvents] = useState<TableEvent[]>([]);
   const seqRef = useRef(0);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   // Match.create() logs the initiative coin flip before the very first broadcast either player
   // receives, so that entry is already "history" by the time this hook mounts. Replay from 0 in
   // that one case (turnNumber still 0) so it still animates instead of being silently swallowed;
@@ -174,16 +194,24 @@ export function useGameEvents(state: GameState): { badgesByCharacter: Map<string
     if (newCharacterBadges.length > 0) {
       setCharacterBadges((list) => [...list, ...newCharacterBadges]);
       for (const b of newCharacterBadges) {
-        setTimeout(() => setCharacterBadges((list) => list.filter((x) => x.id !== b.id)), CHARACTER_BADGE_DURATION_MS);
+        timersRef.current.push(
+          setTimeout(() => setCharacterBadges((list) => list.filter((x) => x.id !== b.id)), CHARACTER_BADGE_DURATION_MS)
+        );
       }
     }
     if (newTableEvents.length > 0) {
       setTableEvents((list) => [...list, ...newTableEvents]);
       for (const e of newTableEvents) {
-        setTimeout(() => setTableEvents((list) => list.filter((x) => x.id !== e.id)), TABLE_EVENT_DURATION_MS);
+        timersRef.current.push(
+          setTimeout(() => setTableEvents((list) => list.filter((x) => x.id !== e.id)), TABLE_EVENT_DURATION_MS)
+        );
       }
     }
   }, [state, state.log.length, state.turnNumber, state.activePlayerId]);
+
+  // Every badge schedules its own removal; leaving those timers behind on unmount would
+  // fire setState on a dead component (and pile up over a long session).
+  useEffect(() => () => timersRef.current.forEach(clearTimeout), []);
 
   const badgesByCharacter = new Map<string, CharacterBadge[]>();
   for (const b of characterBadges) {

@@ -12,11 +12,15 @@ export {
   isSilencedPassive,
   hasDeathWard,
   getAtkReductionTotal,
+  getAtkBoostTotal,
+  getAtkMultiplierTotal,
+  getBleedStacks,
   tickStatusesAtTurnStart,
 } from './statuses.js';
 export * from './queries.js';
 export { checkWinCondition, findCharacterOwner } from './zones.js';
 export { getPlayerView } from './view.js';
+export { defaultChoiceAnswer } from './choices.js';
 export { Match } from './match.js';
 export type { RosterConfig, MatchConfig, PlayerAction, ActionResult } from './match.js';
 export type { EngineApi } from './engine-api.js';

@@ -19,7 +19,7 @@ export default function App() {
     <HoverCardProvider>
       {conn.state && conn.you ? (
         <Board conn={conn} />
-      ) : screen === 'decks' ? (
+      ) : screen === 'decks' && !conn.resuming ? (
         <DeckBuilder onBack={() => setScreen('lobby')} initialView={deckBuilderView} />
       ) : (
         <Lobby

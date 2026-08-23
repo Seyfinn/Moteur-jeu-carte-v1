@@ -24,6 +24,11 @@ export const metamorphe: CharacterCardDef = {
 
         const self = ctx.getCharacter(ctx.sourceInstanceId);
         self.cardId = targetCardId;
+        // baseMaxHP suit la carte copiée : plusieurs cartes calculent un bonus à partir
+        // de l'écart currentMaxHP - baseMaxHP (Surcroissance de Mundo par exemple).
+        // Le laisser sur les 60 HP du Métamorphe offrirait un bonus fantôme énorme.
+        const previousBaseMaxHP = self.baseMaxHP;
+        self.baseMaxHP = targetDef.baseMaxHP;
 
         const delta = targetDef.baseMaxHP - self.currentMaxHP;
         if (delta > 0) {
@@ -35,6 +40,7 @@ export const metamorphe: CharacterCardDef = {
         ctx.log(`Métamorphose : se transforme en ${targetDef.name}`, {
           characterInstanceId: ctx.sourceInstanceId,
           newCardId: targetCardId,
+          previousBaseMaxHP,
         });
       },
     },

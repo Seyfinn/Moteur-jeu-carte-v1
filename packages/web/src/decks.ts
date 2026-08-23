@@ -1,4 +1,4 @@
-import { DECK_LIMITS, DEMO_ROSTER, validateRoster, type RosterConfig } from 'engine';
+import { DECK_LIMITS, DEMO_STARTER_DECK, listDeckPool, validateRoster, type RosterConfig } from 'engine';
 
 export interface Deck {
   id: string;
@@ -14,17 +14,52 @@ function makeId(): string {
   return `deck-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** Seeded so a brand new player can start a game before ever opening the deck builder. */
+/**
+ * Seeded so a brand new player can start a game before ever opening the deck builder.
+ * DEMO_STARTER_DECK is already a legal deck (6/6/2, <=2 copies) -- building one here by
+ * slicing the full card pool produced an over-cap deck that the server refused, so
+ * "Créer un salon" failed for anyone who had never edited their decks.
+ */
 function defaultDecks(): Deck[] {
-  return [
-    {
-      id: 'deck-demo-starter',
-      name: 'Deck de démo',
-      characterCardIds: DEMO_ROSTER.characterCardIds.slice(0, DECK_LIMITS.character),
-      objectCardIds: DEMO_ROSTER.objectCardIds.flatMap((id) => Array(DECK_LIMITS.maxCopiesPerCard).fill(id)),
-      terrainCardIds: DEMO_ROSTER.terrainCardIds.flatMap((id) => Array(DECK_LIMITS.maxCopiesPerCard).fill(id)),
-    },
-  ];
+  return [{ id: 'deck-demo-starter', name: 'Deck de démo', ...DEMO_STARTER_DECK }];
+}
+
+function asIdArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
+}
+
+/**
+ * Decks live in localStorage, so they outlive any change to the card pool or to the
+ * deck rules -- an entry can reference a card that no longer exists, or exceed a cap
+ * that got tightened. Anything the engine would reject is dropped here rather than at
+ * "Créer un salon", where it would surface as an opaque server error.
+ */
+function sanitizeDeck(raw: unknown): Deck | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const source = raw as Record<string, unknown>;
+  if (typeof source['id'] !== 'string') return null;
+
+  const known = new Set(listDeckPool().map((entry) => entry.id));
+  const trim = (ids: string[], max: number) => {
+    const kept: string[] = [];
+    const copies = new Map<string, number>();
+    for (const id of ids) {
+      if (!known.has(id) || kept.length >= max) continue;
+      const used = copies.get(id) ?? 0;
+      if (used >= DECK_LIMITS.maxCopiesPerCard) continue;
+      copies.set(id, used + 1);
+      kept.push(id);
+    }
+    return kept;
+  };
+
+  return {
+    id: source['id'],
+    name: typeof source['name'] === 'string' ? source['name'] : '',
+    characterCardIds: trim(asIdArray(source['characterCardIds']), DECK_LIMITS.character),
+    objectCardIds: trim(asIdArray(source['objectCardIds']), DECK_LIMITS.object),
+    terrainCardIds: trim(asIdArray(source['terrainCardIds']), DECK_LIMITS.terrain),
+  };
 }
 
 export function loadDecks(): Deck[] {
@@ -33,7 +68,8 @@ export function loadDecks(): Deck[] {
     if (!raw) return defaultDecks();
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return defaultDecks();
-    return parsed;
+    const decks = parsed.map(sanitizeDeck).filter((deck): deck is Deck => deck !== null);
+    return decks.length > 0 ? decks : defaultDecks();
   } catch {
     return defaultDecks();
   }
@@ -59,8 +95,14 @@ export function deckCardCount(deck: Deck): number {
   return deck.characterCardIds.length + deck.objectCardIds.length + deck.terrainCardIds.length;
 }
 
+/** A deck the server will accept: at least one character and inside every deck-building cap. */
+export function deckIssue(deck: Deck): string | null {
+  const validation = validateRoster(deckToRoster(deck));
+  return validation.ok ? null : validation.error;
+}
+
 export function isDeckPlayable(deck: Deck): boolean {
-  return deck.characterCardIds.length > 0;
+  return deckIssue(deck) === null;
 }
 
 const EXPORT_PREFIX = 'CTGDECK1:';

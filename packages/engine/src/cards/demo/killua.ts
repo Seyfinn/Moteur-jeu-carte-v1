@@ -70,6 +70,9 @@ export const killua: CharacterCardDef = {
         "Lorsque Killua devient le personnage actif via un switch, la première attaque qu'il effectue lors de ce tour inflige obligatoirement un coup critique.",
       trigger: 'onBecomeActive',
       condition(ctx) {
+        // 'setup' = personnage actif de départ : la carte dit "via un switch", donc la
+        // mise en place initiale (et elle seule) ne doit pas armer le critique garanti.
+        if (ctx.event?.data['reason'] === 'setup') return false;
         return ctx.event?.data['characterInstanceId'] === ctx.sourceInstanceId;
       },
       async execute(ctx) {
