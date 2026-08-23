@@ -509,6 +509,23 @@ input::placeholder {
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
 }
 
+.tcg-card-unique-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  z-index: 1;
+  padding: 1px 4px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #2a1c00;
+  background: linear-gradient(180deg, #ffd873, #e8a83a);
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  line-height: 1.3;
+}
+
 .tcg-card-name-banner {
   padding: 3px 6px;
   font-size: 0.72rem;
@@ -1044,6 +1061,54 @@ input::placeholder {
   padding: 12px 14px;
   box-shadow: var(--shadow-lg), 0 0 0 1px var(--accent-soft);
   animation: fade-slide-in 0.12s var(--ease);
+}
+
+/* Full-screen scrim behind a tap-opened ("pinned") popover -- catches the tap-outside
+   that dismisses it, since touch devices have no mouseleave to hide it on. */
+.hover-card-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 49;
+  background: rgba(0, 0, 0, 0.45);
+  animation: fade-slide-in 0.12s var(--ease);
+}
+
+/* Tap-opened popovers/previews are centered and sized to the viewport instead of
+   anchored next to the card, since a touch tap has no reliable cursor position and the
+   card itself is often near a screen edge. */
+.hover-card-popover.pinned,
+.deck-card-preview.pinned {
+  left: 50% !important;
+  top: 50% !important;
+  right: auto !important;
+  transform: translate(-50%, -50%);
+  width: min(92vw, 360px);
+  max-height: 82vh;
+}
+.hover-card-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  line-height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel-raised);
+  color: var(--text);
+  font-size: 1rem;
+}
+.hover-card-action {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 9px 12px;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-sm);
 }
 .hover-card-title {
   font-weight: 700;
@@ -1648,12 +1713,46 @@ textarea {
   overflow-y: auto;
 }
 
+/* Tap-opened preview: card + text stacked and scaled to fit a narrow viewport, unlike
+   the desktop hover layout which sits them side by side. */
+.deck-card-preview.pinned {
+  position: fixed;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: auto;
+}
+.deck-card-preview.pinned .tcg-card-large {
+  width: min(48vw, 200px);
+}
+.deck-card-preview.pinned .tcg-card-large .tcg-card-art {
+  font-size: 2.6rem;
+}
+.deck-card-preview.pinned .deck-card-preview-text {
+  width: 100%;
+  max-height: none;
+  overflow-y: visible;
+}
+
 @media (max-width: 760px) {
   .slot-row {
     grid-template-columns: repeat(6, minmax(44px, 64px));
   }
   .center-row {
     gap: 8px;
+  }
+
+  /* The active character is otherwise forced to "large" (130px) at all times, which
+     eats a third of a phone screen's width; tapping it now opens the same full-detail
+     popover other cards use, so it no longer needs to sit enlarged in the layout. */
+  .active-character-zone .tcg-card-large {
+    width: 96px;
+  }
+  .active-character-zone .tcg-card-large .tcg-card-art {
+    font-size: 1.6rem;
+  }
+  .active-character-zone .tcg-card-large .tcg-card-name-banner {
+    font-size: 0.72rem;
+    padding: 3px 6px;
   }
 }
 

@@ -13,6 +13,7 @@ export function CardFrame({
   size = 'normal',
   highlight,
   dimmed,
+  unique,
   footer,
   effects,
   onClick,
@@ -24,6 +25,8 @@ export function CardFrame({
   size?: 'small' | 'normal' | 'large';
   highlight?: boolean;
   dimmed?: boolean;
+  /** Marks the card as limited to a single copy per deck (a small corner badge). */
+  unique?: boolean;
   footer?: ReactNode;
   /** Absolutely-positioned overlay (status animations, damage flashes...) covering the whole card. */
   effects?: ReactNode;
@@ -37,6 +40,11 @@ export function CardFrame({
 
   return (
     <div className={classes.join(' ')} onClick={onClick} {...hoverProps}>
+      {unique && (
+        <span className="tcg-card-unique-badge" title="Carte unique exemplaire (1 max par deck)">
+          1×
+        </span>
+      )}
       <CardArt cardId={cardId} kind={kind} />
       <div className="tcg-card-name-banner">{name}</div>
       {footer && <div className="tcg-card-body">{footer}</div>}

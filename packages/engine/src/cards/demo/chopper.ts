@@ -21,6 +21,7 @@ export const chopper: CharacterCardDef = {
   id: 'chopper',
   name: 'Chopper',
   baseMaxHP: 250,
+  maxCopies: 1,
   attacks: [
     {
       id: 'heavy-point',

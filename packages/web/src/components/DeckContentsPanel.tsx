@@ -3,6 +3,7 @@ import { DECK_LIMITS, type DeckPoolEntry } from 'engine';
 import { CardFrame } from './CardFrame';
 import { characterDetailBody, objectDetailBody, terrainDetailBody } from './cardDetails';
 import type { Deck } from '../decks';
+import { usePointerCoarse } from '../hooks/usePointerCoarse';
 
 export type DeckSectionKey = 'characterCardIds' | 'objectCardIds' | 'terrainCardIds';
 export type CardKind = DeckPoolEntry['type'];
@@ -40,6 +41,9 @@ const PREVIEW_PANEL_MAX_HEIGHT = 480;
 
 interface CardPreviewApi {
   requestShow: (entry: DeckPoolEntry, target: HTMLElement) => void;
+  /** Opens the preview centered on screen, pinned open until explicitly dismissed --
+      used on touch devices, which have no hover to show/hide it on. */
+  showCentered: (entry: DeckPoolEntry) => void;
   cancel: () => void;
 }
 
@@ -52,7 +56,7 @@ export function useCardPreview(): CardPreviewApi {
 }
 
 export function CardPreviewProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<{ entry: DeckPoolEntry; rect: DOMRect } | null>(null);
+  const [state, setState] = useState<{ entry: DeckPoolEntry; rect: DOMRect | null } | null>(null);
   const showTimer = useRef<number | null>(null);
 
   function clearTimer() {
@@ -71,14 +75,20 @@ export function CardPreviewProvider({ children }: { children: ReactNode }) {
         setState({ entry, rect });
       }, PREVIEW_DELAY_MS);
     },
+    showCentered(entry) {
+      clearTimer();
+      setState({ entry, rect: null });
+    },
     cancel() {
       clearTimer();
       setState(null);
     },
   };
 
+  const pinned = state !== null && state.rect === null;
+
   let style: CSSProperties = {};
-  if (state) {
+  if (state?.rect) {
     const { rect } = state;
     const spaceRight = window.innerWidth - rect.right;
     const left = spaceRight > PREVIEW_PANEL_WIDTH + 16 ? rect.right + 12 : Math.max(8, rect.left - PREVIEW_PANEL_WIDTH - 12);
@@ -89,9 +99,21 @@ export function CardPreviewProvider({ children }: { children: ReactNode }) {
   return (
     <CardPreviewCtx.Provider value={api}>
       {children}
+      {pinned && <div className="hover-card-backdrop" onClick={() => setState(null)} />}
       {state && (
-        <div className="deck-card-preview" style={style}>
-          <CardFrame cardId={state.entry.id} kind={state.entry.type} name={state.entry.name} size="large" />
+        <div className={`deck-card-preview${pinned ? ' pinned' : ''}`} style={style}>
+          {pinned && (
+            <button className="hover-card-close" onClick={() => setState(null)} aria-label="Fermer">
+              ×
+            </button>
+          )}
+          <CardFrame
+            cardId={state.entry.id}
+            kind={state.entry.type}
+            name={state.entry.name}
+            size="large"
+            unique={state.entry.maxCopies === 1}
+          />
           <div className="deck-card-preview-text">
             <div className="hover-card-title">{state.entry.name}</div>
             <div className="hover-card-content">{detailBodyFor(state.entry)}</div>
@@ -115,22 +137,36 @@ export function SelectedCardTile({
   onRemove?: () => void;
 }) {
   const preview = useCardPreview();
+  const coarse = usePointerCoarse();
   return (
     <CardFrame
       cardId={entry.id}
       kind={entry.type}
       name={entry.name}
       size="small"
-      hoverProps={{
-        onMouseEnter: (e) => preview.requestShow(entry, e.currentTarget),
-        onMouseLeave: preview.cancel,
-      }}
+      unique={entry.maxCopies === 1}
+      onClick={coarse ? () => preview.showCentered(entry) : undefined}
+      hoverProps={
+        coarse
+          ? undefined
+          : {
+              onMouseEnter: (e) => preview.requestShow(entry, e.currentTarget),
+              onMouseLeave: preview.cancel,
+            }
+      }
       footer={
         count > 1 || onRemove ? (
           <div className="deck-selected-stepper">
             {count > 1 && <span className="deck-selected-count-badge">×{count}</span>}
             {onRemove && (
-              <button type="button" onClick={onRemove} aria-label={`Retirer ${entry.name}`}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove();
+                }}
+                aria-label={`Retirer ${entry.name}`}
+              >
                 −
               </button>
             )}
