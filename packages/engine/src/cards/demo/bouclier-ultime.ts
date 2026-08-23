@@ -1,6 +1,7 @@
 import type { ModifierEvalContext, TerrainCardDef } from '../types.js';
 
 const SOURCE = 'terrain:bouclier-ultime';
+const DURATION_TURNS = 3;
 
 /** True when this damage instance is hostile damage aimed at the terrain owner's bench. */
 function blocksBenchDamage(ctx: ModifierEvalContext): boolean {
@@ -15,9 +16,10 @@ export const bouclierUltime: TerrainCardDef = {
   id: 'bouclier-ultime',
   name: 'Bouclier Ultime',
   description:
-    "Tant que le Terrain est actif, vous ne pouvez pas effectuer de switch. En contrepartie, aucun personnage " +
+    `Pendant ${DURATION_TURNS} tours, vous ne pouvez pas effectuer de switch. En contrepartie, aucun personnage ` +
     "sur le banc allié ne peut être ciblé et le banc est totalement immunisé contre tous les dégâts (abilities, " +
     "objets, terrains, états et attaques).",
+  durationTurns: DURATION_TURNS,
   modifiers: [
     // Bloque uniquement le switch standard du possesseur du terrain (comme Stun/Chained) --
     // un switch forcé externe (ex: Hook de Blitzcrank) bypasse canSwitchStandard et reste possible.

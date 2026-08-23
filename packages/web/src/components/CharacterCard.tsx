@@ -6,6 +6,7 @@ import { characterDetailBody } from './cardDetails';
 import { StatusEffectLayers } from './statusEffects';
 import { CharacterActionBadges } from './gameEventBadges';
 import type { CharacterBadge } from './gameEvents';
+import { usePointerCoarse } from '../hooks/usePointerCoarse';
 
 function cardName(cardId: string): string {
   try {
@@ -46,6 +47,7 @@ export function CharacterCard({
   badges?: CharacterBadge[];
 }) {
   const hover = useHoverCard();
+  const coarse = usePointerCoarse();
   const currentHP = Math.max(0, char.currentMaxHP - char.damage);
   const pct = char.currentMaxHP > 0 ? Math.max(0, Math.min(100, (currentHP / char.currentMaxHP) * 100)) : 0;
   const dead = currentHP <= 0;
@@ -84,10 +86,15 @@ export function CharacterCard({
       size={isActive ? 'large' : size}
       highlight={isActive}
       dimmed={dead && isKOable}
-      hoverProps={{
-        onMouseEnter: (e) => hover.show({ title: name, body: characterDetailBody(char.cardId, char) }, e.currentTarget),
-        onMouseLeave: hover.hide,
-      }}
+      onClick={coarse ? () => hover.showCentered({ title: name, body: characterDetailBody(char.cardId, char) }) : undefined}
+      hoverProps={
+        coarse
+          ? undefined
+          : {
+              onMouseEnter: (e) => hover.show({ title: name, body: characterDetailBody(char.cardId, char) }, e.currentTarget),
+              onMouseLeave: hover.hide,
+            }
+      }
       effects={
         <>
           <StatusEffectLayers statusIds={char.statuses.map((s) => s.statusId)} />

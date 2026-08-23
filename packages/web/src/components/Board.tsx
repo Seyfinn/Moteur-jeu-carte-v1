@@ -24,6 +24,7 @@ import { hiddenCardDetailBody, objectDetailBody, terrainDetailBody } from './car
 import { useGameEvents, type CharacterBadge } from './gameEvents';
 import { TableEventBanners } from './gameEventBadges';
 import type { GameConnection } from '../net/useGameConnection';
+import { usePointerCoarse } from '../hooks/usePointerCoarse';
 
 function objectName(cardId: string): string {
   try {
@@ -42,6 +43,7 @@ function terrainName(cardId: string): string {
 
 function ObjectHandTile({ cardId, onPlay }: { cardId: string; onPlay: () => void }) {
   const hover = useHoverCard();
+  const coarse = usePointerCoarse();
   const name = objectName(cardId);
   return (
     <CardFrame
@@ -49,11 +51,15 @@ function ObjectHandTile({ cardId, onPlay }: { cardId: string; onPlay: () => void
       kind="object"
       name={name}
       size="small"
-      onClick={onPlay}
-      hoverProps={{
-        onMouseEnter: (e) => hover.show({ title: name, body: objectDetailBody(cardId) }, e.currentTarget),
-        onMouseLeave: hover.hide,
-      }}
+      onClick={coarse ? () => hover.showCentered({ title: name, body: objectDetailBody(cardId), actionLabel: 'Jouer', onAction: onPlay }) : onPlay}
+      hoverProps={
+        coarse
+          ? undefined
+          : {
+              onMouseEnter: (e) => hover.show({ title: name, body: objectDetailBody(cardId) }, e.currentTarget),
+              onMouseLeave: hover.hide,
+            }
+      }
       footer={<span className="tile-action-label">Jouer</span>}
     />
   );
@@ -61,6 +67,7 @@ function ObjectHandTile({ cardId, onPlay }: { cardId: string; onPlay: () => void
 
 function TerrainHandTile({ cardId, onPlay }: { cardId: string; onPlay: () => void }) {
   const hover = useHoverCard();
+  const coarse = usePointerCoarse();
   const name = terrainName(cardId);
   return (
     <CardFrame
@@ -68,22 +75,75 @@ function TerrainHandTile({ cardId, onPlay }: { cardId: string; onPlay: () => voi
       kind="terrain"
       name={name}
       size="small"
-      onClick={onPlay}
-      hoverProps={{
-        onMouseEnter: (e) => hover.show({ title: name, body: terrainDetailBody(cardId) }, e.currentTarget),
-        onMouseLeave: hover.hide,
-      }}
+      onClick={coarse ? () => hover.showCentered({ title: name, body: terrainDetailBody(cardId), actionLabel: 'Poser', onAction: onPlay }) : onPlay}
+      hoverProps={
+        coarse
+          ? undefined
+          : {
+              onMouseEnter: (e) => hover.show({ title: name, body: terrainDetailBody(cardId) }, e.currentTarget),
+              onMouseLeave: hover.hide,
+            }
+      }
       footer={<span className="tile-action-label">Poser</span>}
+    />
+  );
+}
+
+function RevealedObjectTile({ cardId }: { cardId: string }) {
+  const hover = useHoverCard();
+  const coarse = usePointerCoarse();
+  const name = objectName(cardId);
+  return (
+    <CardFrame
+      cardId={cardId}
+      kind="object"
+      name={name}
+      size="small"
+      onClick={coarse ? () => hover.showCentered({ title: name, body: objectDetailBody(cardId) }) : undefined}
+      hoverProps={
+        coarse
+          ? undefined
+          : {
+              onMouseEnter: (e) => hover.show({ title: name, body: objectDetailBody(cardId) }, e.currentTarget),
+              onMouseLeave: hover.hide,
+            }
+      }
+    />
+  );
+}
+
+function RevealedTerrainTile({ cardId }: { cardId: string }) {
+  const hover = useHoverCard();
+  const coarse = usePointerCoarse();
+  const name = terrainName(cardId);
+  return (
+    <CardFrame
+      cardId={cardId}
+      kind="terrain"
+      name={name}
+      size="small"
+      onClick={coarse ? () => hover.showCentered({ title: name, body: terrainDetailBody(cardId) }) : undefined}
+      hoverProps={
+        coarse
+          ? undefined
+          : {
+              onMouseEnter: (e) => hover.show({ title: name, body: terrainDetailBody(cardId) }, e.currentTarget),
+              onMouseLeave: hover.hide,
+            }
+      }
     />
   );
 }
 
 function HiddenHandTile({ kind }: { kind: 'object' | 'terrain' }) {
   const hover = useHoverCard();
+  const coarse = usePointerCoarse();
+  const payload = { title: 'Carte cachée', body: hiddenCardDetailBody() };
   return (
     <div
-      onMouseEnter={(e) => hover.show({ title: 'Carte cachée', body: hiddenCardDetailBody() }, e.currentTarget)}
-      onMouseLeave={hover.hide}
+      onMouseEnter={coarse ? undefined : (e) => hover.show(payload, e.currentTarget)}
+      onMouseLeave={coarse ? undefined : hover.hide}
+      onClick={coarse ? () => hover.showCentered(payload) : undefined}
     >
       <FaceDownCard />
     </div>
@@ -108,6 +168,7 @@ function ActionErrorBanner({ message, onDismiss }: { message: string; onDismiss:
 
 function ActiveTerrainBadge({ cardId }: { cardId: string }) {
   const hover = useHoverCard();
+  const coarse = usePointerCoarse();
   const name = terrainName(cardId);
   return (
     <CardFrame
@@ -115,10 +176,15 @@ function ActiveTerrainBadge({ cardId }: { cardId: string }) {
       kind="terrain"
       name={name}
       size="small"
-      hoverProps={{
-        onMouseEnter: (e) => hover.show({ title: name, body: terrainDetailBody(cardId) }, e.currentTarget),
-        onMouseLeave: hover.hide,
-      }}
+      onClick={coarse ? () => hover.showCentered({ title: name, body: terrainDetailBody(cardId) }) : undefined}
+      hoverProps={
+        coarse
+          ? undefined
+          : {
+              onMouseEnter: (e) => hover.show({ title: name, body: terrainDetailBody(cardId) }, e.currentTarget),
+              onMouseLeave: hover.hide,
+            }
+      }
     />
   );
 }
@@ -149,15 +215,20 @@ function PlayerZone({
   const bench = player.benchCharacterInstanceIds.map((id) => player.characters[id]!);
   const graveyard = player.graveyardCharacterInstanceIds.map((id) => player.characters[id]!);
 
-  const handSlots: HandSlotDef[] = isSelf
-    ? [
-        ...player.unplayedObjectInstanceIds.map((id) => ({ kind: 'object' as const, id, cardId: player.objects[id]!.cardId })),
-        ...player.unplayedTerrainInstanceIds.map((id) => ({ kind: 'terrain' as const, id, cardId: player.terrains[id]!.cardId })),
-      ]
-    : [
-        ...player.unplayedObjectInstanceIds.map((id) => ({ kind: 'hidden-object' as const, id })),
-        ...player.unplayedTerrainInstanceIds.map((id) => ({ kind: 'hidden-terrain' as const, id })),
-      ];
+  // Card identity is visible whenever the state we received actually carries the
+  // instance data -- true for our own hand, and for the opponent's hand once
+  // revealed (e.g. Kirigiri's "Ultimate Détective"); otherwise `getPlayerView`
+  // stripped it down to an unresolvable placeholder id.
+  const handSlots: HandSlotDef[] = [
+    ...player.unplayedObjectInstanceIds.map((id): HandSlotDef => {
+      const obj = player.objects[id];
+      return obj ? { kind: 'object', id, cardId: obj.cardId } : { kind: 'hidden-object', id };
+    }),
+    ...player.unplayedTerrainInstanceIds.map((id): HandSlotDef => {
+      const terrain = player.terrains[id];
+      return terrain ? { kind: 'terrain', id, cardId: terrain.cardId } : { kind: 'hidden-terrain', id };
+    }),
+  ];
 
   const benchEmptyCount = Math.max(0, MIN_BENCH_SLOTS - bench.length);
   const handEmptyCount = Math.max(0, MIN_HAND_SLOTS - handSlots.length);
@@ -179,12 +250,18 @@ function PlayerZone({
     <div className="slot-row hand-slot-row">
       {handSlots.map((slot) => (
         <div className="card-slot hand-slot" key={slot.id}>
-          {slot.kind === 'object' && (
-            <ObjectHandTile cardId={slot.cardId} onPlay={() => conn.applyAction({ kind: 'play-object', objectInstanceId: slot.id })} />
-          )}
-          {slot.kind === 'terrain' && (
-            <TerrainHandTile cardId={slot.cardId} onPlay={() => conn.applyAction({ kind: 'play-terrain', terrainInstanceId: slot.id })} />
-          )}
+          {slot.kind === 'object' &&
+            (isSelf ? (
+              <ObjectHandTile cardId={slot.cardId} onPlay={() => conn.applyAction({ kind: 'play-object', objectInstanceId: slot.id })} />
+            ) : (
+              <RevealedObjectTile cardId={slot.cardId} />
+            ))}
+          {slot.kind === 'terrain' &&
+            (isSelf ? (
+              <TerrainHandTile cardId={slot.cardId} onPlay={() => conn.applyAction({ kind: 'play-terrain', terrainInstanceId: slot.id })} />
+            ) : (
+              <RevealedTerrainTile cardId={slot.cardId} />
+            ))}
           {slot.kind === 'hidden-object' && <HiddenHandTile kind="object" />}
           {slot.kind === 'hidden-terrain' && <HiddenHandTile kind="terrain" />}
         </div>

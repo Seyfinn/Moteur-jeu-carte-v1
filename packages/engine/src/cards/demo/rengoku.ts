@@ -13,7 +13,7 @@ export const rengoku: CharacterCardDef = {
       name: 'Souffle du feu',
       baseATK: 30,
       description:
-        'Inflige 30 dégâts à l\'actif adverse. Passif "La flamme" : si le coup touche, applique l\'effet burn pendant 2 tours (cumulable en plusieurs stacks indépendants si Rengoku touche plusieurs fois).',
+        'Inflige 30 dégâts à l\'actif adverse. Passif "La flamme" : si le coup touche, applique l\'effet burn pendant 2 tours (retouche pendant que la cible brûle déjà : prolonge la durée au lieu de cumuler un deuxième burn).',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -45,7 +45,7 @@ export const rengoku: CharacterCardDef = {
       name: 'La flamme',
       kind: 'passive',
       description:
-        'À chaque fois qu\'un ennemi est touché par "Souffle du feu", applique l\'effet burn pendant 2 tours (cumulable). Purement descriptif ici : implémenté directement dans "Souffle du feu" plutôt que via un trigger, car l\'event afterDamage ne permet pas de savoir quelle attaque a causé les dégâts.',
+        'À chaque fois qu\'un ennemi est touché par "Souffle du feu", applique l\'effet burn pendant 2 tours (prolonge la durée si déjà brûlé). Purement descriptif ici : implémenté directement dans "Souffle du feu" plutôt que via un trigger, car l\'event afterDamage ne permet pas de savoir quelle attaque a causé les dégâts.',
       // Pas de trigger : le mécanisme vit entièrement dans l'attaque, cf description ci-dessus.
       async execute() {},
     },

@@ -9,8 +9,8 @@ import type { RosterConfig } from './match.js';
  */
 export const DECK_LIMITS = {
   character: 6,
-  object: 6,
-  terrain: 2,
+  object: 8,
+  terrain: 3,
   maxCopiesPerCard: 2,
 } as const;
 
@@ -22,6 +22,8 @@ export interface DeckPoolEntry {
   baseMaxHP?: number;
   /** Terrains only. `undefined` = indefinite duration. */
   durationTurns?: number;
+  /** Effective max copies allowed in a deck for this card (own `maxCopies` override, or the general `DECK_LIMITS.maxCopiesPerCard`). */
+  maxCopies: number;
 }
 
 /** Every card available to put in a deck, for deck-builder UIs. */
@@ -32,6 +34,7 @@ export function listDeckPool(): DeckPoolEntry[] {
     name: def.name,
     baseMaxHP: def.type === 'character' ? def.baseMaxHP : undefined,
     durationTurns: def.type === 'terrain' ? def.durationTurns : undefined,
+    maxCopies: def.maxCopies ?? DECK_LIMITS.maxCopiesPerCard,
   }));
 }
 

@@ -96,6 +96,28 @@ describe('Statuses (section 6)', () => {
 
     expect(p1.characters[activeId]!.damage).toBe(damageBefore + 50);
   });
+
+  it('re-applying burn/poison while already present refreshes the existing instance instead of stacking a second one', async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: FX_ROSTER, p2Roster: FX_ROSTER, seed: 25 },
+      { p1ActiveCardId: 'fx-striker', p2ActiveCardId: 'fx-tank' }
+    );
+    const p1 = match.state.players.p1;
+    const activeId = p1.activeCharacterInstanceId!;
+    const api = match['api'] as EngineApi;
+
+    api.applyStatus(activeId, { statusId: 'burn', label: 'Burn', remainingTurns: 1 });
+    api.applyStatus(activeId, { statusId: 'burn', label: 'Burn (again)', remainingTurns: 2 });
+
+    const burnEntries = p1.characters[activeId]!.statuses.filter((s) => s.statusId === 'burn');
+    expect(burnEntries.length).toBe(1); // merged, not two independently-ticking instances
+    expect(burnEntries[0]!.remainingTurns).toBe(2); // refreshed to the longer of the two
+    expect(burnEntries[0]!.label).toBe('Burn (again)'); // most recent application wins attribution
+
+    const damageBefore = p1.characters[activeId]!.damage;
+    await tickStatusesAtTurnStart(match.state, 'p1', api);
+    expect(p1.characters[activeId]!.damage).toBe(damageBefore + 50); // a single tick, not 100
+  });
 });
 
 describe('Bleed', () => {
@@ -113,7 +135,7 @@ describe('Bleed', () => {
     }
 
     const bleedEntries = p1.characters[activeId]!.statuses.filter((s) => s.statusId === 'bleed');
-    expect(bleedEntries.length).toBe(1); // merged, not 13 separate instances like poison/burn would allow
+    expect(bleedEntries.length).toBe(1); // merged, not 13 separate instances
     expect(bleedEntries[0]!.data?.['stacks']).toBe(10); // capped
   });
 

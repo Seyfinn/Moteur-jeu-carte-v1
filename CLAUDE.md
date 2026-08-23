@@ -222,16 +222,22 @@ Garde-fous appliqués automatiquement, inutile de les re-coder par carte :
   pas de logique par carte. Poser avec
   `ctx.applyStatus(targetId, {statusId: 'bleed', label, data: {stacks: N}})` — `N`
   stacks par défaut si `data.stacks` absent = 1. Ré-appliquer pendant que bleed est déjà
-  présent ADDITIONNE les stacks (jusqu'à 10 max) au lieu de créer une deuxième instance
-  (contrairement à poison/burn) ; c'est géré automatiquement dans
-  `statuses.ts::applyStatus`, rien à faire côté carte. Au début du PROCHAIN tour du
-  porteur (tick toujours actif même sur banc, comme poison/burn), inflige
-  `10% * stacks` des HP max en dégâts (donc 100% à 10 stacks) puis le statut est
-  consommé (retiré), qu'il ait fait des dégâts ou non — ce n'est pas un compte à rebours
-  comme les autres statuts à `remainingTurns`. N'importe quel `heal()` sur le porteur
-  (même 1 point) retire bleed immédiatement, avant même d'atteindre le tick — géré dans
-  `match.ts`'s `heal` handler, rien à faire côté carte non plus. Pas de champ
-  `remainingTurns` à passer.
+  présent ADDITIONNE les stacks (jusqu'à 10 max) au lieu de créer une deuxième instance ;
+  c'est géré automatiquement dans `statuses.ts::applyStatus`, rien à faire côté carte. Au
+  début du PROCHAIN tour du porteur (tick toujours actif même sur banc, comme
+  poison/burn), inflige `10% * stacks` des HP max en dégâts (donc 100% à 10 stacks) puis
+  le statut est consommé (retiré), qu'il ait fait des dégâts ou non — ce n'est pas un
+  compte à rebours comme les autres statuts à `remainingTurns`. N'importe quel `heal()`
+  sur le porteur (même 1 point) retire bleed immédiatement, avant même d'atteindre le
+  tick — géré dans `match.ts`'s `heal` handler, rien à faire côté carte non plus. Pas de
+  champ `remainingTurns` à passer.
+- **Poison/Burn et ré-application** : comme bleed, poser poison/burn sur une cible qui en
+  a déjà rafraîchit l'instance existante (source/label mis à jour, `remainingTurns` porté
+  au plus grand des deux) au lieu d'en empiler une deuxième — sinon les deux tiquaient
+  indépendamment le même tour et doublaient silencieusement les dégâts (bug corrigé :
+  avant ça, une cible déjà brûlée qui se refaisait toucher par un burn prenait le tick de
+  l'ancien ET du nouveau le même tour). Contrairement à bleed, pas de notion de stacks :
+  la ré-application ne change pas le montant du tick (toujours fixe), seulement la durée.
 
 ## Ce que le serveur impose par-dessus le moteur
 

@@ -3,6 +3,7 @@ import { DECK_LIMITS, listDeckPool, validateRoster, type DeckPoolEntry } from 'e
 import { CardFrame } from './CardFrame';
 import { CardPreviewProvider, DeckContentsPanel, SECTIONS, useCardPreview, type CardKind, type DeckSectionKey } from './DeckContentsPanel';
 import { createEmptyDeck, decodeDeckCode, deckToRoster, encodeDeckCode, loadDecks, saveDecks, type Deck } from '../decks';
+import { usePointerCoarse } from '../hooks/usePointerCoarse';
 
 type SortValue = 'default' | 'hp-desc' | 'hp-asc' | 'name-asc' | 'name-desc' | 'duration-desc' | 'duration-asc';
 
@@ -71,6 +72,7 @@ function PoolCardTile({
   onRemove: () => void;
 }) {
   const preview = useCardPreview();
+  const coarse = usePointerCoarse();
   return (
     <CardFrame
       cardId={entry.id}
@@ -78,17 +80,37 @@ function PoolCardTile({
       name={entry.name}
       size="normal"
       highlight={count > 0}
-      hoverProps={{
-        onMouseEnter: (e) => preview.requestShow(entry, e.currentTarget),
-        onMouseLeave: preview.cancel,
-      }}
+      unique={entry.maxCopies === 1}
+      onClick={coarse ? () => preview.showCentered(entry) : undefined}
+      hoverProps={
+        coarse
+          ? undefined
+          : {
+              onMouseEnter: (e) => preview.requestShow(entry, e.currentTarget),
+              onMouseLeave: preview.cancel,
+            }
+      }
       footer={
         <div className="deck-card-stepper">
-          <button type="button" onClick={onRemove} disabled={count === 0}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            disabled={count === 0}
+          >
             −
           </button>
           <span>{count}</span>
-          <button type="button" onClick={onAdd} disabled={disabledAdd}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAdd();
+            }}
+            disabled={disabledAdd}
+          >
             +
           </button>
         </div>
