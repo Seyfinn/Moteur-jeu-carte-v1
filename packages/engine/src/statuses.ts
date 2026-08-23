@@ -82,8 +82,7 @@ export function getAtkMultiplierTotal(char: CharacterInstance): number {
 /**
  * Bleed: a generic engine-recognized status (like death-ward/atk-boost) rather
  * than per-card logic. Applying it while one is already present adds stacks
- * (capped at BLEED_MAX_STACKS) instead of pushing a second entry, unlike
- * poison/burn which allow independent stacked instances. It deals its
+ * (capped at BLEED_MAX_STACKS) instead of pushing a second entry. It deals its
  * stack-scaled damage once, at the start of the bearer's NEXT turn (always
  * ticks, even benched -- see tickStatusesAtTurnStart), then is consumed
  * (removed) regardless of whether it dealt damage. Any `heal()` call on the
@@ -106,6 +105,28 @@ export function applyStatus(char: CharacterInstance, status: StatusInstance): vo
     char.statuses.push({ ...status, data: { ...status.data, stacks: Math.min(BLEED_MAX_STACKS, incoming) } });
     return;
   }
+
+  // Burn/Poison: like bleed, re-applying while one is already present refreshes the
+  // existing instance instead of pushing a second one. Both tick a FIXED amount every
+  // turn regardless of remainingTurns (see tickStatusesAtTurnStart) rather than a
+  // stack-scaled one, so two independent instances didn't stack damage -- they silently
+  // doubled it, ticking twice in the same turn for no visible reason on the card. The
+  // refreshed duration takes the longer of the two so re-applying never shortens it.
+  if (status.statusId === 'burn' || status.statusId === 'poison') {
+    const existing = getStatus(char, status.statusId);
+    if (existing) {
+      existing.label = status.label;
+      existing.sourcePlayerId = status.sourcePlayerId;
+      existing.sourceCardInstanceId = status.sourceCardInstanceId;
+      existing.data = status.data;
+      existing.remainingTurns =
+        status.remainingTurns === undefined
+          ? undefined
+          : Math.max(existing.remainingTurns ?? 0, status.remainingTurns);
+      return;
+    }
+  }
+
   char.statuses.push(status);
 }
 
