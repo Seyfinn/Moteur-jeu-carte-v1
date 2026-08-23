@@ -455,7 +455,9 @@ export class Match {
 
       async dealDamage(targetInstanceId, amount, options) {
         const target = findCharacter(state, targetInstanceId);
-        const reduced = evaluateTransform(state, 'getIncomingDamageAmount', { targetInstanceId, source: options?.source }, amount);
+        const reduced = options?.ignoreDamageReduction
+          ? amount
+          : evaluateTransform(state, 'getIncomingDamageAmount', { targetInstanceId, source: options?.source }, amount);
         let finalAmount = Math.max(0, reduced);
 
         let shieldAbsorbed = 0;

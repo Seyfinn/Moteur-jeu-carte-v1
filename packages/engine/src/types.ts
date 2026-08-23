@@ -34,6 +34,8 @@ export type BuiltinStatusId =
 export interface DealDamageOptions {
   /** Bypasses shield entirely: damage hits `damage` directly, ignoring any current `shield` value. */
   ignoreShield?: boolean;
+  /** Skips the getIncomingDamageAmount transform entirely -- bypasses every card's damage-reduction modifier (flat/percent reductions, custom shield-like statuses such as Blitzcrank's, full immunities like Bouclier Ultime's), not just the native `shield` field. Death ward and esquive/critique are unaffected. */
+  ignoreDamageReduction?: boolean;
   /**
    * Skips this call's own esquive roll -- for effects that already resolved a
    * single shared roll via `ctx.rollEvasion()` and are applying its outcome
