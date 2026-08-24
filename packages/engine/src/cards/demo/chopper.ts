@@ -27,7 +27,7 @@ export const chopper: CharacterCardDef = {
       id: 'heavy-point',
       name: 'Heavy Point',
       baseATK: HEAVY_POINT_ATK,
-      description: `Inflige ${HEAVY_POINT_ATK} dégâts à l'actif adverse. Si les dégâts passent réellement (pas d'esquive), ${POISON_CHANCE_PERCENT}% de chance d'appliquer Poison pendant ${POISON_REMAINING_TURNS} tour.`,
+      description: `Inflige ${HEAVY_POINT_ATK} dégâts à l'actif adverse. Si les dégâts passent, ${POISON_CHANCE_PERCENT}% de chance d'appliquer Poison pendant ${POISON_REMAINING_TURNS} tour.`,
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;

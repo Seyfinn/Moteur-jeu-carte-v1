@@ -282,9 +282,12 @@ export function getEffectiveATK(state: GameState, characterInstanceId: string, b
   return Math.round(withBoosts * getAtkMultiplierTotal(char));
 }
 
+/** Damage multiplier of a critical hit, before any card transforms it (Point Faible's x3). */
+export const BASE_CRITICAL_MULTIPLIER = 2;
+
 /** Defaults to the base x2 critical multiplier; a card (e.g. a terrain) can transform it for a specific attacker. */
 export function getCriticalMultiplier(state: GameState, characterInstanceId: string): number {
-  return evaluateTransform(state, 'getCriticalMultiplier', { characterInstanceId }, 2);
+  return evaluateTransform(state, 'getCriticalMultiplier', { characterInstanceId }, BASE_CRITICAL_MULTIPLIER);
 }
 
 /**

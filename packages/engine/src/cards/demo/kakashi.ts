@@ -31,8 +31,7 @@ export const kakashi: CharacterCardDef = {
       id: 'sharingan',
       name: 'Sharingan',
       kind: 'passive',
-      description:
-        "Kakashi bénéficie en permanence de l'effet Esquive (statut 'evasive', 33% au lieu de 5% de base), que Kakashi soit actif ou au banc.",
+      description: "Kakashi bénéficie en permanence de l'effet Esquive, qu'il soit actif ou au banc.",
       // Purement descriptive : implémentée par le modifier 'getEvasionPercent' plus bas
       // (même mécanisme que L'Infini de Gojo).
       async execute() {},
@@ -67,7 +66,7 @@ export const kakashi: CharacterCardDef = {
       name: 'Copie de Technique',
       kind: 'active',
       description:
-        "Rejoue immédiatement la dernière attaque utilisée par l'adversaire, mais lancée par Kakashi. Une attaque qui dépend d'un compteur propre à son porteur d'origine peut être moins efficace. Utilisation unique.",
+        "Rejoue immédiatement la dernière attaque utilisée par l'adversaire, mais lancée par Kakashi. Utilisation unique.",
       usesPerGame: 1,
       condition(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);

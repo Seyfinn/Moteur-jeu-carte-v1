@@ -16,7 +16,7 @@ export const akali: CharacterCardDef = {
       id: 'kunai',
       name: 'Kunaï',
       baseATK: BASE_ATK,
-      description: `Inflige ${BASE_ATK} dégâts à l'actif adverse. S'il lui reste ${EXECUTE_THRESHOLD_HP} HP ou moins après le coup, il est achevé sur le champ — sauf s'il est protégé contre la mort (Détermination).`,
+      description: `Inflige ${BASE_ATK} dégâts à l'actif adverse.`,
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;

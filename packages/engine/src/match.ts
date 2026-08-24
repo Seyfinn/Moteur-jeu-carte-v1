@@ -1,5 +1,7 @@
 import { createRng, flipCoin as rngFlipCoin } from './rng.js';
 import { randomUUID } from './uuid.js';
+import { defaultChoiceAnswer } from './choices.js';
+import { otherPlayer } from './types.js';
 import type {
   ChoiceAnswer,
   ChoiceSpec,
@@ -226,6 +228,9 @@ export class Match {
         min: 1,
         max: 1,
       });
+      // Un abandon pendant la mise en place a déjà clos la partie : reprendre la suite
+      // remettrait `phase` sur 'main' et rouvrirait le plateau aux actions.
+      if (state.result) return;
       const chosenId = answer.kind === 'select-characters' ? answer.selected[0] : undefined;
       const activeId = chosenId ?? options[0]!;
       player.activeCharacterInstanceId = activeId;
@@ -305,6 +310,38 @@ export class Match {
         this.inFlight = null;
         this.notify();
       });
+    return { ok: true };
+  }
+
+  /**
+   * Abandon. Volontairement hors de `applyAction` : celui-ci commence par exiger que ce
+   * soit votre tour et qu'aucun choix ne soit en attente, alors que renoncer doit rester
+   * possible à tout moment -- c'est justement pendant le tour de l'autre qu'on décide de
+   * quitter une partie.
+   */
+  forfeit(playerId: PlayerId): ActionResult {
+    const state = this.state;
+    if (state.result) return { ok: false, error: 'La partie est déjà terminée' };
+
+    const winner = otherPlayer(playerId);
+    state.result = { kind: 'win', winner, reason: 'forfeit' };
+    state.phase = 'ended';
+    this.api.log(`${playerName(state, playerId)} abandonne la partie`, { kind: 'forfeit', winner }, playerId);
+
+    // Un choix encore ouvert n'aura plus jamais de réponse : le libérer avec la réponse
+    // neutre plutôt que d'abandonner son resolver, sinon l'action en cours reste
+    // suspendue pour toujours et le serveur garde un minuteur armé sur un prompt que
+    // plus personne ne voit. Tous les points de reprise du moteur testent `state.result`,
+    // donc la suite de l'effet ne peut plus changer l'issue.
+    const pending = state.pendingChoice;
+    if (pending) {
+      const resolve = this.resolvers.get(pending.id);
+      this.resolvers.delete(pending.id);
+      state.pendingChoice = undefined;
+      resolve?.(defaultChoiceAnswer(pending.spec));
+    }
+
+    this.notify();
     return { ok: true };
   }
 
@@ -573,9 +610,16 @@ export class Match {
           attackerInstanceId: options?.attackerInstanceId,
           attackerOwnerId: options?.attackerOwnerId,
         };
-        const reduced = options?.ignoreDamageReduction
+        // "Vulnérable" amplifies on the receiving side, before any card's reduction, so a
+        // flat/percent damage reduction still applies to the real incoming number. Left out
+        // of the `ignoreDamageReduction` path, which is how a character pays an HP cost to
+        // itself -- see getVulnerableDamageMultiplier.
+        const amplified = options?.ignoreDamageReduction
           ? amount
-          : evaluateTransform(state, 'getIncomingDamageAmount', damageQuery, amount);
+          : Math.round(amount * statusesMod.getVulnerableDamageMultiplier(target));
+        const reduced = options?.ignoreDamageReduction
+          ? amplified
+          : evaluateTransform(state, 'getIncomingDamageAmount', damageQuery, amplified);
         let finalAmount = Math.max(0, reduced);
 
         let shieldAbsorbed = 0;

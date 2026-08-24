@@ -9,7 +9,7 @@ export const regulationThermique: TerrainCardDef = {
   type: 'terrain',
   id: 'regulation-thermique',
   name: 'Régulation Thermique',
-  description: `Pendant ${DURATION_TURNS} tours, la Brûlure ne blesse plus vos personnages (actif comme banc) : elle les soigne de ${HEAL_AMOUNT} HP à la place. La durée de la brûlure, elle, continue de s'écouler normalement.`,
+  description: `Pendant ${DURATION_TURNS} tours, la Brûlure ne blesse plus vos personnages (actif comme banc) : elle les soigne de ${HEAL_AMOUNT} HP à la place.`,
   durationTurns: DURATION_TURNS,
   modifiers: [
     {

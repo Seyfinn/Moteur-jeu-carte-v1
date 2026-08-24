@@ -73,7 +73,15 @@ function SelectCharacters({
               highlight={selected.includes(id)}
               onClick={() => toggle(id)}
               hoverProps={{
-                onMouseEnter: (e) => hover.show({ title: name, body: characterDetailBody(instance.cardId, instance) }, e.currentTarget),
+                onMouseEnter: (e) =>
+                  hover.show(
+                    {
+                      title: name,
+                      card: { cardId: instance.cardId, kind: 'character', name },
+                      body: characterDetailBody(instance.cardId, instance),
+                    },
+                    e.currentTarget
+                  ),
                 onMouseLeave: hover.hide,
               }}
               footer={

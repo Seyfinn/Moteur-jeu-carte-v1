@@ -12,7 +12,7 @@ export const mahito: CharacterCardDef = {
       id: 'paume-transfiguratrice',
       name: 'Paume Transfiguratrice',
       baseATK: PAUME_ATK,
-      description: `Inflige ${PAUME_ATK} dégâts à l'actif adverse, convertis à 100% en réduction de HP max (voir Altération de l'Âme) -- donc jamais soignables.`,
+      description: `Inflige ${PAUME_ATK} dégâts à l'actif adverse.`,
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;

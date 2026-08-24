@@ -30,7 +30,7 @@ export const katarina: CharacterCardDef = {
       id: 'shunpo',
       name: 'Shunpo',
       baseATK: BASE_ATK,
-      description: `Inflige ${BASE_ATK} dégâts à l'actif adverse. Si des dégâts passent réellement (pas d'esquive), ${DISARM_CHANCE_PERCENT}% de chance de désarmer la cible pendant ${DISARM_EFFECTIVE_TURNS} tour.`,
+      description: `Inflige ${BASE_ATK} dégâts à l'actif adverse. Si des dégâts passent, ${DISARM_CHANCE_PERCENT}% de chance de désarmer la cible pendant ${DISARM_EFFECTIVE_TURNS} tour.`,
       endsTurn(ctx) {
         return !ctx.scratch[KILLED_THIS_ATTACK];
       },

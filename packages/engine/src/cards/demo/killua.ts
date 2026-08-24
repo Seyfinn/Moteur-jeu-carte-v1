@@ -26,7 +26,7 @@ export const killua: CharacterCardDef = {
       id: 'narukami',
       name: 'Narukami',
       baseATK: NARUKAMI_ATK,
-      description: `Inflige ${NARUKAMI_ATK} dégâts à l'actif adverse ; si le coup touche, ${DISARM_CHANCE_PERCENT}% de chance de le désarmer pendant ${DISARM_EFFECTIVE_TURNS} tour. Avec Godspeed armé, la première Narukami après un switch est un critique garanti.`,
+      description: `Inflige ${NARUKAMI_ATK} dégâts à l'actif adverse ; si le coup touche, ${DISARM_CHANCE_PERCENT}% de chance de le désarmer pendant ${DISARM_EFFECTIVE_TURNS} tour.`,
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;

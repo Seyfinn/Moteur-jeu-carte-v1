@@ -1,4 +1,4 @@
-import type { MouseEvent, ReactNode } from 'react';
+import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { CardArt } from './CardArt';
 
 export interface HoverHandlers {
@@ -11,6 +11,8 @@ export function CardFrame({
   kind,
   name,
   size = 'normal',
+  /** `landscape` = illustration à gauche, nom et infos à droite -- le format du personnage actif. */
+  orientation = 'portrait',
   highlight,
   dimmed,
   unique,
@@ -18,11 +20,13 @@ export function CardFrame({
   effects,
   onClick,
   hoverProps,
+  title,
 }: {
   cardId: string;
   kind: 'character' | 'object' | 'terrain';
   name: string;
   size?: 'small' | 'normal' | 'large';
+  orientation?: 'portrait' | 'landscape';
   highlight?: boolean;
   dimmed?: boolean;
   /** Marks the card as limited to a single copy per deck (a small corner badge). */
@@ -32,22 +36,49 @@ export function CardFrame({
   effects?: ReactNode;
   onClick?: () => void;
   hoverProps?: HoverHandlers;
+  title?: string;
 }) {
   const classes = ['tcg-card', `tcg-card-${size}`];
+  if (orientation === 'landscape') classes.push('tcg-card-landscape');
   if (highlight) classes.push('highlight');
   if (dimmed) classes.push('dimmed');
   if (onClick) classes.push('clickable');
 
+  // Une carte cliquable est un vrai bouton pour le clavier et les lecteurs d'écran :
+  // jouer une carte, ouvrir sa fiche ou le mini-menu d'un banc passait par un `div`, donc
+  // par la souris uniquement.
+  const onKeyDown = onClick
+    ? (e: KeyboardEvent<HTMLDivElement>) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        onClick();
+      }
+    : undefined;
+
   return (
-    <div className={classes.join(' ')} onClick={onClick} {...hoverProps}>
+    <div
+      className={classes.join(' ')}
+      onClick={onClick}
+      onKeyDown={onKeyDown}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-label={onClick ? name : undefined}
+      title={title}
+      {...hoverProps}
+    >
       {unique && (
         <span className="tcg-card-unique-badge" title="Carte unique exemplaire (1 max par deck)">
           1×
         </span>
       )}
       <CardArt cardId={cardId} kind={kind} />
-      <div className="tcg-card-name-banner">{name}</div>
-      {footer && <div className="tcg-card-body">{footer}</div>}
+      {/* Une seule structure DOM pour les deux orientations : en portrait la CSS rend cette
+          colonne transparente (`display: contents`), en paysage elle devient le panneau
+          d'infos posé à droite de l'illustration. */}
+      <div className="tcg-card-lane">
+        <div className="tcg-card-name-banner">{name}</div>
+        {footer && <div className="tcg-card-body">{footer}</div>}
+      </div>
       {effects}
     </div>
   );

@@ -25,7 +25,7 @@ export const autelDemoniaque: TerrainCardDef = {
       id: 'autel-demoniaque-onplay',
       name: 'Autel Démoniaque',
       kind: 'passive',
-      description: `Déclenche l'effet immédiatement à la pose (1ère des ${DURATION_TURNS} activations).`,
+      description: "Déclenche l'effet immédiatement à la pose.",
       trigger: 'onTerrainPlayed',
       // Only for THIS terrain's own arrival. Without the guard, the event emitted when
       // *any* terrain hits the table (including the opponent's) re-fired this on-play

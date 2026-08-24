@@ -1,0 +1,30 @@
+<!doctype html><html><body style="font-family:sans-serif">
+<div id="box" style="position:fixed;left:20px;top:20px;width:300px;border:1px solid #999">
+  <header id="head" style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#eee;cursor:grab;user-select:none;touch-action:none">
+    <span>&#10303;</span>
+    <h3 style="flex:1;margin:0;font-size:.7rem">Journal</h3>
+    <button id="min" style="padding:0 8px;font-size:1rem">&ndash;</button>
+  </header>
+  <ul style="height:120px;margin:0"><li>entry</li></ul>
+</div>
+<pre id="out" style="position:fixed;left:20px;top:220px;font-size:12px"></pre>
+<script>
+var out=document.getElementById('out');
+function L(s){out.textContent+=s+"\n";}
+var head=document.getElementById('head'), min=document.getElementById('min');
+var drag=null;
+head.addEventListener('pointerdown',function(e){
+  drag={dx:0,dy:0};
+  L('header pointerdown target='+e.target.id);
+  e.currentTarget.setPointerCapture(e.pointerId);
+});
+head.addEventListener('pointerup',function(e){
+  L('header pointerup target='+e.target.id);
+  if(!drag) return; drag=null;
+  if(e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+});
+document.addEventListener('mousedown',function(e){L('doc mousedown target='+e.target.id);});
+document.addEventListener('mouseup',function(e){L('doc mouseup target='+e.target.id);});
+head.addEventListener('click',function(e){L('HEADER click target='+e.target.id);});
+min.addEventListener('click',function(e){L('*** BUTTON onClick RAN ***');});
+</script></body></html>

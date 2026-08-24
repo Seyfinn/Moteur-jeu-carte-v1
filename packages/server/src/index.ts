@@ -143,6 +143,8 @@ function parseClientMessage(raw: unknown): ClientMessage | null {
       if (!action || typeof action !== 'object') return null;
       return isString((action as Record<string, unknown>)['kind']) ? (message as unknown as ClientMessage) : null;
     }
+    case 'forfeit':
+      return message as unknown as ClientMessage;
     case 'answer-choice': {
       const answer = message['answer'];
       if (!isString(message['choiceId']) || !answer || typeof answer !== 'object') return null;
@@ -266,6 +268,12 @@ function handleMessage(socket: WebSocket, message: ClientMessage): void {
       const conn = connections.get(socket);
       if (!conn) return sendError(socket, 'Not in a room');
       rooms.get(conn.roomCode)?.handleAction(conn.playerId, message.action);
+      return;
+    }
+    case 'forfeit': {
+      const conn = connections.get(socket);
+      if (!conn) return sendError(socket, 'Not in a room');
+      rooms.get(conn.roomCode)?.handleForfeit(conn.playerId);
       return;
     }
     case 'answer-choice': {

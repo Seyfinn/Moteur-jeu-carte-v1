@@ -12,14 +12,14 @@ export const protectionDivine: TerrainCardDef = {
   type: 'terrain',
   id: 'protection-divine',
   name: 'Protection Divine',
-  description: `Pendant ${DURATION_TURNS} tours, au début de chaque tour du possesseur (${DURATION_TURNS} activations au total, dont celle à la pose), ajoute ${SHIELD_AMOUNT} de shield à son personnage actif du moment.`,
+  description: `Pendant ${DURATION_TURNS} tours, au début de chaque tour du possesseur, ajoute ${SHIELD_AMOUNT} de shield à son personnage actif du moment.`,
   durationTurns: DURATION_TURNS,
   abilities: [
     {
       id: 'protection-divine-onplay',
       name: 'Protection Divine',
       kind: 'passive',
-      description: `Déclenche l'effet immédiatement à la pose (1ère des ${DURATION_TURNS} activations).`,
+      description: "Déclenche l'effet immédiatement à la pose.",
       trigger: 'onTerrainPlayed',
       // Only for THIS terrain's own arrival. Without the guard, the event emitted when
       // *any* terrain hits the table (including the opponent's) re-fired this on-play

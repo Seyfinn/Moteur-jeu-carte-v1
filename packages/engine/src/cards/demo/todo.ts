@@ -13,7 +13,7 @@ export const todo: CharacterCardDef = {
       id: 'black-flash',
       name: 'Black Flash',
       baseATK: BLACK_FLASH_ATK,
-      description: `Inflige ${BLACK_FLASH_ATK} dégâts à l'actif adverse. ${BLACK_FLASH_CRIT_PERCENT}% de chance de critique (au lieu des 2% de base).`,
+      description: `Inflige ${BLACK_FLASH_ATK} dégâts à l'actif adverse. ${BLACK_FLASH_CRIT_PERCENT}% de chance de critique.`,
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;

@@ -21,7 +21,7 @@ export const blitzcrank: CharacterCardDef = {
   id: 'blitzcrank',
   name: 'Blitzcrank',
   baseMaxHP: 250,
-  attacks: [simpleAttack('poing-dacier', "Poing d'acier", 50, "Attaque simple : inflige 50 dégâts à l'actif adverse.")],
+  attacks: [simpleAttack('poing-dacier', "Poing d'acier", 50, "Inflige 50 dégâts à l'actif adverse.")],
   abilities: [
     {
       id: 'mana-barrier',

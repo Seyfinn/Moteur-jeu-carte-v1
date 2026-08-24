@@ -6,7 +6,7 @@ export const determination: ObjectCardDef = {
   type: 'object',
   id: 'determination',
   name: 'Détermination',
-  description: `Exemplaire unique. Jusqu'à la fin de ce tour, aucun coup ne peut faire descendre votre personnage actif en dessous de 1 HP. Ne protège pas contre la perte de HP max (Valeur Lock) ni contre une mise à mort directe.`,
+  description: "Exemplaire unique. Jusqu'à la fin de ce tour, aucun coup ne peut faire descendre votre personnage actif en dessous de 1 HP.",
   maxCopies: 1,
   async execute(ctx) {
     const active = ctx.getActive(ctx.ownerId);

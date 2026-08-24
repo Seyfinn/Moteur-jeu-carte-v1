@@ -18,17 +18,55 @@ projet (packages, comment lancer le jeu...), voir [README.md](README.md).
    légal. Ne pas y toucher les limites. `DEMO_STARTER_DECK` juste au-dessus est le deck
    par défaut (6 persos / 6 objets / 2 terrains, ≤2 exemplaires) : il doit rester valide
    au sens de `validateRoster`, ne l'étendre qu'en remplaçant une carte par une autre.
-4. Vérifier avec `npm run build -w engine` (typecheck rapide, pas de vrai `tsc -b` à la
+4. Ajouter son entrée dans [docs/cartes.md](docs/cartes.md) : le texte imprimé + ce que le
+   moteur fait vraiment derrière (statuts posés, modifiers, `+1` de durée, garde-fous...).
+   C'est le pendant obligatoire de la règle « texte exact » ci-dessous : tout ce que la
+   description ne dit plus vit là. C'est aussi le fichier à relire avant de toucher à une
+   carte existante, plutôt que d'en re-déduire le comportement.
+5. Vérifier avec `npm run build -w engine` (typecheck rapide, pas de vrai `tsc -b` à la
    racine — le tsconfig racine n'est pas configuré pour ça).
-5. **Pas de test unitaire par carte par défaut** — la flexibilité du moteur est déjà
+6. **Pas de test unitaire par carte par défaut** — la flexibilité du moteur est déjà
    prouvée par la suite existante. N'ajouter un test que si la carte introduit un
    mécanisme réellement nouveau pour le moteur (pas juste une recombinaison de patterns
    déjà couverts).
-6. **Ne pas tenter de vérification navigateur** pour l'ajout d'une carte seule (pas de
+7. **Ne pas tenter de vérification navigateur** pour l'ajout d'une carte seule (pas de
    code UI touché, et le port 5173 est généralement déjà pris par une autre session).
 
 Objectif : une carte "normale" (mécaniques déjà vues) ne devrait nécessiter que la
 lecture de ce fichier + l'écriture du fichier de carte + l'edit de `index.ts`.
+
+## ⚠️ Les `description` sont le texte EXACT de la carte
+
+Règle absolue, elle prime sur toute envie de clarté : le champ `description` (carte,
+attaque, ability) reprend **mot pour mot** le texte de la carte d'origine envoyée par
+l'utilisateur. Pas de reformulation, pas de résumé, pas de phrase explicative ajoutée,
+pas de précision entre parenthèses, pas de renvoi à une autre carte, pas de rappel de
+règle du moteur. Le client affiche `description` tel quel (`web/components/cardDetails.tsx`)
+— ce qui est écrit dans le fichier est exactement ce que le joueur lit.
+
+Concrètement, quand le texte d'origine dit « Si l'ennemi touché est à 40HP ou moins, il
+meurt immédiatement », c'est cette phrase-là et rien d'autre. **Interdit** d'en faire
+« Inflige 60 dégâts à l'actif adverse. S'il lui reste 40 HP ou moins après le coup, il est
+achevé sur le champ — sauf s'il est protégé contre la mort (Détermination). »
+
+Où va le reste :
+
+- Le comportement réel de la carte (statuts posés, modifiers, cas limites, interactions
+  avec d'autres cartes) : dans [docs/cartes.md](docs/cartes.md), une entrée par carte. Ce
+  fichier n'est pas affiché en jeu, c'est la note de travail à relire avant de toucher à
+  une carte.
+- Les précisions d'implémentation purement locales : en **commentaire de code**, jamais
+  dans `description`.
+- Les mécaniques génériques (poison, burn, bleed, vulnérable, stun, désarmé, silences,
+  critique, esquive) : elles sont déjà décrites pour le joueur dans le **glossaire en
+  partie** (`web/components/EffectsGlossary.tsx`), inutile de les réexpliquer sur chaque
+  carte.
+- Si le texte d'origine est ambigu ou semble contredire le moteur, poser la question à
+  l'utilisateur — ne pas « corriger » le texte tout seul.
+
+Une valeur interpolée (`${BASE_ATK}`) reste bienvenue à condition que la phrase résultante
+soit celle de la carte : elle sert à ce que le texte suive un ajustement d'équilibrage,
+pas à enrichir le propos.
 
 ## API des cartes (`packages/engine/src/cards/types.ts`)
 
@@ -213,6 +251,11 @@ Garde-fous appliqués automatiquement, inutile de les re-coder par carte :
     porteur s'il est indiqué). Ex : Miroir de Renvoi.
   - `bench-damage-bonus` (`data.multiplier`, défaut 2) : les dégâts du porteur contre le
     **banc adverse** sont multipliés. Ex : Couteau dans le dos.
+  - `vulnerable` : le porteur subit +50% sur **chaque** instance de dégâts reçue
+    (`VULNERABLE_DAMAGE_BONUS_PERCENT`), tics de poison/brûlure/saignement compris.
+    L'amplification a lieu avant les réductions de dégâts des cartes, n'est jamais
+    consommée par un coup, et ne s'applique pas à un coût en HP que le camp se paie à
+    lui-même (`ignoreDamageReduction`).
   - `hit-bounty` (`data: { bonusMaxHP, forOwnerId? }`) : la première attaque qui touche
     réellement le porteur donne du HP max permanent à son attaquant, puis se consomme.
     Ex : la marque chargée de Coeur Acier.
@@ -224,6 +267,13 @@ Garde-fous appliqués automatiquement, inutile de les re-coder par carte :
   Deux champs transverses utilisables sur **n'importe quel** statut :
   `ticksOnBench: true` (la durée continue de descendre au banc) et `hidden: true`
   (bookkeeping interne : ni badge sur la carte, ni ligne de journal).
+
+  ⚠️ Ajouter un statut à cette liste (nouvelle mécanique générique du moteur) veut dire
+  trois choses en plus du code : l'ajouter à `BuiltinStatusId` **et** à
+  `BUILTIN_STATUS_IDS`, lui donner un visuel dans `web/components/statusEffects.tsx`, et
+  l'ajouter au glossaire en partie (`web/components/EffectsGlossary.tsx`) — dont chaque
+  nombre affiché doit venir d'une constante exportée par le moteur, jamais d'un chiffre
+  recopié.
 - ⚠️ **Un trigger `onTerrainPlayed` DOIT filtrer sur son propre terrain.** L'event est
   émis pour *n'importe quel* terrain posé, y compris celui de l'adversaire, et tous les
   terrains déjà en jeu le reçoivent. Sans garde, l'effet « à la pose » se rejoue à chaque
