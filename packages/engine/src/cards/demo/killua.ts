@@ -1,5 +1,4 @@
 import type { CharacterCardDef } from '../types.js';
-import { chancePercent } from '../../rng.js';
 
 const NARUKAMI_ATK = 60;
 const DISARM_CHANCE_PERCENT = 33;
@@ -55,7 +54,7 @@ export const killua: CharacterCardDef = {
         }
 
         const landed = ctx.getCharacter(target.instanceId).damage > damageBefore;
-        if (landed && chancePercent(ctx.state.rng, DISARM_CHANCE_PERCENT)) {
+        if (landed && ctx.rollChance(DISARM_CHANCE_PERCENT, 'Désarmement', { characterInstanceId: target.instanceId })) {
           ctx.applyStatus(target.instanceId, {
             statusId: 'disarmed',
             label: 'Désarmé (Narukami)',

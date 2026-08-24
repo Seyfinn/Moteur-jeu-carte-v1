@@ -15,6 +15,7 @@ const LOCK_TRACKER_STATUS_ID = 'ornn-forge-lock';
 
 interface RecoverableCard {
   instanceId: string;
+  cardId: string;
   kind: 'object' | 'terrain';
   ownerId: PlayerId;
   name: string;
@@ -89,8 +90,9 @@ export const ornn: CharacterCardDef = {
       kind: 'passive',
       description: "S'il survit aux 3 tours de Living Forge, récupère un objet ou terrain au choix parmi les 4 cimetières.",
       trigger: 'onTurnStart',
-      // Doit rester déclenchable même si Ornn a été forcé hors de l'actif entre-temps
-      // (ex: Hook de Blitzcrank -- forceSwitch contourne "chained").
+      // Doit rester déclenchable même si Ornn a quitté le poste actif entre-temps (le
+      // "chained" de Living Forge bloque désormais aussi les switchs forcés, mais une
+      // résurrection ou un échange de statuts peut encore l'en sortir).
       usableFromBench: true,
       condition(ctx) {
         if (ctx.event?.playerId !== ctx.ownerId) return false;
@@ -110,13 +112,20 @@ export const ornn: CharacterCardDef = {
           for (const objectInstanceId of player.graveyardObjectInstanceIds) {
             const obj = player.objects[objectInstanceId];
             if (!obj) continue;
-            candidates.push({ instanceId: objectInstanceId, kind: 'object', ownerId: playerId, name: getObjectCard(obj.cardId).name });
+            candidates.push({
+              instanceId: objectInstanceId,
+              cardId: obj.cardId,
+              kind: 'object',
+              ownerId: playerId,
+              name: getObjectCard(obj.cardId).name,
+            });
           }
           for (const terrainInstanceId of player.graveyardTerrainInstanceIds) {
             const terrain = player.terrains[terrainInstanceId];
             if (!terrain) continue;
             candidates.push({
               instanceId: terrainInstanceId,
+              cardId: terrain.cardId,
               kind: 'terrain',
               ownerId: playerId,
               name: getTerrainCard(terrain.cardId).name,
@@ -127,9 +136,12 @@ export const ornn: CharacterCardDef = {
 
         const chosenKey = await ctx.chooseOption(
           'Living Forge : choisissez la carte objet ou terrain à récupérer',
+          // `card` : la modale affiche l'illustration réelle de chaque carte récupérable
+          // plutôt qu'une simple ligne de texte.
           candidates.map((c) => ({
             key: c.instanceId,
             label: `${c.name} (${c.kind === 'object' ? 'objet' : 'terrain'}${c.ownerId === ctx.ownerId ? '' : ', ennemi'})`,
+            card: { cardId: c.cardId, kind: c.kind },
           }))
         );
         const chosen = candidates.find((c) => c.instanceId === chosenKey);

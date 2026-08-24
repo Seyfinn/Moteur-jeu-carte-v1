@@ -18,6 +18,34 @@ import { findCharacterOwner } from './zones.js';
 import { cardName } from './names.js';
 import { otherPlayer, type EngineEvent, type GameState, type PlayerId } from './types.js';
 
+/**
+ * Tire un jet à pourcentage porté par une carte **et** l'annonce : le client transforme
+ * chaque entrée `kind: 'chance-roll'` en roue de pourcentage à l'écran, pour les deux
+ * joueurs, que le jet passe ou non. Tout tirage visible par le joueur devrait passer par
+ * là plutôt que par un `chancePercent` muet (voir `ctx.rollChance`).
+ */
+function announceChanceRoll(
+  state: GameState,
+  api: EngineApi,
+  percent: number,
+  label: string,
+  characterInstanceId: string,
+  sourceInstanceId: string
+): boolean {
+  const hit = chancePercent(state.rng, percent);
+  const char = state.players.p1.characters[characterInstanceId] ?? state.players.p2.characters[characterInstanceId];
+  const who = char ? `${cardName(char.cardId)} : ` : '';
+  api.log(`${who}${label} (${Math.round(percent)} %) -- ${hit ? 'réussi' : 'raté'}`, {
+    kind: 'chance-roll',
+    label,
+    percent,
+    hit,
+    characterInstanceId,
+    sourceInstanceId,
+  });
+  return hit;
+}
+
 export function buildEffectContext(
   state: GameState,
   sourceInstanceId: string,
@@ -123,6 +151,13 @@ export function buildEffectContext(
       return result;
     },
 
+    rollChance(percent, label, options) {
+      // La roue à l'écran nomme un personnage : la cible du jet quand la carte la précise,
+      // la source de l'effet sinon.
+      const characterInstanceId = options?.characterInstanceId ?? sourceInstanceId;
+      return announceChanceRoll(state, api, percent, label, characterInstanceId, sourceInstanceId);
+    },
+
     async choose(spec) {
       const answer = await api.chooseFor(ownerId, spec);
       if (answer.kind !== 'select-characters') throw new Error('Unexpected choice answer kind');
@@ -213,7 +248,12 @@ export function buildEffectContext(
         const redirectPercent = Number(
           evaluateTransform(state, 'getDamageRedirectPercent', { targetInstanceId, sourceInstanceId }, 0)
         );
-        if (redirectPercent > 0 && chancePercent(state.rng, redirectPercent)) {
+        // Annoncé comme n'importe quel jet porté par une carte (kind 'chance-roll') : le
+        // client en fait tourner une roue, réussite comme échec.
+        const redirected =
+          redirectPercent > 0 &&
+          announceChanceRoll(state, api, redirectPercent, 'Redirection', targetInstanceId, sourceInstanceId);
+        if (redirected) {
           const targetOwnerId = findCharacterOwner(state, targetInstanceId);
           const aliveBench = state.players[targetOwnerId].benchCharacterInstanceIds.filter(
             (id) => id !== targetInstanceId && !isKO(state.players[targetOwnerId].characters[id]!)

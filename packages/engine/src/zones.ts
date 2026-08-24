@@ -2,6 +2,7 @@ import { randomUUID } from './uuid.js';
 import { otherPlayer, type CharacterInstance, type GameState, type PlayerId, type PlayerState, type TerrainInstance } from './types.js';
 import type { EngineApi } from './engine-api.js';
 import { getCharacterCard, getTerrainCard } from './cards/registry.js';
+import { hasStatus } from './statuses.js';
 import { cardName, playerName } from './names.js';
 
 export function findCharacterOwner(state: GameState, instanceId: string): PlayerId {
@@ -197,6 +198,20 @@ export async function switchActive(state: GameState, playerId: PlayerId, newActi
   if (benchIndex === -1) throw new Error(`"${newActiveInstanceId}" is not on ${playerId}'s bench`);
 
   const previousActiveId = player.activeCharacterInstanceId;
+  // Le défensif prime sur l'offensif : 'chained' (Chaînes) bloque TOUT départ du poste
+  // actif, pas seulement l'action de switch standard. Le garde vit ici, dans l'unique
+  // point de passage de tous les switchs, pour qu'aucun `forceSwitch` de carte (Dieu du
+  // Tonnerre Volant, Hook, Boogie Woogie, Portail Dimensionnel) ne puisse le contourner.
+  // Le remplacement après un KO ne passe pas par ici : un mort n'est plus enchaîné.
+  const previousActive = previousActiveId ? player.characters[previousActiveId] : undefined;
+  if (previousActive && hasStatus(previousActive, 'chained')) {
+    api.log(
+      `${cardName(previousActive.cardId)} est enchaîné : impossible de le sortir du poste actif`,
+      { kind: 'blocked', characterInstanceId: previousActiveId, reason: 'chained' },
+      playerId
+    );
+    return;
+  }
   player.benchCharacterInstanceIds.splice(benchIndex, 1);
   if (previousActiveId) player.benchCharacterInstanceIds.push(previousActiveId);
   player.activeCharacterInstanceId = newActiveInstanceId;

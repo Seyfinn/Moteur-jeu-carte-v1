@@ -48,8 +48,10 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
 ### Akali — 260 HP
 
 - **Kunaï** (70 ATK) — *« Inflige 70 dégâts à l'actif adverse. »*
-- **Shroud** (active) — *« Akali lance son nuage de fumée, lui accordant esquive pendant
-  3 tours. »* → statut `evasive`, 33 %.
+- **Shroud** (active, 1×/partie) — *« Akali lance son nuage de fumée, lui accordant esquive
+  pendant 5 tours. Utilisable une seule fois par partie. »* → statut `evasive`, 33 %.
+  - Moteur : `usesPerGame: 1`. La limite n'était pas écrite sur la carte d'origine, elle a
+    été ajoutée au texte imprimé en même temps que le passage de 3 à 5 tours.
 - **Perfect Execution** (passive) — *« Si après une attaque de Akali, l'ennemi touché est à
   20HP ou moins, il meurt immédiatement. »*
   - Moteur : exécuté dans l'`AttackDef` de Kunaï, via `ctx.koCharacter` — donc hors du
@@ -75,6 +77,10 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     (`blitzcrank-mana-barrier-shield`, volontairement **visible**) consommé par un modifier
     `getIncomingDamageAmount`. Conséquence : Brise bouclier et Voleur de bouclier n'ont
     aucune prise dessus. Le verrou de Hook est le statut `blitzcrank-hook-locked`.
+  - La réserve restante vit dans `data.shield`, la convention que le client lit pour
+    afficher le chiffre sur le badge, la barre de bouclier sous les PV et le halo : à
+    l'écran, elle se lit donc exactement comme un bouclier natif, tout en restant
+    intouchable par Brise bouclier / Voleur de bouclier.
 - **Hook** (active, 1×/partie) — *« Une fois par partie, ramène un personnage ennemi du banc
   sur le poste actif. »* → `forceSwitch` sur le camp adverse.
 
@@ -228,14 +234,18 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   - Moteur : le blocage est la combinaison `chained` + `disarmed` ; la récompense est un
     passive `onTurnStart` séparé qui lit un statut caché de suivi. « 4 cimetières » = les
     deux vôtres (objets, terrains) et les deux de l'adversaire.
+  - Le choix de la récupération passe par `ctx.chooseOption` avec un `card` par option : la
+    modale montre les illustrations réelles des cartes récupérables, pas une liste de noms.
 
 ### Rengoku — 340 HP
 
 - **Souffle du feu** (30 ATK) — *« Inflige 30 dégâts à l'actif adverse et, si le coup touche,
   le met en Brûlure pendant 2 tours. »*
   - Moteur : un seul jet d'esquive partagé (`ctx.rollEvasion` + `skipEvasionRoll`) pour les
-    dégâts et la brûlure. Retoucher une cible déjà en feu **rafraîchit** l'instance
-    existante (durée = max des deux) au lieu d'en créer une deuxième.
+    dégâts et la brûlure. Retoucher une cible déjà en feu **additionne les durées** sur
+    l'instance existante (2 tours de plus par coup) au lieu d'en créer une deuxième : c'est
+    la façon dont la brûlure « stack ». Les dégâts par tic restent fixes (50 HP), sinon deux
+    instances tiqueraient le même tour et doubleraient les dégâts en silence.
 - **La flamme** (passive) — descriptif, la brûlure est posée par l'attaque.
 
 ### Roi des esprits — 240 HP
@@ -321,8 +331,11 @@ actuels à 10 HP et multiplie par 2 les dégâts de toutes ses attaques pendant 
 
 *« Sacrifiez votre terrain actif pour retirer 3 tours au terrain adverse. »*
 
-- Moteur : sans terrain à soi, la carte est un no-op (elle reste jouable et se consomme).
-  `destroyTerrain` sur le sien, `shortenTerrain` sur celui d'en face.
+- Moteur : `destroyTerrain` sur le sien, `shortenTerrain` sur celui d'en face.
+- La carte est **refusée avant d'être consommée** (`unplayableReason`) tant qu'il manque un
+  des deux terrains : « vous n'avez aucun terrain actif à sacrifier » / « aucun terrain
+  adverse à annuler ». Le serveur rejette l'action avec cette phrase et la main grise la
+  carte avec la même.
 
 ### Caméléon
 
@@ -335,11 +348,15 @@ d'exemplaires. »*
 
 ### Chaînes — exemplaire unique
 
-*« Enchaîne le personnage actif ennemi : il ne peut plus être switché via l'action standard,
-jusqu'à sa mort. Un exemplaire. »*
+*« Enchaîne le personnage actif ennemi : il ne peut plus être switché TOTALEMENT, jusqu'à sa
+mort. Un exemplaire. »*
 
-- Moteur : statut `chained` sans `remainingTurns`. Ne bloque que le switch **standard** :
-  un `forceSwitch` (Hook, Boogie Woogie, Dieu du Tonnerre Volant) passe outre.
+- Moteur : statut `chained` sans `remainingTurns`. Bloque **tout** départ du poste actif, le
+  switch standard comme les switchs forcés (Hook, Boogie Woogie, Portail Dimensionnel, Dieu
+  du Tonnerre Volant) : le garde vit dans `zones.switchActive`, l'unique point de passage de
+  tous les switchs. Le défensif prime sur l'offensif.
+- Le remplacement après un KO n'est pas concerné (il ne passe pas par `switchActive`) : un
+  personnage mort n'est plus enchaîné.
 
 ### Concentration
 
@@ -364,6 +381,9 @@ doublés. »*
 *« Exemplaire unique. Tire 2 cartes objet au hasard dans le cimetière adverse et vous en fait
 choisir une : elle rejoint votre réserve, jouable normalement plus tard. »*
 
+- Moteur : `ctx.chooseOption` avec un `card` par option — la modale montre les deux cartes
+  tirées en illustration, pas leurs seuls noms.
+
 ### Détermination — exemplaire unique
 
 *« Exemplaire unique. Jusqu'à la fin de ce tour, aucun coup ne peut faire descendre votre
@@ -376,10 +396,13 @@ personnage actif en dessous de 1 HP. »*
 ### Dieu du Tonnerre Volant
 
 *« Téléportation : échange votre actif avec un personnage de votre banc, gratuitement et sans
-finir votre tour. Ignore Stun et Chaînes. »*
+finir votre tour. Ignore Stun. »*
 
-- Moteur : `forceSwitch`. Reste bloqué par un interdit explicite de switch (Bouclier Ultime),
-  qui vote via `canSwitchStandard` **et** est vérifié ici.
+- Moteur : `forceSwitch`, qui ignore bien le Stun. Ne passe **pas** au travers de Chaînes
+  depuis que `chained` bloque tout switch, ni au travers d'un interdit explicite (Bouclier
+  Ultime).
+- Refusée avant d'être consommée (`unplayableReason`) quand la téléportation n'aurait pas
+  lieu : banc vide, actif enchaîné, ou switch interdit par une carte en jeu.
 
 ### Echange équivalent
 

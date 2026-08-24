@@ -4,6 +4,11 @@ import { statusBadgeText } from './CharacterCard';
 export function characterDetailBody(cardId: string, instance?: CharacterInstance) {
   const def = getCharacterCard(cardId);
   const currentHP = instance ? Math.max(0, instance.currentMaxHP - instance.damage) : undefined;
+  // Même total que sur la carte : bouclier du moteur + réserves portées par un statut
+  // (`data.shield`, cf. Mana Barrier de Blitzcrank).
+  const shieldTotal = instance
+    ? instance.shield + instance.statuses.reduce((sum, st) => sum + Math.max(0, Number(st.data?.['shield'] ?? 0)), 0)
+    : 0;
 
   return (
     <>
@@ -11,7 +16,7 @@ export function characterDetailBody(cardId: string, instance?: CharacterInstance
         {instance ? (
           <>
             {currentHP} / {instance.currentMaxHP} HP
-            {instance.shield > 0 && <span className="shield-text"> +{instance.shield} 🛡</span>}
+            {shieldTotal > 0 && <span className="shield-text"> +{shieldTotal} 🛡</span>}
           </>
         ) : (
           <>{def.baseMaxHP} HP</>

@@ -4,7 +4,7 @@ import { cardName } from '../../names.js';
 
 const BASE_ATK = 70;
 const EXECUTE_THRESHOLD_HP = 20;
-const SHROUD_DURATION_TURNS = 3;
+const SHROUD_DURATION_TURNS = 5;
 
 export const akali: CharacterCardDef = {
   type: 'character',
@@ -40,7 +40,8 @@ export const akali: CharacterCardDef = {
       id: 'shroud',
       name: 'Shroud',
       kind: 'active',
-      description: `Akali lance son nuage de fumée, lui accordant esquive pendant ${SHROUD_DURATION_TURNS} tours.`,
+      description: `Akali lance son nuage de fumée, lui accordant esquive pendant ${SHROUD_DURATION_TURNS} tours. Utilisable une seule fois par partie.`,
+      usesPerGame: 1,
       async execute(ctx) {
         ctx.applyStatus(ctx.sourceInstanceId, {
           statusId: 'evasive',

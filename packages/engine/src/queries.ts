@@ -170,7 +170,11 @@ export function canAttack(state: GameState, characterInstanceId: string): Permis
   return evaluatePermission(state, 'canAttack', { characterInstanceId }, true, extra);
 }
 
-/** Only gates the *standard* switch action. External/forced switches bypass this entirely (section 6). */
+/**
+ * Gates the *standard* switch action. External/forced switches bypass this entirely
+ * (section 6) -- except the 'chained' status, which zones.switchActive enforces on every
+ * switch, forced ones included (Chaînes bloque le switch « TOTALEMENT »).
+ */
 export function canSwitchStandard(state: GameState, characterInstanceId: string): PermissionResult {
   const char = findCharacter(state, characterInstanceId);
   const extra: Vote[] = [];
@@ -253,6 +257,23 @@ export function canPlayObject(state: GameState, playerId: PlayerId): PermissionR
     extra.push({ allow: false, source: 'default:objects-per-turn-limit' });
   }
   return evaluatePermission(state, 'canPlayObject', { playerId }, true, extra);
+}
+
+/**
+ * Refus propre à UNE carte objet (son `unplayableReason`), par opposition à `canPlayObject`
+ * qui décide si le joueur peut jouer un objet *tout court*. Sert à ne pas laisser gaspiller
+ * une carte qui n'a rien à cibler (annuler un terrain quand il n'y a pas de terrain...).
+ * Partagé par le refus du serveur et par la grisaille de la main, pour que les deux disent
+ * exactement la même phrase. `null` = rien à signaler.
+ */
+export function describeObjectUnplayable(state: GameState, playerId: PlayerId, objectInstanceId: string): string | null {
+  const obj = state.players[playerId].objects[objectInstanceId];
+  if (!obj) return null;
+  try {
+    return getObjectCard(obj.cardId).unplayableReason?.(state, playerId) ?? null;
+  } catch {
+    return null; // carte inconnue du registre : le serveur reste l'autorité
+  }
 }
 
 /**

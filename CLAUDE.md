@@ -79,6 +79,10 @@ interface CharacterCardDef {
 interface ObjectCardDef {
   type: 'object'; id: string; name: string; description: string;
   condition?(ctx: EffectContext): boolean;
+  // Refus lisible évalué sur le seul GameState (donc côté client aussi) : renvoyer une
+  // phrase quand la carte n'a rien à cibler et serait gaspillée. Le serveur refuse
+  // l'action avec ce message, la main grise la carte avec la même raison.
+  unplayableReason?(state: GameState, ownerId: PlayerId): string | null;
   execute(ctx: EffectContext): Promise<void>; modifiers?: ModifierDef[];
 }
 interface TerrainCardDef {
@@ -158,8 +162,11 @@ ctx.ownerId / ctx.opponentId / ctx.sourceInstanceId / ctx.event?
 ctx.scratch                       // bloc-notes propre à CETTE exécution (voir patterns)
 
 ctx.log(msg, data?); ctx.flipCoin(): 'heads' | 'tails'
+ctx.rollChance(percent, label, {characterInstanceId?}?): boolean  // jet % annoncé (roue à l'écran)
 ctx.choose({kind:'select-characters', prompt, options, min, max}): Promise<string[]>
 ctx.chooseOption(prompt, options); ctx.chooseYesNo(prompt); ctx.chooseOrder(prompt, items)
+// ChoiceOption = { key, label, card?: { cardId, kind } } -- avec `card`, la modale
+// affiche l'illustration réelle au lieu d'un bouton de texte.
 
 ctx.getCharacter(id) / getObject(id) / getTerrain(id)
 ctx.getActive(playerId) / getBench(playerId) / getAllOnBoard(playerId) // actif+banc
@@ -230,6 +237,29 @@ Garde-fous appliqués automatiquement, inutile de les re-coder par carte :
   `execute` écrit `ctx.scratch['ma-cle'] = true` et `endsTurn(ctx)` retourne
   `!ctx.scratch['ma-cle']`. **Ne jamais utiliser une variable au niveau du module** pour
   ça : un serveur héberge plusieurs parties en parallèle et elles se marcheraient dessus.
+- **Carte qui peut être jouée « dans le vide »** (annuler un terrain quand il n'y en a
+  pas, se téléporter sans banc) : donner un `unplayableReason(state, ownerId)` à
+  l'`ObjectCardDef` plutôt que de laisser `execute` faire un no-op. C'est du pur
+  `GameState`, donc `match.ts` refuse l'action avec la phrase renvoyée **et** la main
+  grise la carte avec exactement la même (`describeObjectUnplayable` dans `queries.ts`).
+  Réserver `condition(ctx)` aux refus qui ont réellement besoin de l'`EffectContext` (leur
+  message d'erreur, lui, reste générique).
+- **Jet à pourcentage** (« 33% de chance de désarmer ») : `ctx.rollChance(percent, label,
+  { characterInstanceId })` et **jamais** `chancePercent(ctx.state.rng, x)` en direct. La
+  première tire *et* annonce le jet (`kind: 'chance-roll'`), ce qui fait tourner une roue
+  de pourcentage à l'écran pour les deux joueurs, réussite comme échec ; la seconde tire en
+  silence et le joueur ne voit rien. `characterInstanceId` = le personnage que la roue
+  nomme (en général la cible du jet).
+- **Faire choisir une carte** (cimetière, réserve, deck) : passer `card: { cardId, kind }`
+  dans chaque `ChoiceOption` de `ctx.chooseOption`. La modale affiche alors les cartes
+  réelles, survolables, au lieu d'une liste de noms. Sans `card`, l'option reste un bouton
+  de texte -- ce qu'on veut pour une vraie alternative abstraite (« vers l'actif / vers le
+  banc » de Poupée Voodoo).
+- **Réserve de bouclier portée par un statut** (Mana Barrier de Blitzcrank, dont
+  l'absorption est un modifier et non le bouclier natif du moteur) : stocker le montant
+  dans `data.shield`. C'est la convention que lit le client pour afficher le chiffre sur
+  le badge, la barre de bouclier sous les PV et le halo -- exactement comme pour
+  `ctx.addShield`.
 - **AoE sur tout le board adverse** : `ctx.getAllOnBoard(ctx.opponentId)` puis
   `dealDamage` sur chaque instance.
 - **Override d'une règle générale** (fréquence, ciblage du banc, ATK effectif, limite
@@ -261,7 +291,10 @@ Garde-fous appliqués automatiquement, inutile de les re-coder par carte :
     Ex : la marque chargée de Coeur Acier.
   - `concentration` (`data.percent`) : la prochaine attaque crit à ce pourcentage, sinon
     0 dégât + désarmé. Ex : l'objet Concentration.
-  - `stun` `disarmed` `chained` `silence-active` `silence-passive` `silence-ultimate`
+  - `chained` : bloque **tout** départ du poste actif — l'action de switch standard comme
+    n'importe quel `forceSwitch` de carte (le garde est dans `zones.switchActive`, seul
+    point de passage commun). Le remplacement après un KO n'est pas concerné.
+  - `stun` `disarmed` `silence-active` `silence-passive` `silence-ultimate`
     `evasive` `critical` `burn` `poison`.
 
   Deux champs transverses utilisables sur **n'importe quel** statut :
@@ -327,12 +360,16 @@ Garde-fous appliqués automatiquement, inutile de les re-coder par carte :
   tick — géré dans `match.ts`'s `heal` handler, rien à faire côté carte non plus. Pas de
   champ `remainingTurns` à passer.
 - **Poison/Burn et ré-application** : comme bleed, poser poison/burn sur une cible qui en
-  a déjà rafraîchit l'instance existante (source/label mis à jour, `remainingTurns` porté
-  au plus grand des deux) au lieu d'en empiler une deuxième — sinon les deux tiquaient
-  indépendamment le même tour et doublaient silencieusement les dégâts (bug corrigé :
-  avant ça, une cible déjà brûlée qui se refaisait toucher par un burn prenait le tick de
-  l'ancien ET du nouveau le même tour). Contrairement à bleed, pas de notion de stacks :
-  la ré-application ne change pas le montant du tick (toujours fixe), seulement la durée.
+  a déjà met à jour l'instance existante (source/label) au lieu d'en empiler une deuxième
+  — sinon les deux tiquaient indépendamment le même tour et doublaient silencieusement les
+  dégâts (bug corrigé : avant ça, une cible déjà brûlée qui se refaisait toucher par un
+  burn prenait le tick de l'ancien ET du nouveau le même tour). Contrairement à bleed, pas
+  de notion de stacks : la ré-application ne change jamais le montant du tick (toujours
+  fixe), seulement la durée. Les deux durées ne se combinent pas pareil :
+  - **burn** : les durées **s'additionnent** (2 tours de plus par coup) — c'est comme ça
+    que la brûlure « stack » ;
+  - **poison** : durée portée au **plus grand des deux** (jamais raccourcie, jamais
+    cumulée).
 
 ## Ce que le serveur impose par-dessus le moteur
 
@@ -391,7 +428,16 @@ avant qu'il ne puisse agir. Donc :
 
 Le client ne lit **pas** le texte : il classe chaque entrée sur `data.kind`
 (`'attack' | 'use-ability' | 'play-object' | 'play-terrain' | 'damage' | 'heal' | 'ko' |
-'critical' | 'evasion' | 'status' | 'switch' | ...`) pour choisir l'icône, la couleur et
-les animations de plateau. Une nouvelle entrée de journal digne d'être mise en avant doit
-donc porter un `kind` ; sinon elle s'affiche en ligne neutre, ce qui est très bien pour
-du détail.
+'critical' | 'evasion' | 'chance-roll' | 'status' | 'switch' | ...`) pour choisir l'icône,
+la couleur et les animations de plateau. Une nouvelle entrée de journal digne d'être mise
+en avant doit donc porter un `kind` ; sinon elle s'affiche en ligne neutre, ce qui est très
+bien pour du détail.
+
+Trois `kind` déclenchent une animation plein plateau, visible par **les deux** joueurs
+(`web/components/gameEvents.ts`) :
+
+- `play-object` / `play-terrain` / `use-ability` → la carte concernée est projetée en très
+  grand au centre pendant ~1,7 s (`CardSpotlight`). Plusieurs cartes jouées d'affilée
+  s'enchaînent au lieu de se superposer.
+- `chance-roll` (et les jets d'esquive/critique portés par une carte) → une roue de
+  pourcentage tourne et s'arrête sur le résultat réel (`ProcWheel`).

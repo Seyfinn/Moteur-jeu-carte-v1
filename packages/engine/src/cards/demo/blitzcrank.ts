@@ -44,7 +44,9 @@ export const blitzcrank: CharacterCardDef = {
           statusId: SHIELD_STATUS_ID,
           label: 'Bouclier (Mana Barrier)',
           sourceCardInstanceId: ctx.sourceInstanceId,
-          data: { remaining: SHIELD_AMOUNT },
+          // `data.shield` est la convention lue par le client : réserve chiffrée sur le
+          // badge, segment sur la barre de vie et halo, comme le bouclier natif du moteur.
+          data: { shield: SHIELD_AMOUNT },
         });
         ctx.applyStatus(ctx.sourceInstanceId, {
           statusId: HOOK_LOCK_STATUS_ID,
@@ -94,14 +96,14 @@ export const blitzcrank: CharacterCardDef = {
         const char = findCharacter(ctx.state, ctx.sourceInstanceId);
         const shield = char.statuses.find((s) => s.statusId === SHIELD_STATUS_ID);
         if (!shield) return amount;
-        const remaining = Number(shield.data?.['remaining'] ?? 0);
+        const remaining = Number(shield.data?.['shield'] ?? 0);
         if (remaining <= 0) return amount;
         const absorbed = Math.min(remaining, amount);
         const newRemaining = remaining - absorbed;
         if (newRemaining <= 0) {
           char.statuses = char.statuses.filter((s) => s !== shield);
         } else {
-          shield.data = { ...shield.data, remaining: newRemaining };
+          shield.data = { ...shield.data, shield: newRemaining };
         }
         return amount - absorbed;
       },

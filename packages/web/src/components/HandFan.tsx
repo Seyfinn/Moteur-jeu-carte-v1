@@ -1,9 +1,9 @@
 import type { CSSProperties } from 'react';
-import type { PlayerState } from 'engine';
+import type { GameState, PlayerId, PlayerState } from 'engine';
 import { CardFrame, FaceDownCard } from './CardFrame';
 import { useCardInspect, useHoverCard, type HoverPayload } from './HoverCard';
 import { hiddenCardDetailBody, objectDetailBody, terrainDetailBody } from './cardDetails';
-import { objectName, terrainName } from './boardActions';
+import { objectCardDenial, objectName, terrainName } from './boardActions';
 import { usePointerCoarse } from '../hooks/usePointerCoarse';
 
 export type HandSlot =
@@ -120,6 +120,8 @@ function PlayerHandCard({
 
 /** La main du joueur, en éventail tout en bas de l'écran. */
 export function PlayerHand({
+  state,
+  you,
   player,
   objectDenial,
   terrainDenial,
@@ -127,6 +129,8 @@ export function PlayerHand({
   onPlayTerrain,
   onBlocked,
 }: {
+  state: GameState;
+  you: PlayerId;
   player: PlayerState;
   objectDenial: string | null;
   terrainDenial: string | null;
@@ -135,6 +139,14 @@ export function PlayerHand({
   onBlocked: (reason: string) => void;
 }) {
   const slots = handSlots(player);
+
+  // Le refus global (pas votre tour, quota d'objets épuisé) prime : il empêche de jouer
+  // quoi que ce soit. Sinon, la carte affiche sa propre raison de ne rien pouvoir cibler.
+  const denialFor = (slot: HandSlot): string | null => {
+    if (slot.kind === 'terrain') return terrainDenial;
+    if (slot.kind === 'hidden') return null;
+    return objectDenial ?? objectCardDenial(state, you, slot.id);
+  };
 
   return (
     <div className="hand-fan" role="group" aria-label="Votre main">
@@ -146,7 +158,7 @@ export function PlayerHand({
             slot={slot}
             index={i}
             count={slots.length}
-            disabledReason={slot.kind === 'object' ? objectDenial : terrainDenial}
+            disabledReason={denialFor(slot)}
             onPlay={() => (slot.kind === 'object' ? onPlayObject(slot.id) : onPlayTerrain(slot.id))}
             onBlocked={onBlocked}
           />

@@ -20,8 +20,9 @@ export const bouclierUltime: TerrainCardDef = {
     'impossible à cibler et immunisé contre tous les dégâts adverses.',
   durationTurns: DURATION_TURNS,
   modifiers: [
-    // Bloque uniquement le switch standard du possesseur du terrain (comme Stun/Chained) --
-    // un switch forcé externe (ex: Hook de Blitzcrank) bypasse canSwitchStandard et reste possible.
+    // Bloque uniquement le switch standard du possesseur du terrain (comme Stun) -- un switch
+    // forcé externe (ex: Hook de Blitzcrank) bypasse canSwitchStandard et reste possible.
+    // Seul 'chained' (Chaînes) bloque aussi les switchs forcés, dans zones.switchActive.
     {
       query: 'canSwitchStandard',
       vote(ctx) {

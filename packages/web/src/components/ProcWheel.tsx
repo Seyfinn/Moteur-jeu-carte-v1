@@ -2,10 +2,10 @@ import type { CSSProperties } from 'react';
 import type { ProcRoll } from './gameEvents';
 
 /**
- * Mini-roue de chance : elle ne sort que pour un jet dont le pourcentage vient d'une
- * carte (capacité ou objet qui donne du critique ou de l'esquive). Le taux de base d'un
- * personnage ne la déclenche jamais -- c'est le moteur qui fait le tri, en n'annonçant
- * que les jets « portés par une carte » (voir `rollEvasionAnnounced` / `rollCriticalAnnounced`).
+ * Mini-roue de chance : elle sort pour tout jet à pourcentage porté par une carte --
+ * critique et esquive au taux d'une carte (le taux de base d'un personnage ne la déclenche
+ * jamais, c'est le moteur qui fait le tri), et n'importe quel jet nommé par la carte
+ * elle-même via `ctx.rollChance` (désarmement, stun, silence, poison, redirection...).
  *
  * Deux parts : la part gagnante occupe le pourcentage annoncé, le reste est perdant.
  * L'aiguille s'arrête donc dans une zone qui correspond visuellement à la vraie chance.
@@ -13,6 +13,7 @@ import type { ProcRoll } from './gameEvents';
 const LABEL: Record<ProcRoll['kind'], string> = {
   critical: 'Critique',
   evasion: 'Esquive',
+  chance: 'Effet', // remplacé par le libellé que la carte a donné au jet
 };
 
 function ProcWheelItem({ proc }: { proc: ProcRoll }) {
@@ -36,7 +37,7 @@ function ProcWheelItem({ proc }: { proc: ProcRoll }) {
       <div className="proc-wheel-text">
         <span className="proc-wheel-verdict">{proc.hit ? '✓' : '✗'}</span>
         <span className="proc-wheel-label">
-          {LABEL[proc.kind]}
+          {proc.label ?? LABEL[proc.kind]}
           {proc.percent > 0 && <span className="proc-wheel-percent"> {proc.percent}%</span>}
         </span>
         {proc.characterName && <span className="proc-wheel-who">{proc.characterName}</span>}
