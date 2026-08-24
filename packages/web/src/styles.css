@@ -220,6 +220,43 @@ input::placeholder {
   50%      { transform: rotateY(9deg) rotateX(-9deg) rotateZ(calc(var(--tilt, 0deg) + 9deg)) translate3d(4%, 32%, 0); }
 }
 
+/* Clin d'œil : un petit texte qui traverse le champ de cartes, de loin en loin. Il vit
+   entre les cartes et les voiles, donc le halo et le voile de lisibilité l'estompent
+   comme le reste du décor. */
+.lobby-bg-easter {
+  position: absolute;
+  left: 0;
+  white-space: nowrap;
+  font-family: 'Manrope', 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-size: clamp(0.85rem, 1.6vw, 1.35rem);
+  font-weight: 700;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: rgba(230, 233, 239, 0.17);
+  text-shadow: 0 0 22px rgba(79, 140, 255, 0.3);
+  will-change: transform;
+  animation-name: lobby-bg-easter-drift;
+  animation-timing-function: linear;
+  animation-iteration-count: 1;
+  /* `both` : le texte reste hors cadre avant le premier pas de l'animation, au lieu
+     d'apparaître brutalement au bord droit. */
+  animation-fill-mode: both;
+}
+@keyframes lobby-bg-easter-drift {
+  from {
+    transform: translateX(100vw);
+    opacity: 0;
+  }
+  12%,
+  88% {
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+}
+
 .lobby-bg-glow {
   position: absolute;
   inset: 0;
@@ -246,6 +283,23 @@ input::placeholder {
   .lobby-bg-card,
   .lobby-bg-glow {
     animation: none;
+  }
+  /* Le clin d'œil ne traverse plus l'écran : il se contente de paraître puis de s'effacer,
+     centré. Le couper tout court le rendrait introuvable pour qui limite les animations. */
+  .lobby-bg-easter {
+    left: 50%;
+    transform: translateX(-50%);
+    animation-name: lobby-bg-easter-fade;
+  }
+  @keyframes lobby-bg-easter-fade {
+    0%,
+    100% {
+      opacity: 0;
+    }
+    20%,
+    80% {
+      opacity: 1;
+    }
   }
 }
 
