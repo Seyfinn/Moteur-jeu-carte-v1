@@ -1,157 +1,75 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   DEFAULT_MAX_OBJECTS_PER_TURN,
   DEFAULT_MAX_TERRAINS_PER_TURN,
-  canAttack,
-  canPlayObject,
-  canPlayTerrain,
-  canSwitchStandard,
-  canUseAbility,
-  describeDenials,
-  getCharacterCard,
-  getEffectiveATK,
   getMaxObjectsPerTurn,
   getMaxTerrainsPerTurn,
-  getObjectCard,
-  getTerrainCard,
   otherPlayer,
+  type CharacterInstance,
   type GameState,
   type PlayerId,
   type PlayerState,
-  type Vote,
 } from 'engine';
 import { CharacterCard } from './CharacterCard';
-import { CardFrame, FaceDownCard } from './CardFrame';
+import { CardFrame } from './CardFrame';
 import { ChoiceCountdownBadge, ChoiceModal } from './ChoiceModal';
+import { CommandPanel } from './CommandPanel';
+import { EffectsGlossaryButton } from './EffectsGlossary';
 import { EventLog } from './EventLog';
-import { useHoverCard } from './HoverCard';
-import { hiddenCardDetailBody, objectDetailBody, terrainDetailBody } from './cardDetails';
+import { GraveyardPile } from './GraveyardPile';
+import { OpponentHand, PlayerHand } from './HandFan';
+import { useCardInspect, useHoverCard } from './HoverCard';
+import { characterDetailBody, terrainDetailBody } from './cardDetails';
+import {
+  abilityOptionsFor,
+  characterName,
+  objectDenial,
+  switchOptions,
+  terrainDenial,
+  terrainName,
+  type ActionOption,
+} from './boardActions';
 import { useGameEvents, type CharacterBadge } from './gameEvents';
 import { TableEventBanners } from './gameEventBadges';
 import type { GameConnection } from '../net/useGameConnection';
-import { usePointerCoarse } from '../hooks/usePointerCoarse';
 
-function objectName(cardId: string): string {
-  try {
-    return getObjectCard(cardId).name;
-  } catch {
-    return cardId;
+/**
+ * Abandon. Disponible en permanence, y compris pendant le tour de l'adversaire : c'est
+ * précisément là qu'on décide de quitter une partie (et le bouton « Quitter » d'à côté ne
+ * fait que rendre la main au lobby, sans conclure la partie pour l'autre joueur).
+ * Deux temps, parce que c'est irréversible et que le bouton vit dans la barre du haut.
+ */
+function ForfeitButton({ onForfeit }: { onForfeit: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+
+  useEffect(() => {
+    if (!confirming) return;
+    const timer = setTimeout(() => setConfirming(false), 6000);
+    return () => clearTimeout(timer);
+  }, [confirming]);
+
+  if (!confirming) {
+    return (
+      <button
+        className="board-leave"
+        onClick={() => setConfirming(true)}
+        title="Abandonner : la victoire revient immédiatement à l'adversaire"
+      >
+        Abandonner
+      </button>
+    );
   }
-}
-function terrainName(cardId: string): string {
-  try {
-    return getTerrainCard(cardId).name;
-  } catch {
-    return cardId;
-  }
-}
 
-function ObjectHandTile({ cardId, onPlay }: { cardId: string; onPlay: () => void }) {
-  const hover = useHoverCard();
-  const coarse = usePointerCoarse();
-  const name = objectName(cardId);
   return (
-    <CardFrame
-      cardId={cardId}
-      kind="object"
-      name={name}
-      size="small"
-      onClick={coarse ? () => hover.showCentered({ title: name, body: objectDetailBody(cardId), actionLabel: 'Jouer', onAction: onPlay }) : onPlay}
-      hoverProps={
-        coarse
-          ? undefined
-          : {
-              onMouseEnter: (e) => hover.show({ title: name, body: objectDetailBody(cardId) }, e.currentTarget),
-              onMouseLeave: hover.hide,
-            }
-      }
-      footer={<span className="tile-action-label">Jouer</span>}
-    />
-  );
-}
-
-function TerrainHandTile({ cardId, onPlay }: { cardId: string; onPlay: () => void }) {
-  const hover = useHoverCard();
-  const coarse = usePointerCoarse();
-  const name = terrainName(cardId);
-  return (
-    <CardFrame
-      cardId={cardId}
-      kind="terrain"
-      name={name}
-      size="small"
-      onClick={coarse ? () => hover.showCentered({ title: name, body: terrainDetailBody(cardId), actionLabel: 'Poser', onAction: onPlay }) : onPlay}
-      hoverProps={
-        coarse
-          ? undefined
-          : {
-              onMouseEnter: (e) => hover.show({ title: name, body: terrainDetailBody(cardId) }, e.currentTarget),
-              onMouseLeave: hover.hide,
-            }
-      }
-      footer={<span className="tile-action-label">Poser</span>}
-    />
-  );
-}
-
-function RevealedObjectTile({ cardId }: { cardId: string }) {
-  const hover = useHoverCard();
-  const coarse = usePointerCoarse();
-  const name = objectName(cardId);
-  return (
-    <CardFrame
-      cardId={cardId}
-      kind="object"
-      name={name}
-      size="small"
-      onClick={coarse ? () => hover.showCentered({ title: name, body: objectDetailBody(cardId) }) : undefined}
-      hoverProps={
-        coarse
-          ? undefined
-          : {
-              onMouseEnter: (e) => hover.show({ title: name, body: objectDetailBody(cardId) }, e.currentTarget),
-              onMouseLeave: hover.hide,
-            }
-      }
-    />
-  );
-}
-
-function RevealedTerrainTile({ cardId }: { cardId: string }) {
-  const hover = useHoverCard();
-  const coarse = usePointerCoarse();
-  const name = terrainName(cardId);
-  return (
-    <CardFrame
-      cardId={cardId}
-      kind="terrain"
-      name={name}
-      size="small"
-      onClick={coarse ? () => hover.showCentered({ title: name, body: terrainDetailBody(cardId) }) : undefined}
-      hoverProps={
-        coarse
-          ? undefined
-          : {
-              onMouseEnter: (e) => hover.show({ title: name, body: terrainDetailBody(cardId) }, e.currentTarget),
-              onMouseLeave: hover.hide,
-            }
-      }
-    />
-  );
-}
-
-function HiddenHandTile({ kind }: { kind: 'object' | 'terrain' }) {
-  const hover = useHoverCard();
-  const coarse = usePointerCoarse();
-  const payload = { title: 'Carte cachée', body: hiddenCardDetailBody() };
-  return (
-    <div
-      onMouseEnter={coarse ? undefined : (e) => hover.show(payload, e.currentTarget)}
-      onMouseLeave={coarse ? undefined : hover.hide}
-      onClick={coarse ? () => hover.showCentered(payload) : undefined}
-    >
-      <FaceDownCard />
-    </div>
+    <span className="board-forfeit-confirm">
+      Abandonner ?
+      <button className="board-leave danger" onClick={onForfeit}>
+        Oui
+      </button>
+      <button className="board-leave" onClick={() => setConfirming(false)}>
+        Non
+      </button>
+    </span>
   );
 }
 
@@ -171,433 +89,270 @@ function ActionErrorBanner({ message, onDismiss }: { message: string; onDismiss:
   );
 }
 
-function ActiveTerrainBadge({ cardId, remainingTurns }: { cardId: string; remainingTurns?: number }) {
-  const hover = useHoverCard();
-  const coarse = usePointerCoarse();
-  const name = terrainName(cardId);
+function TerrainSlot({ player }: { player: PlayerState }) {
+  const terrainId = player.activeTerrainInstanceId;
+  const terrain = terrainId ? player.terrains[terrainId] : undefined;
+  const name = terrain ? terrainName(terrain.cardId) : 'Aucun terrain';
+  const inspect = useCardInspect({
+    title: name,
+    card: { cardId: terrain?.cardId ?? '', kind: 'terrain', name },
+    body: terrain ? terrainDetailBody(terrain.cardId) : null,
+  });
+
   return (
-    <CardFrame
-      cardId={cardId}
-      kind="terrain"
-      name={name}
-      size="small"
-      onClick={coarse ? () => hover.showCentered({ title: name, body: terrainDetailBody(cardId) }) : undefined}
-      hoverProps={
-        coarse
-          ? undefined
-          : {
-              onMouseEnter: (e) => hover.show({ title: name, body: terrainDetailBody(cardId) }, e.currentTarget),
-              onMouseLeave: hover.hide,
-            }
-      }
-      // How long a terrain still has to run drives most decisions around it, and it was
-      // only readable by counting turns by hand.
-      footer={
-        <span className="terrain-remaining">
-          {remainingTurns === undefined ? '∞' : `${remainingTurns} tour${remainingTurns > 1 ? 's' : ''}`}
-        </span>
-      }
-    />
+    <div className="terrain-slot-zone">
+      <span className="zone-label">Magie active</span>
+      {terrain ? (
+        <CardFrame
+          cardId={terrain.cardId}
+          kind="terrain"
+          name={name}
+          size="small"
+          {...inspect}
+          // La durée restante d'un terrain commande la plupart des décisions autour de
+          // lui, et elle n'était lisible qu'en comptant les tours à la main.
+          footer={
+            <span className="terrain-remaining">
+              {terrain.remainingTurns === undefined
+                ? '∞'
+                : `${terrain.remainingTurns} tour${terrain.remainingTurns > 1 ? 's' : ''}`}
+            </span>
+          }
+        />
+      ) : (
+        <span className="terrain-badge empty">Aucun</span>
+      )}
+    </div>
   );
 }
 
-const MIN_BENCH_SLOTS = 6;
-const MIN_HAND_SLOTS = 6;
+function Nameplate({
+  label,
+  alive,
+  total,
+  isSelf,
+  isTheirTurn,
+}: {
+  label: string;
+  alive: number;
+  total: number;
+  isSelf: boolean;
+  isTheirTurn: boolean;
+}) {
+  return (
+    <div className={`nameplate${isSelf ? ' self' : ' opponent'}${isTheirTurn ? ' active-turn' : ''}`}>
+      <span className="nameplate-name">{label}</span>
+      <span className="nameplate-meta">
+        <span title="Personnages encore en jeu">
+          {alive}/{total} perso
+        </span>
+        {isTheirTurn && <span className="nameplate-turn-pill">joue</span>}
+      </span>
+    </div>
+  );
+}
 
-type HandSlotDef =
-  | { kind: 'object'; id: string; cardId: string }
-  | { kind: 'terrain'; id: string; cardId: string }
-  | { kind: 'hidden-object'; id: string }
-  | { kind: 'hidden-terrain'; id: string };
+function ActiveSlot({
+  char,
+  badges,
+  side,
+}: {
+  char: CharacterInstance | undefined;
+  badges?: CharacterBadge[];
+  side: 'self' | 'opponent';
+}) {
+  if (!char) {
+    return <div className={`active-slot empty ${side}`}>Aucun personnage actif</div>;
+  }
+  return (
+    <div className={`active-slot ${side}`}>
+      <CharacterCard char={char} isActive isKOable size="large" orientation="landscape" badges={badges} />
+    </div>
+  );
+}
 
-function PlayerZone({
+/**
+ * Mini-menu d'un personnage de réserve : de quoi le renvoyer au combat ou déclencher à
+ * distance une capacité marquée `usableFromBench`, sans passer par une barre d'action.
+ */
+function BenchMenu({
+  name,
+  options,
+  onClose,
+  onDetails,
+}: {
+  name: string;
+  options: ActionOption[];
+  onClose: () => void;
+  onDetails: () => void;
+}) {
+  const hover = useHoverCard();
+
+  return (
+    <div className="bench-menu">
+      <div className="bench-menu-head">{name}</div>
+      {options.length === 0 && <p className="bench-menu-empty">Rien à déclencher d'ici.</p>}
+      {options.map((option) => (
+        <button
+          key={option.key}
+          className={`bench-menu-item${option.disabledReason ? ' blocked' : ''}`}
+          disabled={Boolean(option.disabledReason)}
+          title={option.disabledReason ?? undefined}
+          onClick={() => {
+            option.run();
+            onClose();
+          }}
+          onMouseEnter={(e) => option.hover && hover.show(option.hover, e.currentTarget)}
+          onMouseLeave={hover.hide}
+        >
+          <span className="bench-menu-item-label">{option.label}</span>
+          {option.disabledReason ? (
+            <span className="bench-menu-item-detail blocked">{option.disabledReason}</span>
+          ) : (
+            option.detail && <span className="bench-menu-item-detail">{option.detail}</span>
+          )}
+        </button>
+      ))}
+      <button
+        className="bench-menu-item ghost"
+        onClick={() => {
+          onDetails();
+          onClose();
+        }}
+      >
+        <span className="bench-menu-item-label">🔍 Voir la carte</span>
+      </button>
+    </div>
+  );
+}
+
+function SelfBenchCard({
+  char,
+  badges,
+  state,
+  you,
+  conn,
+  turnGate,
+  isOpen,
+  onToggle,
+  onClose,
+}: {
+  char: CharacterInstance;
+  badges?: CharacterBadge[];
+  state: GameState;
+  you: PlayerId;
+  conn: GameConnection;
+  turnGate: string | null;
+  isOpen: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+}) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const name = characterName(char.cardId);
+  const inspect = useCardInspect({
+    id: char.instanceId,
+    title: name,
+    card: { cardId: char.cardId, kind: 'character', name },
+    body: characterDetailBody(char.cardId, char),
+  });
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [isOpen, onClose]);
+
+  // Le tour de l'adversaire est la raison dominante : elle passe devant un stun ou une
+  // limite d'usage, qui n'apprendraient rien tant que la main n'est pas à nous.
+  const gate = (option: ActionOption): ActionOption => ({
+    ...option,
+    disabledReason: turnGate ?? option.disabledReason,
+  });
+  const options = [
+    ...switchOptions(state, you, conn)
+      .filter((option) => option.key === char.instanceId)
+      .map((option) => gate({ ...option, label: '🔁 Envoyer au combat', detail: undefined })),
+    ...abilityOptionsFor(state, you, conn, char.instanceId).map((option) =>
+      gate({ ...option, label: `✨ ${option.label}`, sub: undefined })
+    ),
+  ];
+
+  return (
+    <div className="bench-card-wrap" ref={wrapRef}>
+      <CharacterCard
+        char={char}
+        isActive={false}
+        isKOable
+        size="small"
+        badges={badges}
+        selected={isOpen}
+        onSelect={onToggle}
+      />
+      {isOpen && <BenchMenu name={name} options={options} onClose={onClose} onDetails={inspect.onClick} />}
+    </div>
+  );
+}
+
+function BenchRow({
   player,
   isSelf,
-  label,
-  isTheirTurn,
-  conn,
   badgesByCharacter,
+  state,
+  you,
+  conn,
+  turnGate,
 }: {
   player: PlayerState;
   isSelf: boolean;
-  label: string;
-  isTheirTurn: boolean;
-  conn: GameConnection;
   badgesByCharacter: Map<string, CharacterBadge[]>;
+  state: GameState;
+  you: PlayerId;
+  conn: GameConnection;
+  turnGate: string | null;
 }) {
-  const active = player.activeCharacterInstanceId ? player.characters[player.activeCharacterInstanceId] : undefined;
-  const bench = player.benchCharacterInstanceIds.map((id) => player.characters[id]!);
-  const graveyard = player.graveyardCharacterInstanceIds.map((id) => player.characters[id]!);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const bench = player.benchCharacterInstanceIds
+    .map((id) => player.characters[id])
+    .filter((char): char is CharacterInstance => char !== undefined);
 
-  // Card identity is visible whenever the state we received actually carries the
-  // instance data -- true for our own hand, and for the opponent's hand once
-  // revealed (e.g. Kirigiri's "Ultimate Détective"); otherwise `getPlayerView`
-  // stripped it down to an unresolvable placeholder id.
-  const handSlots: HandSlotDef[] = [
-    ...player.unplayedObjectInstanceIds.map((id): HandSlotDef => {
-      const obj = player.objects[id];
-      return obj ? { kind: 'object', id, cardId: obj.cardId } : { kind: 'hidden-object', id };
-    }),
-    ...player.unplayedTerrainInstanceIds.map((id): HandSlotDef => {
-      const terrain = player.terrains[id];
-      return terrain ? { kind: 'terrain', id, cardId: terrain.cardId } : { kind: 'hidden-terrain', id };
-    }),
-  ];
+  // Un mini-menu ouvert sur un personnage qui vient de partir au combat (ou de mourir)
+  // n'a plus de carte sous lui : le refermer plutôt que le laisser flotter.
+  useEffect(() => {
+    if (openId && !player.benchCharacterInstanceIds.includes(openId)) setOpenId(null);
+  }, [openId, player.benchCharacterInstanceIds]);
 
-  const benchEmptyCount = Math.max(0, MIN_BENCH_SLOTS - bench.length);
-  const handEmptyCount = Math.max(0, MIN_HAND_SLOTS - handSlots.length);
-
-  const benchRow = (
-    <div className="slot-row bench-slot-row">
-      {bench.map((char) => (
-        <div className="card-slot bench-slot" key={char.instanceId}>
-          <CharacterCard char={char} isActive={false} isKOable size="small" badges={badgesByCharacter.get(char.instanceId)} />
-        </div>
-      ))}
-      {Array.from({ length: benchEmptyCount }).map((_, i) => (
-        <div className="card-slot bench-slot empty" key={`bench-empty-${i}`} />
-      ))}
-    </div>
-  );
-
-  const handRow = (
-    <div className="slot-row hand-slot-row">
-      {handSlots.map((slot) => (
-        <div className="card-slot hand-slot" key={slot.id}>
-          {slot.kind === 'object' &&
-            (isSelf ? (
-              <ObjectHandTile cardId={slot.cardId} onPlay={() => conn.applyAction({ kind: 'play-object', objectInstanceId: slot.id })} />
-            ) : (
-              <RevealedObjectTile cardId={slot.cardId} />
-            ))}
-          {slot.kind === 'terrain' &&
-            (isSelf ? (
-              <TerrainHandTile cardId={slot.cardId} onPlay={() => conn.applyAction({ kind: 'play-terrain', terrainInstanceId: slot.id })} />
-            ) : (
-              <RevealedTerrainTile cardId={slot.cardId} />
-            ))}
-          {slot.kind === 'hidden-object' && <HiddenHandTile kind="object" />}
-          {slot.kind === 'hidden-terrain' && <HiddenHandTile kind="terrain" />}
-        </div>
-      ))}
-      {Array.from({ length: handEmptyCount }).map((_, i) => (
-        <div className="card-slot hand-slot empty" key={`hand-empty-${i}`} />
-      ))}
-    </div>
-  );
-
-  const centerRow = (
-    <div className="center-row">
-      <div className="graveyard-zone">
-        <span className="zone-label">Cimetière</span>
-        <div className="graveyard-cards">
-          {graveyard.length === 0 && <span className="zone-count-empty">—</span>}
-          {graveyard.map((char) => (
-            <div className="graveyard-thumb" key={char.instanceId}>
-              <CharacterCard char={char} isActive={false} isKOable size="small" />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="active-character-zone">
-        {active && <CharacterCard char={active} isActive isKOable badges={badgesByCharacter.get(active.instanceId)} />}
-      </div>
-
-      <div className="terrain-zone">
-        <span className="zone-label">Magie active</span>
-        {player.activeTerrainInstanceId ? (
-          <ActiveTerrainBadge
-            cardId={player.terrains[player.activeTerrainInstanceId]!.cardId}
-            remainingTurns={player.terrains[player.activeTerrainInstanceId]!.remainingTurns}
+  return (
+    <div className={`bench-row${isSelf ? ' self' : ' opponent'}`}>
+      {bench.length === 0 && <span className="bench-row-empty">Banc vide</span>}
+      {bench.map((char) =>
+        isSelf ? (
+          <SelfBenchCard
+            key={char.instanceId}
+            char={char}
+            badges={badgesByCharacter.get(char.instanceId)}
+            state={state}
+            you={you}
+            conn={conn}
+            turnGate={turnGate}
+            isOpen={openId === char.instanceId}
+            onToggle={() => setOpenId((prev) => (prev === char.instanceId ? null : char.instanceId))}
+            onClose={() => setOpenId(null)}
           />
         ) : (
-          <span className="terrain-badge empty">Aucun</span>
-        )}
-      </div>
-    </div>
-  );
-
-  const alive = bench.length + (active ? 1 : 0);
-  // Denominator from the full roster, not alive+graveyard: during setup nobody is on the
-  // board yet and the counter read a meaningless "0/0".
-  const total = Object.keys(player.characters).length;
-
-  return (
-    <div className={`player-zone player-mat${isSelf ? ' self' : ' opponent'}${isTheirTurn ? ' active-turn' : ''}`}>
-      <h2 className="player-zone-head">
-        <span className="player-zone-name">{label}</span>
-        <span className="player-zone-meta">
-          <span title="Personnages encore en jeu">{alive}/{total} perso</span>
-          {isTheirTurn && <span className="player-zone-turn-pill">joue</span>}
-        </span>
-      </h2>
-      {isSelf ? (
-        <>
-          {centerRow}
-          {benchRow}
-          {handRow}
-        </>
-      ) : (
-        <>
-          {handRow}
-          {benchRow}
-          {centerRow}
-        </>
+          <div className="bench-card-wrap" key={char.instanceId}>
+            <CharacterCard
+              char={char}
+              isActive={false}
+              isKOable
+              size="small"
+              badges={badgesByCharacter.get(char.instanceId)}
+            />
+          </div>
+        )
       )}
-    </div>
-  );
-}
-
-interface MenuOption {
-  key: string;
-  label: string;
-  detail?: string;
-  hover?: { title: string; subtitle?: string; body: ReactNode };
-  /** Non-null when the engine would reject this action right now -- shown instead of firing it. */
-  disabledReason?: string | null;
-  run: () => void;
-}
-
-function ActionMenuButton({
-  label,
-  options,
-  autoFireSingle,
-  emptyMessage,
-  isOpen,
-  onOpen,
-  onClose,
-}: {
-  label: string;
-  options: MenuOption[];
-  autoFireSingle?: boolean;
-  emptyMessage?: string;
-  isOpen: boolean;
-  onOpen: () => void;
-  onClose: () => void;
-}) {
-  const hover = useHoverCard();
-  if (options.length === 0 && !emptyMessage) return null;
-
-  const playable = options.filter((opt) => !opt.disabledReason);
-  const allBlocked = options.length > 0 && playable.length === 0;
-
-  const handleClick = () => {
-    // Auto-firing only makes sense when there is exactly one *playable* option; with a
-    // single blocked one, open the menu so the player can read why it's blocked.
-    if (autoFireSingle && playable.length === 1 && options.length === 1) {
-      playable[0]!.run();
-      return;
-    }
-    isOpen ? onClose() : onOpen();
-  };
-
-  return (
-    <div className="menu-item">
-      <button
-        className={`menu-button${isOpen ? ' menu-button-open' : ''}${allBlocked ? ' menu-button-blocked' : ''}`}
-        onClick={handleClick}
-      >
-        {label}
-      </button>
-      {isOpen && (
-        <div className="menu-dropdown">
-          {options.length === 0 && <p className="menu-dropdown-empty">{emptyMessage}</p>}
-          {options.map((opt) => (
-            <button
-              key={opt.key}
-              className="menu-dropdown-option"
-              disabled={Boolean(opt.disabledReason)}
-              title={opt.disabledReason ?? undefined}
-              onClick={() => {
-                opt.run();
-                onClose();
-              }}
-              onMouseEnter={(e) => opt.hover && hover.show(opt.hover, e.currentTarget)}
-              onMouseLeave={hover.hide}
-            >
-              <span>{opt.label}</span>
-              {opt.disabledReason ? (
-                <span className="menu-dropdown-option-detail blocked">{opt.disabledReason}</span>
-              ) : (
-                opt.detail && <span className="menu-dropdown-option-detail">{opt.detail}</span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ActionMenu({ state, you, conn }: { state: GameState; you: PlayerId; conn: GameConnection }) {
-  const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const barRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!openMenu) return;
-    const onClickOutside = (e: MouseEvent) => {
-      if (barRef.current && !barRef.current.contains(e.target as Node)) setOpenMenu(null);
-    };
-    document.addEventListener('mousedown', onClickOutside);
-    return () => document.removeEventListener('mousedown', onClickOutside);
-  }, [openMenu]);
-
-  const player = state.players[you];
-  const isMyTurn = state.activePlayerId === you && state.phase === 'main' && !state.pendingChoice;
-  if (!isMyTurn) return null;
-
-  const activeId = player.activeCharacterInstanceId;
-  const activeChar = activeId ? player.characters[activeId] : undefined;
-  const activeDef = activeChar ? getCharacterCard(activeChar.cardId) : undefined;
-
-  /**
-   * The same permission queries the server runs, so a blocked action is greyed out with
-   * its reason instead of bouncing back as an error. Evaluated against the redacted
-   * player view, so it is wrapped: a query that can't resolve something client-side must
-   * degrade to "allowed" (the server stays the authority) rather than crash the board.
-   */
-  const denial = (evaluate: () => { allow: boolean; votes: Vote[] }): string | null => {
-    try {
-      const result = evaluate();
-      return result.allow ? null : describeDenials(result.votes) || 'action impossible';
-    } catch {
-      return null;
-    }
-  };
-
-  const attackDenial = activeId ? denial(() => canAttack(state, activeId)) : 'aucun personnage actif';
-  const attackOptions: MenuOption[] =
-    activeDef && activeId
-      ? activeDef.attacks.map((attack) => {
-          // Effective ATK, not the printed one: buffs, debuffs and stacking passives
-          // (Berserk, Enervement, Potion force, Adrénaline...) all land here, and the
-          // player had no way to see the number they were actually about to deal.
-          let effective = attack.baseATK;
-          try {
-            effective = getEffectiveATK(state, activeId, attack.baseATK);
-          } catch {
-            /* client-side view can't resolve it -- fall back to the printed value */
-          }
-          const suffix = effective === attack.baseATK ? '' : ` (base ${attack.baseATK})`;
-          return {
-            key: attack.id,
-            label: attack.name,
-            detail: `${effective} ATK`,
-            disabledReason: attackDenial,
-            hover: { title: attack.name, subtitle: `${effective} ATK${suffix}`, body: <p>{attack.description}</p> },
-            run: () => conn.applyAction({ kind: 'attack', characterInstanceId: activeId, attackId: attack.id }),
-          };
-        })
-      : [];
-
-  // Abilities flagged `usableFromBench` are legal from the bench, but only the active
-  // character's menu used to be built -- so cards like Todo's "Boogie Woogie" or
-  // Chopper's "Traque" were simply unreachable while benched.
-  const abilityHolders = [
-    ...(activeId ? [{ id: activeId, benched: false }] : []),
-    ...player.benchCharacterInstanceIds.map((id) => ({ id, benched: true })),
-  ];
-  const abilityOptions: MenuOption[] = abilityHolders.flatMap(({ id, benched }) => {
-    const char = player.characters[id];
-    if (!char) return [];
-    const def = getCharacterCard(char.cardId);
-    return def.abilities
-      .filter((ability) => ability.kind === 'active' && !ability.trigger && (!benched || ability.usableFromBench))
-      .map((ability) => ({
-        key: `${id}:${ability.id}`,
-        label: benched ? `${ability.name} — ${def.name}` : ability.name,
-        disabledReason: denial(() => canUseAbility(state, id, ability)),
-        hover: { title: ability.name, subtitle: `${def.name} · ${ability.kind}`, body: <p>{ability.description}</p> },
-        run: () => conn.applyAction({ kind: 'use-ability', characterInstanceId: id, abilityId: ability.id }),
-      }));
-  });
-
-  const objectDenial = denial(() => canPlayObject(state, you));
-  const objectOptions: MenuOption[] = player.unplayedObjectInstanceIds.map((id) => {
-    const cardId = player.objects[id]!.cardId;
-    const name = objectName(cardId);
-    return {
-      key: id,
-      label: name,
-      disabledReason: objectDenial,
-      hover: { title: name, body: objectDetailBody(cardId) },
-      run: () => conn.applyAction({ kind: 'play-object', objectInstanceId: id }),
-    };
-  });
-
-  const terrainDenial = denial(() => canPlayTerrain(state, you));
-  const terrainOptions: MenuOption[] = player.unplayedTerrainInstanceIds.map((id) => {
-    const cardId = player.terrains[id]!.cardId;
-    const name = terrainName(cardId);
-    return {
-      key: id,
-      label: name,
-      disabledReason: terrainDenial,
-      hover: { title: name, body: terrainDetailBody(cardId) },
-      run: () => conn.applyAction({ kind: 'play-terrain', terrainInstanceId: id }),
-    };
-  });
-
-  const switchDenial = activeId ? denial(() => canSwitchStandard(state, activeId)) : 'aucun personnage actif';
-  const switchOptions: MenuOption[] = player.benchCharacterInstanceIds.map((id) => {
-    const name = getCharacterCard(player.characters[id]!.cardId).name;
-    return {
-      key: id,
-      label: name,
-      disabledReason: switchDenial,
-      run: () => conn.applyAction({ kind: 'switch', newActiveInstanceId: id }),
-    };
-  });
-
-  return (
-    <div className="menu-bar" ref={barRef}>
-      <ActionMenuButton
-        label="Attaque"
-        options={attackOptions}
-        autoFireSingle
-        isOpen={openMenu === 'attack'}
-        onOpen={() => setOpenMenu('attack')}
-        onClose={() => setOpenMenu(null)}
-      />
-      {/* Deliberately NOT autoFireSingle: abilities are heterogeneous and often costly
-          (a once-per-game ultimate, a bench ally paying 100 HP for a heal). Firing the
-          only available one straight off the button spent it with no confirmation and no
-          chance to read what it does. */}
-      <ActionMenuButton
-        label="Capacité"
-        options={abilityOptions}
-        emptyMessage="Pas de capacité activable"
-        isOpen={openMenu === 'ability'}
-        onOpen={() => setOpenMenu('ability')}
-        onClose={() => setOpenMenu(null)}
-      />
-      <ActionMenuButton
-        label="Objet"
-        options={objectOptions}
-        isOpen={openMenu === 'object'}
-        onOpen={() => setOpenMenu('object')}
-        onClose={() => setOpenMenu(null)}
-      />
-      <ActionMenuButton
-        label="Terrain"
-        options={terrainOptions}
-        isOpen={openMenu === 'terrain'}
-        onOpen={() => setOpenMenu('terrain')}
-        onClose={() => setOpenMenu(null)}
-      />
-      <ActionMenuButton
-        label="Switch"
-        options={switchOptions}
-        isOpen={openMenu === 'switch'}
-        onOpen={() => setOpenMenu('switch')}
-        onClose={() => setOpenMenu(null)}
-      />
-      <div className="menu-item menu-item-pass">
-        <button className="menu-button pass-button" onClick={() => conn.applyAction({ kind: 'pass' })}>
-          Passer
-        </button>
-      </div>
     </div>
   );
 }
@@ -607,14 +362,25 @@ export function Board({ conn }: { conn: GameConnection }) {
   const you = conn.you!;
   const opponentId = otherPlayer(you);
   const { badgesByCharacter, tableEvents } = useGameEvents(state);
+  // Un refus que le client a vu venir (jouer une carte hors de son tour, deuxième terrain
+  // du tour...) : il n'atteint jamais le serveur, donc il n'apparaît pas dans conn.error.
+  const [localError, setLocalError] = useState<string | null>(null);
 
   if (state.result) {
+    // Une victoire par abandon se lit autrement qu'une victoire au plateau : sans le
+    // dire, le gagnant voit « Vous avez gagné » sans comprendre pourquoi la partie
+    // s'est arrêtée net.
+    const forfeited = state.result.kind === 'win' && state.result.reason === 'forfeit';
     const message =
       state.result.kind === 'draw'
         ? 'Égalité parfaite !'
         : state.result.winner === you
-          ? 'Vous avez gagné !'
-          : 'Vous avez perdu.';
+          ? forfeited
+            ? `${state.players[opponentId].displayName || 'Adversaire'} a abandonné — vous gagnez !`
+            : 'Vous avez gagné !'
+          : forfeited
+            ? 'Vous avez abandonné la partie.'
+            : 'Vous avez perdu.';
     return (
       <div className="board">
         <h1 className="result-banner">{message}</h1>
@@ -628,8 +394,12 @@ export function Board({ conn }: { conn: GameConnection }) {
 
   const pendingChoice = state.pendingChoice;
   const me = state.players[you];
+  const opponent = state.players[opponentId];
   const myTurn = state.activePlayerId === you;
-  const opponentName = state.players[opponentId].displayName || 'Adversaire';
+  const opponentName = opponent.displayName || 'Adversaire';
+  const canAct = myTurn && state.phase === 'main' && !pendingChoice;
+  const turnGate = canAct ? null : pendingChoice ? 'choix en cours' : "ce n'est pas votre tour";
+
   // Same queries the engine uses, so the counters can never disagree with what the
   // server will actually accept. Wrapped: a query that can't resolve client-side must
   // degrade to the default rather than blank the header.
@@ -643,6 +413,13 @@ export function Board({ conn }: { conn: GameConnection }) {
   const maxObjects = safe(() => getMaxObjectsPerTurn(state, you), DEFAULT_MAX_OBJECTS_PER_TURN);
   const maxTerrains = safe(() => getMaxTerrainsPerTurn(state, you), DEFAULT_MAX_TERRAINS_PER_TURN);
 
+  const activeOf = (player: PlayerState) =>
+    player.activeCharacterInstanceId ? player.characters[player.activeCharacterInstanceId] : undefined;
+  const aliveOf = (player: PlayerState) =>
+    player.benchCharacterInstanceIds.length + (player.activeCharacterInstanceId ? 1 : 0);
+
+  const errorMessage = conn.error ?? localError;
+
   return (
     <div className="board">
       <header className={`board-header${myTurn ? ' my-turn' : ''}`}>
@@ -653,44 +430,121 @@ export function Board({ conn }: { conn: GameConnection }) {
           Tour {state.turnNumber} · <strong>{myTurn ? 'à vous de jouer' : `${opponentName} joue`}</strong>
         </span>
         <span className="board-header-budget" title="Cartes encore jouables pendant votre tour">
-          🎒 {Math.max(0, maxObjects - me.objectsPlayedThisTurn)} · 🗺️ {Math.max(0, maxTerrains - me.terrainsPlayedThisTurn)}
+          🎒 {Math.max(0, maxObjects - me.objectsPlayedThisTurn)} · 🗺️{' '}
+          {Math.max(0, maxTerrains - me.terrainsPlayedThisTurn)}
         </span>
+        <EffectsGlossaryButton />
         {/* Leaving was only possible from the result screen: a player whose opponent
             never comes back had no way out short of reloading. */}
+        <ForfeitButton onForfeit={conn.forfeit} />
         <button className="board-leave" onClick={conn.leave} title="Quitter la partie et revenir au lobby">
           Quitter
         </button>
       </header>
 
       {conn.opponentDisconnected && <p className="warning">L'adversaire s'est déconnecté.</p>}
-      {conn.error && <ActionErrorBanner message={conn.error} onDismiss={conn.clearError} />}
+      {errorMessage && (
+        <ActionErrorBanner
+          message={errorMessage}
+          onDismiss={() => {
+            setLocalError(null);
+            conn.clearError();
+          }}
+        />
+      )}
 
       <TableEventBanners events={tableEvents} />
 
-      <div className="board-scroll">
-        <div className="board-grid">
-          <PlayerZone
-            player={state.players[opponentId]}
-            isSelf={false}
-            label={opponentName}
-            isTheirTurn={!myTurn}
-            conn={conn}
-            badgesByCharacter={badgesByCharacter}
-          />
-          <PlayerZone
-            player={state.players[you]}
-            isSelf
-            label={`${state.players[you].displayName || 'Vous'} (vous)`}
-            isTheirTurn={myTurn}
-            conn={conn}
-            badgesByCharacter={badgesByCharacter}
-          />
-        </div>
+      <div className="arena">
+        <OpponentHand player={opponent} />
 
-        <EventLog log={state.log} you={you} />
+        <div className="battlefield">
+          <div className="rail rail-self">
+            <GraveyardPile player={me} title="Votre cimetière" />
+            <TerrainSlot player={me} />
+          </div>
+
+          <div className="zone zone-plate-self">
+            <Nameplate
+              label={`${me.displayName || 'Vous'} (vous)`}
+              alive={aliveOf(me)}
+              // Dénominateur pris sur le roster complet, pas sur vivants+cimetière : pendant
+              // la mise en place personne n'est encore sur le plateau et le compteur
+              // affichait un « 0/0 » qui ne veut rien dire.
+              total={Object.keys(me.characters).length}
+              isSelf
+              isTheirTurn={myTurn}
+            />
+          </div>
+
+          <div className="zone zone-active-self">
+            <ActiveSlot
+              char={activeOf(me)}
+              badges={badgesByCharacter.get(me.activeCharacterInstanceId ?? '')}
+              side="self"
+            />
+          </div>
+
+          <div className="zone zone-lower-self">
+            <CommandPanel state={state} you={you} conn={conn} />
+            <BenchRow
+              player={me}
+              isSelf
+              badgesByCharacter={badgesByCharacter}
+              state={state}
+              you={you}
+              conn={conn}
+              turnGate={turnGate}
+            />
+          </div>
+
+          <div className="zone zone-bench-opp">
+            <BenchRow
+              player={opponent}
+              isSelf={false}
+              badgesByCharacter={badgesByCharacter}
+              state={state}
+              you={you}
+              conn={conn}
+              turnGate={turnGate}
+            />
+          </div>
+
+          <div className="zone zone-active-opp">
+            <ActiveSlot
+              char={activeOf(opponent)}
+              badges={badgesByCharacter.get(opponent.activeCharacterInstanceId ?? '')}
+              side="opponent"
+            />
+          </div>
+
+          <div className="zone zone-plate-opp">
+            <Nameplate
+              label={opponentName}
+              alive={aliveOf(opponent)}
+              total={Object.keys(opponent.characters).length}
+              isSelf={false}
+              isTheirTurn={!myTurn}
+            />
+          </div>
+
+          <div className="rail rail-opp">
+            <GraveyardPile player={opponent} title="Cimetière adverse" />
+            <TerrainSlot player={opponent} />
+          </div>
+        </div>
       </div>
 
-      <ActionMenu state={state} you={you} conn={conn} />
+      <PlayerHand
+        player={me}
+        objectDenial={turnGate ?? objectDenial(state, you)}
+        terrainDenial={turnGate ?? terrainDenial(state, you)}
+        onPlayObject={(objectInstanceId) => conn.applyAction({ kind: 'play-object', objectInstanceId })}
+        onPlayTerrain={(terrainInstanceId) => conn.applyAction({ kind: 'play-terrain', terrainInstanceId })}
+        onBlocked={setLocalError}
+      />
+
+      <EventLog log={state.log} you={you} />
 
       {pendingChoice && pendingChoice.playerId === you && (
         <ChoiceModal

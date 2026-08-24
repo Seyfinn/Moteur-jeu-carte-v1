@@ -12,8 +12,7 @@ export const rengoku: CharacterCardDef = {
       id: 'souffle-du-feu',
       name: 'Souffle du feu',
       baseATK: 30,
-      description:
-        "Inflige 30 dégâts à l'actif adverse et, si le coup touche, le met en Brûlure pendant 2 tours. Retoucher une cible déjà en feu prolonge la brûlure au lieu d'en ajouter une deuxième.",
+      description: "Inflige 30 dégâts à l'actif adverse et, si le coup touche, le met en Brûlure pendant 2 tours.",
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;

@@ -191,6 +191,16 @@ export class Room {
     }
   }
 
+  /** Abandon : contrairement à une action, il n'attend ni le tour du joueur ni la fin d'un choix. */
+  handleForfeit(playerId: PlayerId): void {
+    if (!this.match) return;
+    const result = this.match.forfeit(playerId);
+    if (!result.ok) {
+      const socket = this.sockets[playerId];
+      if (socket) send(socket, { type: 'error', message: result.error });
+    }
+  }
+
   handleAnswerChoice(playerId: PlayerId, choiceId: string, answer: Parameters<Match['answerChoice']>[2]): void {
     if (!this.match) return;
     const result = this.match.answerChoice(playerId, choiceId, answer);

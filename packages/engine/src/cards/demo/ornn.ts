@@ -57,7 +57,7 @@ export const ornn: CharacterCardDef = {
       id: 'living-forge',
       name: 'Living Forge',
       kind: 'active',
-      description: `Ornn se bloque sur le poste actif pendant ${LOCK_EFFECTIVE_TURNS} tours (ne peut ni attaquer ni switch). S'il est toujours vivant à l'issue, récupère un objet ou terrain au choix parmi les 4 cimetières (les vôtres et ceux de l'adversaire). Nécessite d'avoir utilisé "Récupération de matériaux" au préalable.`,
+      description: `Ornn se bloque sur le poste actif pendant ${LOCK_EFFECTIVE_TURNS} tours (ne peut ni attaquer ni switch). S'il est toujours vivant à l'issue, récupère un objet ou terrain au choix parmi les 4 cimetières.`,
       condition(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);
         if (!hasStatus(self, MATERIALS_STATUS_ID)) return false;

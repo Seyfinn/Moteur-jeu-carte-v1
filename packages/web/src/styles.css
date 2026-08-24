@@ -136,39 +136,248 @@ input::placeholder {
   color: var(--text-dim);
 }
 
-/* Lobby */
-.lobby-layout {
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 24px;
-  max-width: 800px;
-  margin: 0 auto;
-  /* body is overflow:hidden, so every top-level screen has to own its own scrolling --
-     otherwise anything past the fold is unreachable on a short viewport. */
+/* ==========================================================================
+   Salon (lobby) -- ambiance « menu de jeu de cartes » : un décor de cartes qui
+   dérivent au loin, et des panneaux de verre posés par-dessus.
+   ========================================================================== */
+
+.lobby-screen {
+  position: relative;
+  /* body est en overflow:hidden : chaque écran de premier niveau porte son propre
+     défilement, sinon tout ce qui dépasse est inatteignable sur un écran court. */
   height: 100dvh;
   overflow-y: auto;
-  padding: 6vh 16px 32px;
+  overflow-x: hidden;
+  /* Presque noir : tout le contraste de l'interface se joue contre ce fond, et le
+     décor animé ne doit jamais rivaliser avec le texte posé dessus. */
+  background: #05060a;
 }
-.lobby {
-  width: 480px;
-  max-width: 480px;
+
+/* -- Décor animé ---------------------------------------------------------- */
+
+.lobby-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  perspective: 1400px;
+}
+.lobby-bg-field {
+  position: absolute;
+  /* Débordement volontaire : les cartes dérivent hors cadre, on ne veut pas voir
+     apparaître de bande vide sur les bords. */
+  inset: -12% -8%;
+  transform-style: preserve-3d;
+}
+.lobby-bg-card {
+  position: absolute;
+  aspect-ratio: 3 / 4;
+  /* Propriété `translate` indépendante plutôt que `transform: translate(-50%, -50%)` :
+     `transform` est déjà pris par l'animation, et les deux se composent sans se battre. */
+  translate: -50% -50%;
+  animation-name: lobby-drift-0;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+.lobby-bg-card-1 { animation-name: lobby-drift-1; }
+.lobby-bg-card-2 { animation-name: lobby-drift-2; }
+.lobby-bg-card-3 { animation-name: lobby-drift-3; }
+.lobby-bg-card-4 { animation-name: lobby-drift-4; }
+
+/* Le flou vit ici, sur un enfant immobile dans son parent : le navigateur rasterise la
+   texture floutée une fois et se contente de la recomposer. Flouter l'élément animé
+   lui-même referait le flou à chaque image. */
+.lobby-bg-card-art {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background-size: cover;
+  background-position: center 28%;
+  background-color: #10131c;
+  box-shadow: 0 30px 60px -18px rgba(0, 0, 0, 0.95);
+}
+
+@keyframes lobby-drift-0 {
+  0%, 100% { transform: rotateY(-16deg) rotateX(6deg) rotateZ(var(--tilt, 0deg)) translate3d(0, 0, 0); }
+  50%      { transform: rotateY(12deg) rotateX(-7deg) rotateZ(calc(var(--tilt, 0deg) + 7deg)) translate3d(7%, -30%, 0); }
+}
+@keyframes lobby-drift-1 {
+  0%, 100% { transform: rotateY(14deg) rotateX(-5deg) rotateZ(var(--tilt, 0deg)) translate3d(0, 0, 0); }
+  50%      { transform: rotateY(-13deg) rotateX(8deg) rotateZ(calc(var(--tilt, 0deg) - 8deg)) translate3d(-9%, 26%, 0); }
+}
+@keyframes lobby-drift-2 {
+  0%, 100% { transform: rotateY(-9deg) rotateX(-8deg) rotateZ(var(--tilt, 0deg)) translate3d(0, 0, 0); }
+  50%      { transform: rotateY(18deg) rotateX(9deg) rotateZ(calc(var(--tilt, 0deg) + 5deg)) translate3d(11%, 18%, 0); }
+}
+@keyframes lobby-drift-3 {
+  0%, 100% { transform: rotateY(10deg) rotateX(9deg) rotateZ(var(--tilt, 0deg)) translate3d(0, 0, 0); }
+  50%      { transform: rotateY(-17deg) rotateX(-6deg) rotateZ(calc(var(--tilt, 0deg) - 6deg)) translate3d(-6%, -24%, 0); }
+}
+@keyframes lobby-drift-4 {
+  0%, 100% { transform: rotateY(-20deg) rotateX(4deg) rotateZ(var(--tilt, 0deg)) translate3d(0, 0, 0); }
+  50%      { transform: rotateY(9deg) rotateX(-9deg) rotateZ(calc(var(--tilt, 0deg) + 9deg)) translate3d(4%, 32%, 0); }
+}
+
+.lobby-bg-glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 62% 55% at 16% 6%, rgba(79, 140, 255, 0.22), transparent 70%),
+    radial-gradient(ellipse 58% 52% at 86% 94%, rgba(168, 85, 247, 0.2), transparent 70%);
+  animation: lobby-glow-pulse 22s ease-in-out infinite alternate;
+}
+@keyframes lobby-glow-pulse {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
+}
+
+/* Voile de lisibilité : quoi que fasse le décor, le texte garde son contraste. */
+.lobby-bg-veil {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 95% 80% at 50% 42%, rgba(5, 6, 10, 0.3), rgba(5, 6, 10, 0.88) 78%),
+    linear-gradient(180deg, rgba(5, 6, 10, 0.7), rgba(5, 6, 10, 0.2) 38%, rgba(5, 6, 10, 0.85));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lobby-bg-card,
+  .lobby-bg-glow {
+    animation: none;
+  }
+}
+
+/* -- Ossature ------------------------------------------------------------- */
+
+.lobby-shell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(18px, 3vh, 30px);
+  min-height: 100dvh;
+  /* Menu resserré plutôt qu'étalé sur toute la largeur : les deux panneaux doivent se
+     lire comme un bloc unique, pas comme deux colonnes qui se font face de loin. */
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: clamp(18px, 4vh, 44px) clamp(14px, 3vw, 30px) 44px;
+}
+
+.lobby-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.lobby-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.lobby-brand-mark {
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
-  padding: 28px;
-  background: linear-gradient(165deg, var(--panel-raised), var(--panel) 55%);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-lg);
+  width: 46px;
+  height: 46px;
+  font-size: 1.3rem;
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(79, 140, 255, 0.95), rgba(168, 85, 247, 0.9));
+  box-shadow: 0 12px 28px -12px rgba(110, 100, 255, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
-.lobby h1 {
-  margin-top: 0;
-  font-size: 1.6rem;
+.lobby-brand-text h1 {
+  margin: 0;
+  font-size: clamp(1.2rem, 2.6vw, 1.8rem);
   font-weight: 800;
-  background: linear-gradient(90deg, var(--text), var(--accent) 140%);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: linear-gradient(100deg, #ffffff 5%, #a7c6ff 55%, #d0a8ff 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  filter: drop-shadow(0 0 18px rgba(120, 160, 255, 0.28));
 }
+.lobby-tagline {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+/* Gestion des decks : nécessaire, mais ce n'est pas ce qu'on vient chercher au salon.
+   Rangée en onglets discrets pour ne pas encombrer la zone de lancement de partie. */
+.lobby-tabs {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.lobby-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 8px 15px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.lobby-tab:hover:not(:disabled) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.lobby-layout {
+  display: grid;
+  /* La colonne de droite reste étroite : au-delà, une liste de lignes de 44px se met à
+     flotter dans le vide au lieu de se lire d'un coup d'oeil. */
+  grid-template-columns: minmax(300px, 430px) minmax(280px, 460px);
+  justify-content: center;
+  gap: clamp(16px, 2.4vw, 26px);
+  align-items: start;
+}
+
+/* -- Panneaux de verre ---------------------------------------------------- */
+
+.lobby-panel,
+.lobby-layout .deck-selected-panel {
+  position: relative;
+  border-radius: 20px;
+  background: rgba(8, 10, 16, 0.62);
+  backdrop-filter: blur(14px) saturate(135%);
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+.lobby-panel::before,
+.lobby-layout .deck-selected-panel::before {
+  content: '';
+  position: absolute;
+  left: 16%;
+  right: 16%;
+  top: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(150, 180, 255, 0.75), transparent);
+}
+.lobby-play {
+  padding: clamp(20px, 2.4vw, 30px);
+}
+.lobby-resuming {
+  margin: 0 0 16px;
+  font-size: 0.85rem;
+  color: #9ec1ff;
+}
+
 .subtitle {
   color: var(--text-dim);
 }
@@ -186,39 +395,402 @@ input::placeholder {
   color: var(--text);
   font-size: 0.95rem;
 }
-.lobby-deck-menu {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 16px;
+/* Étiquettes « façon menu de jeu » : petites capitales espacées au-dessus de champs
+   sombres et arrondis, plutôt que le style de formulaire par défaut. */
+.lobby-panel .field {
+  margin-bottom: 18px;
+  gap: 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #808ca5;
 }
+.lobby-panel .field > input,
+.lobby-panel .field > select {
+  padding: 11px 13px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.lobby-panel .field > input:focus,
+.lobby-panel .field > select:focus {
+  border-color: rgba(120, 160, 255, 0.7);
+  box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.18);
+}
+
+/* -- Actions -------------------------------------------------------------- */
+
 .lobby-actions {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
-.join-row {
+
+/* L'action qu'on vient chercher : elle doit écraser tout le reste de la page. */
+.lobby-cta {
+  position: relative;
+  overflow: hidden;
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  padding: 16px 22px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #fff;
+  background: linear-gradient(135deg, #2f6bff 0%, #6d4bff 48%, #b845e0 100%);
+  box-shadow: 0 18px 40px -16px rgba(105, 90, 255, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transition: transform 0.18s var(--ease), box-shadow 0.22s var(--ease), filter 0.18s var(--ease);
 }
-.join-row input {
-  flex: 1;
+.lobby-cta-label {
+  font-family: 'Manrope', 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-size: clamp(1rem, 1.5vw, 1.2rem);
+  font-weight: 800;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
+.lobby-cta-sub {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+/* Balayage lumineux au survol -- le « brillant » d'un bouton de menu de jeu. */
+.lobby-cta::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  bottom: -50%;
+  left: 0;
+  width: 45%;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  transform: translateX(-180%) skewX(-18deg);
+  transition: transform 0.75s var(--ease);
+}
+.lobby-cta:hover:not(:disabled) {
+  transform: translateY(-2px);
+  filter: brightness(1.08);
+  box-shadow: 0 26px 52px -16px rgba(125, 105, 255, 1);
+}
+.lobby-cta:hover:not(:disabled)::after {
+  transform: translateX(320%) skewX(-18deg);
+}
+.lobby-cta:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.lobby-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #6d778d;
+}
+.lobby-or::before,
+.lobby-or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.14), transparent);
+}
+
+/* Action secondaire : même famille visuelle que le bouton principal, en sourdine. */
+.lobby-join {
+  display: flex;
+  gap: 8px;
+  padding: 7px;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  transition: border-color 0.18s var(--ease), background-color 0.18s var(--ease);
+}
+.lobby-join:focus-within {
+  border-color: rgba(120, 160, 255, 0.5);
+  background: rgba(79, 140, 255, 0.08);
+}
+.lobby-join input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-family: 'Manrope', 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 800;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.35em;
+  /* letter-spacing pousse un blanc après la dernière lettre : on le compense pour que
+     le code reste optiquement centré. */
+  text-indent: 0.35em;
+}
+.lobby-join button {
+  flex-shrink: 0;
+  padding: 10px 20px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.lobby-join button:hover:not(:disabled) {
+  background: rgba(79, 140, 255, 0.22);
+  border-color: rgba(130, 170, 255, 0.6);
+}
+
 .room-code-banner {
   margin-top: 20px;
-  padding: 14px;
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-glow);
-  border-radius: var(--radius-md);
+  padding: 16px;
+  background: rgba(79, 140, 255, 0.1);
+  border: 1px solid rgba(120, 160, 255, 0.32);
+  border-radius: 14px;
   text-align: center;
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
   animation: fade-slide-in 0.2s var(--ease);
 }
 .room-code-banner strong {
-  font-size: 1.15rem;
-  letter-spacing: 0.08em;
-  color: var(--accent);
+  display: block;
+  margin: 6px 0 2px;
+  font-family: 'Manrope', 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+  color: #cfe0ff;
+  text-shadow: 0 0 26px rgba(120, 160, 255, 0.55);
 }
+.room-code-banner p {
+  margin: 0 0 12px;
+}
+/* Le bandeau est en petites capitales espacées ; le bouton hérite de l'espacement des
+   lettres et devenait illisible. */
+.room-code-banner button {
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+/* -- Contenu du deck : liste verticale ------------------------------------ */
+
+.lobby-layout .deck-selected-panel {
+  width: auto;
+  max-width: none;
+  position: static;
+  padding: clamp(18px, 2.2vw, 26px);
+  gap: 0;
+  max-height: min(74dvh, 640px);
+  /* Le décalage au survol d'une ligne déborderait de 3px et ferait apparaître une barre
+     de défilement horizontale ; rien de visible n'est rogné, le rembourrage l'absorbe. */
+  overflow-x: hidden;
+}
+.lobby-layout .deck-selected-panel h2 {
+  margin-bottom: 4px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #e2e8f6;
+}
+
+.deck-row-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+/* Une carte = une ligne : bande d'illustration en fond, nom par-dessus, quantité à
+   droite. La grille de vignettes complètes saturait le panneau ; ici l'illustration
+   n'est qu'une ambiance, et l'aperçu (survol prolongé, ou tap sur mobile) reste la
+   façon de vraiment lire la carte. */
+.deck-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 10px 0 14px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.025);
+  cursor: pointer;
+  transition: border-color 0.18s var(--ease), transform 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+.deck-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, rgba(120, 160, 255, 0.95), rgba(180, 120, 255, 0.95));
+  opacity: 0;
+  transition: opacity 0.18s var(--ease);
+}
+.deck-row:hover {
+  border-color: rgba(120, 160, 255, 0.42);
+  transform: translateX(3px);
+  box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(79, 140, 255, 0.16);
+}
+.deck-row:hover::before {
+  opacity: 1;
+}
+.deck-row-art {
+  position: absolute;
+  inset: 0;
+  background-image: var(--row-art);
+  background-size: cover;
+  background-position: center 30%;
+  opacity: 0.62;
+  transition: opacity 0.25s var(--ease), transform 0.45s var(--ease);
+}
+.deck-row:hover .deck-row-art {
+  opacity: 0.92;
+  transform: scale(1.07);
+}
+.deck-row-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(6, 8, 14, 0.96) 0%,
+    rgba(6, 8, 14, 0.86) 38%,
+    rgba(6, 8, 14, 0.46) 76%,
+    rgba(6, 8, 14, 0.72) 100%
+  );
+}
+.deck-row-main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.deck-row-name {
+  min-width: 0;
+  font-size: 0.87rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+}
+.deck-row-unique {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #2a1c00;
+  background: linear-gradient(180deg, #ffd873, #e8a83a);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.deck-row-count {
+  position: relative;
+  flex-shrink: 0;
+  min-width: 32px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #cfe0ff;
+  background: rgba(6, 8, 14, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.deck-row-remove {
+  position: relative;
+  flex-shrink: 0;
+  padding: 2px 9px;
+  border-radius: 8px;
+  background: rgba(6, 8, 14, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  line-height: 1.2;
+}
+.deck-row-remove:hover:not(:disabled) {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: #ff8790;
+}
+
+/* -- Adaptations écran étroit --------------------------------------------- */
+
+@media (max-width: 980px) {
+  .lobby-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .lobby-layout .deck-selected-panel {
+    max-height: none;
+  }
+}
+/* Le garde-fou global « 16px minimum » vit sur le sélecteur `input`, que les règles de
+   champ du salon (plus spécifiques) écrasaient : sous iOS Safari, la mise au point sur
+   le nom ou le deck zoomait alors toute la page. */
+@media (max-width: 760px) {
+  .lobby-panel .field > input,
+  .lobby-panel .field > select {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .lobby-shell {
+    padding: 12px;
+    gap: 14px;
+  }
+  .lobby-topbar {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .lobby-brand-text h1 {
+    font-size: 1.35rem;
+  }
+  .lobby-tagline {
+    display: none;
+  }
+  .lobby-tabs {
+    width: 100%;
+    justify-content: stretch;
+  }
+  .lobby-tab {
+    flex: 1;
+    text-align: center;
+  }
+  .lobby-cta {
+    padding: 14px 16px;
+  }
+  .lobby-join {
+    flex-wrap: wrap;
+  }
+  .lobby-join input {
+    min-width: 0;
+    flex: 1 1 120px;
+  }
+  .room-code-banner strong {
+    font-size: 1.5rem;
+  }
+}
+
 .error {
   color: #ff8790;
 }
@@ -261,6 +833,12 @@ input::placeholder {
 
 /* Board */
 .board {
+  --card-hand-w: clamp(58px, 8.2vh, 92px);
+  --card-bench-w: clamp(44px, 6.2vh, 72px);
+  --card-pile-w: clamp(48px, 6.5vh, 66px);
+  --card-opp-hand-w: clamp(34px, 4.5vh, 56px);
+  --active-card-w: clamp(240px, 32vh, 300px);
+  --active-card-h: clamp(96px, 14vh, 132px);
   position: relative;
   max-width: 1200px;
   height: 100dvh;
@@ -320,6 +898,20 @@ input::placeholder {
   background: var(--danger-soft);
 }
 
+/* Confirmation en deux temps de l'abandon, à même la barre du haut. */
+.board-forfeit-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--danger);
+  white-space: nowrap;
+}
+.board-leave.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
 /* Remaining duration under the active terrain card. */
 .terrain-remaining {
   display: block;
@@ -341,82 +933,289 @@ input::placeholder {
   animation: fade-slide-in 0.35s var(--ease);
 }
 
-.board-scroll {
+.arena {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
-.board-grid {
+/* -- Mains ---------------------------------------------------------------- */
+
+/* Main adverse : alignée tout en haut, dos de cartes tant qu'un effet ne l'a pas
+   révélée (auquel cas l'instance nous parvient et la carte s'affiche face visible). */
+.hand-strip {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 4px;
+  row-gap: 3px;
+  min-height: calc(var(--card-opp-hand-w) * 1.15);
+}
+.hand-strip-slot {
+  flex: 0 0 auto;
+}
+.hand-strip-hidden {
+  cursor: pointer;
+}
+.hand-strip-empty {
+  align-self: center;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.opponent-hand .tcg-card,
+.opponent-hand .tcg-card.face-down {
+  width: var(--card-opp-hand-w);
+}
+
+/* Main du joueur, en éventail : les cartes se chevauchent et pivotent autour de leur
+   bas ; celle qu'on survole se redresse, grandit et passe au premier plan. Le padding
+   du haut réserve la place que prend cet agrandissement. */
+.hand-fan {
+  position: relative;
+  z-index: 4;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  padding: clamp(12px, 2.4vh, 40px) 10px 0;
+}
+.hand-card {
+  flex: 0 0 auto;
+  /* Le chevauchement suit la taille de la carte, sinon un éventail réduit se recolle. */
+  margin: 0 calc(var(--card-hand-w) * -0.22);
+  z-index: var(--fan-z, 1);
+  transform-origin: bottom center;
+  transform: rotate(var(--fan-rot, 0deg)) translateY(var(--fan-lift, 0px));
+  transition: transform 0.18s var(--ease);
+  will-change: transform;
+}
+.hand-card:hover {
+  z-index: 40;
+  transform: translateY(-34px) scale(1.3);
+}
+.hand-card .tcg-card {
+  width: var(--card-hand-w);
+}
+.hand-card.blocked .tcg-card {
+  cursor: not-allowed;
+}
+.hand-card-hint {
+  display: block;
+  text-align: center;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.hand-card-hint.blocked {
+  color: var(--text-dim);
+}
+
+/* Les petites cartes (main, banc, main adverse) tiennent sur une ligne de nom : à 50-90px
+   de large, « Protection Divine » ou « 250 / 250 HP » passaient à la ligne et faisaient
+   grandir toute la rangée, jusqu'à pousser la main du joueur sous la ligne de flottaison. */
+.hand-card .tcg-card-name-banner,
+.bench-card-wrap .tcg-card-name-banner,
+.opponent-hand .tcg-card-name-banner {
+  font-size: 0.62rem;
+  padding: 2px 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hand-card .tcg-card-body,
+.bench-card-wrap .tcg-card-body {
+  padding: 3px 5px 4px;
+  gap: 2px;
+}
+.bench-card-wrap .hp-text {
+  font-size: 0.58rem;
+  white-space: nowrap;
+}
+.bench-card-wrap .status-badge {
+  font-size: 0.54rem;
+  padding: 0 3px;
+}
+/* Le décompte d'objets attachés reste lisible dans la fiche au survol ; sur une vignette
+   de banc il ne tient pas et coûte une ligne entière. */
+.bench-card-wrap .attached-objects {
+  display: none;
+}
+
+/* -- Champ de bataille : joueur à gauche, adversaire à droite -------------- */
+
+/* Une seule grille pour les deux camps : les lignes sont dimensionnées sur le contenu
+   des DEUX colonnes, ce qui aligne exactement les deux personnages actifs sur la ligne
+   du milieu sans mesurer quoi que ce soit en JavaScript. */
+.battlefield {
+  flex: 1 0 auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
+  grid-template-areas:
+    'railS plateS  benchO  railO'
+    'railS activeS activeO railO'
+    'railS lowerS  plateO  railO';
+  align-content: center;
+  column-gap: 14px;
+  row-gap: 6px;
+}
+.rail-self {
+  grid-area: railS;
+}
+.rail-opp {
+  grid-area: railO;
+}
+.zone-plate-self {
+  grid-area: plateS;
+  align-self: end;
+}
+.zone-active-self {
+  grid-area: activeS;
+}
+.zone-lower-self {
+  grid-area: lowerS;
+  align-self: start;
+}
+.zone-bench-opp {
+  grid-area: benchO;
+  align-self: end;
+}
+.zone-active-opp {
+  grid-area: activeO;
+}
+.zone-plate-opp {
+  grid-area: plateO;
+  align-self: start;
+}
+
+/* Rails latéraux : cimetière et terrain, chacun de son côté de l'écran. */
+.rail {
+  align-self: center;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 12px;
-  flex-shrink: 0;
-}
-
-.player-zone {
+  padding: 8px;
   background: var(--panel);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
-  padding: 10px;
-  box-shadow: var(--shadow-sm);
-  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
 }
-.player-zone h2 {
-  margin: 0 0 6px;
-  font-size: 0.8rem;
+.graveyard-pile-zone,
+.terrain-slot-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.zone-label {
+  font-size: 0.66rem;
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 700;
 }
-.player-zone-head {
+/* Pile de défausse : les ombres décalées font le « paquet de cartes » sans dupliquer
+   des éléments vides dans le DOM. */
+.graveyard-pile {
+  position: relative;
+  width: var(--card-pile-w);
+  padding: 0;
+  overflow: hidden;
+  background: var(--panel-alt);
+  box-shadow:
+    3px 3px 0 -1px var(--panel-alt),
+    3px 3px 0 0 var(--border),
+    6px 6px 0 -1px var(--panel-alt),
+    6px 6px 0 0 var(--border);
+}
+.graveyard-pile:hover:not(:disabled) {
+  background: var(--panel-alt);
+  border-color: var(--accent);
+}
+.graveyard-pile .tcg-card-art {
+  filter: grayscale(0.65) brightness(0.72);
+}
+.graveyard-pile.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 3 / 4;
+  border-style: dashed;
+  box-shadow: none;
+  opacity: 0.5;
+}
+.graveyard-pile-empty-icon {
+  font-size: 1.4rem;
+}
+.graveyard-pile-count {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  min-width: 20px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(10, 12, 16, 0.85);
+  border: 1px solid var(--border);
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Contenu du cimetière, ouvert en modale depuis la pile. */
+.graveyard-modal {
+  width: min(760px, 96vw);
+  max-height: 84dvh;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.graveyard-modal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
-.player-zone-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.graveyard-modal-head h3 {
+  margin: 0;
+  font-size: 1rem;
 }
-.player-zone-meta {
+.graveyard-modal-count {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.graveyard-modal-close {
+  position: static;
+}
+.graveyard-modal-scroll {
+  overflow-y: auto;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 14px;
+}
+.graveyard-modal-section h4 {
+  margin: 0 0 6px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+.graveyard-modal-grid {
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  flex-shrink: 0;
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
 }
-.player-zone-turn-pill {
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  border: 1px solid var(--accent-glow);
-}
-/* Whose turn it is, readable without looking at the header. */
-.player-zone.active-turn {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-sm), 0 0 0 1px var(--accent-soft);
-}
-.player-zone.self {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-sm), 0 0 0 1px var(--accent-soft);
-}
-.player-zone.self h2 {
-  color: var(--accent);
-}
-
-.player-mat.opponent {
-  background: radial-gradient(ellipse at 50% -10%, #2a2340 0%, var(--panel) 65%);
-}
-.player-mat.self {
-  background: radial-gradient(ellipse at 50% 110%, #202c40 0%, var(--panel) 65%);
+.graveyard-modal-empty {
+  margin: 0;
+  color: var(--text-dim);
 }
 
 .terrain-badge {
@@ -425,97 +1224,192 @@ input::placeholder {
   border-radius: var(--radius-sm);
   background: var(--panel-alt);
   border: 1px solid var(--border-soft);
-  font-size: 0.85rem;
+  font-size: 0.78rem;
 }
 .terrain-badge.empty {
   color: var(--text-dim);
   border-style: dashed;
 }
+.terrain-slot-zone .tcg-card {
+  width: var(--card-pile-w);
+}
 
-/* Slot rows: fixed-size grid of card slots, styled like a physical play mat. */
-.slot-row {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(64px, 108px));
-  justify-content: center;
-  gap: 6px;
-  margin: 8px 0;
-}
-.card-slot {
+/* Plaque de nom de chaque camp, posée du côté « extérieur » de son personnage actif. */
+.nameplate {
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
-}
-.card-slot .tcg-card {
-  width: 100%;
-}
-.card-slot.empty {
-  aspect-ratio: 3 / 4.7;
-  border: 2px dashed var(--slot-border, var(--border));
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 10px;
   border-radius: var(--radius-sm);
-  opacity: 0.35;
-  transition: opacity 0.2s var(--ease);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
 }
-.hand-slot-row {
-  --slot-border: #b0429e;
+.nameplate.self {
+  border-color: var(--accent);
+  color: var(--accent);
 }
-.bench-slot-row {
-  --slot-border: #d99a3a;
+.nameplate.active-turn {
+  box-shadow: 0 0 0 1px var(--accent-soft), 0 0 16px -6px var(--accent-glow);
 }
-.hand-slot .tcg-card,
-.bench-slot .tcg-card {
-  border-width: 2px;
+.nameplate-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.hand-slot .tcg-card {
-  border-color: #b0429e;
+.nameplate-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  font-size: 0.68rem;
 }
-.bench-slot .tcg-card {
-  border-color: #d99a3a;
+.nameplate-turn-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-glow);
 }
 
-/* Center row: graveyard | active character | active terrain, facing the opponent's. */
-.center-row {
+/* Les deux actifs se font face au milieu du plateau. */
+.active-slot {
   display: flex;
+}
+.active-slot.self {
+  justify-content: flex-end;
+}
+.active-slot.opponent {
+  justify-content: flex-start;
+}
+.active-slot.empty {
   align-items: center;
   justify-content: center;
-  gap: 24px;
-  margin: 10px 0;
-}
-.graveyard-zone,
-.terrain-zone {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-.zone-label {
-  font-size: 0.7rem;
+  min-height: var(--active-card-h);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-md);
   color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 700;
+  font-size: 0.78rem;
 }
-.graveyard-cards {
+
+/* Banc : cartes verticales, sous l'actif du joueur et au-dessus de celui de l'adversaire. */
+.bench-row {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 4px;
-  min-height: 1px;
+  gap: 6px;
+  min-height: 40px;
 }
-.graveyard-thumb {
-  width: 54px;
+.bench-row.self {
+  justify-content: flex-end;
+  margin-top: 4px;
 }
-.graveyard-thumb .tcg-card {
-  width: 100%;
+.bench-row.opponent {
+  justify-content: flex-start;
 }
-.zone-count-empty {
+.bench-row-empty {
+  align-self: center;
   color: var(--text-dim);
-  font-size: 0.85rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
-.active-character-zone {
-  flex-shrink: 0;
-  min-height: 1px;
+.bench-card-wrap {
+  position: relative;
+}
+.bench-card-wrap .tcg-card {
+  width: var(--card-bench-w);
+}
+/* Mini-menu d'un personnage de réserve, ouvert vers le haut (le banc du joueur est en
+   bas de sa colonne). */
+.bench-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  z-index: 25;
+  min-width: 208px;
+  max-width: min(280px, 80vw);
+  background: var(--panel-raised);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-50%);
+  animation: bench-menu-pop-in 0.14s var(--ease);
+}
+@keyframes bench-menu-pop-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+.bench-menu-head {
+  padding: 5px 8px 4px;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+.bench-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 7px 9px;
+}
+.bench-menu-item:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+.bench-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.bench-menu-item.ghost {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+.bench-menu-item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bench-menu-item-detail {
+  font-size: 0.74rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.bench-menu-item-detail.blocked {
+  color: var(--danger);
+  font-style: italic;
+  white-space: normal;
+  text-align: right;
+  max-width: 55%;
+}
+.bench-menu-empty {
+  margin: 0;
+  padding: 6px 9px;
+  color: var(--text-dim);
+  font-size: 0.8rem;
 }
 
 /* Visual card frame -- reserves space for real card art (falls back to a
@@ -557,6 +1451,13 @@ input::placeholder {
 }
 .tcg-card.clickable:active {
   transform: translateY(-1px);
+}
+/* La carte cliquable est atteignable au clavier : il lui faut le même anneau de mise au
+   point que les boutons ordinaires. */
+.tcg-card.clickable:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent-glow);
 }
 .tcg-card.face-down {
   width: 72px;
@@ -626,12 +1527,48 @@ input::placeholder {
   gap: 3px;
   background: var(--panel);
 }
-.tile-action-label {
-  font-size: 0.68rem;
-  color: var(--accent);
-  text-align: center;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+/* Format paysage du personnage actif : illustration à gauche, nom / PV / statuts à
+   droite. `display: contents` en portrait -- la colonne d'infos n'existe alors pas comme
+   boîte, si bien qu'une seule structure DOM sert aux deux orientations. */
+.tcg-card-lane {
+  display: contents;
+}
+.tcg-card.tcg-card-landscape {
+  flex-direction: row;
+  align-items: stretch;
+  width: var(--active-card-w, 300px);
+  min-height: var(--active-card-h, 132px);
+}
+.tcg-card-landscape .tcg-card-art {
+  flex: 0 0 38%;
+  /* L'illustration ne pilote plus la hauteur : elle s'étire sur celle de la colonne
+     d'infos, sinon le ratio 3/4 rendrait la carte aussi haute qu'en portrait. */
+  aspect-ratio: auto;
+  border-right: 1px solid var(--border);
+}
+/* Les visuels sont des portraits : recadrés dans une boîte presque carrée, un cadrage
+   centré coupe les visages. */
+.tcg-card-landscape .tcg-card-art img {
+  object-position: 50% 28%;
+}
+.tcg-card-landscape .tcg-card-lane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  background: var(--panel);
+}
+.tcg-card-landscape .tcg-card-name-banner {
+  border-top: none;
+  text-align: left;
+  font-size: 0.9rem;
+  padding: 6px 10px;
+}
+.tcg-card-landscape .tcg-card-body {
+  flex: 1;
+  justify-content: center;
+  gap: 3px;
+  padding: 5px 10px 6px;
 }
 
 /* Status-effect / damage overlays -- absolutely positioned over the whole card,
@@ -909,6 +1846,11 @@ input::placeholder {
   animation: fx-tint-pulse 1.4s ease-in-out infinite;
 }
 
+.fx-vulnerable {
+  background: radial-gradient(ellipse at 50% 100%, rgba(224, 85, 95, 0.28), transparent 65%);
+  animation: fx-pulse-red 1.6s ease-in-out infinite;
+}
+
 .fx-generic {
   background: radial-gradient(circle at 50% 50%, rgba(230, 233, 239, 0.18), transparent 70%);
 }
@@ -1157,7 +2099,7 @@ input::placeholder {
    anchored next to the card, since a touch tap has no reliable cursor position and the
    card itself is often near a screen edge. */
 .hover-card-popover.pinned,
-.deck-card-preview.pinned {
+.card-preview.pinned {
   left: 50% !important;
   top: 50% !important;
   right: auto !important;
@@ -1239,169 +2181,293 @@ input::placeholder {
   white-space: nowrap;
 }
 
-.menu-bar {
-  flex-shrink: 0;
+/* ==========================================================================
+   Panneau de commandes « façon Pokémon », posé sous le personnage actif du joueur.
+   Les objets et les terrains n'y sont plus : ils se jouent depuis la main, en bas.
+   ========================================================================== */
+
+.cmd-panel {
+  width: min(var(--active-card-w), 100%);
+  margin-left: auto;
   background: linear-gradient(180deg, var(--panel-raised), var(--panel));
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 10px 12px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
+  padding: 8px;
   box-shadow: var(--shadow-sm);
 }
-.menu-item {
-  position: relative;
+.cmd-panel-attack {
+  border-color: #d0606a;
 }
-.menu-item-pass {
-  margin-left: auto;
+.cmd-panel-ability {
+  border-color: #9b7ce0;
 }
-.menu-button {
+.cmd-panel-switch {
+  border-color: #4fbf95;
+}
+/* Même encombrement pendant le tour adverse : sans ça le plateau sautait à chaque
+   changement de tour. */
+.cmd-panel-waiting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: clamp(60px, 11vh, 84px);
+  border-style: dashed;
+}
+.cmd-waiting-label {
+  color: var(--text-dim);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.cmd-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.cmd-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: clamp(7px, 1.3vh, 10px) 11px;
+  text-align: left;
+  font-size: 0.88rem;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--cmd-border, var(--border));
+  background: var(--cmd-bg, var(--panel-alt));
+  color: var(--cmd-fg, var(--text));
+}
+/* `background` est redéclaré : la règle générique `button:hover` repeindrait le bouton
+   en gris et effacerait le code couleur de la rubrique. */
+.cmd-button:hover:not(:disabled) {
+  background: var(--cmd-bg, var(--panel-raised));
+  border-color: var(--cmd-border, var(--accent));
+  filter: brightness(1.12);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+.cmd-button-icon {
+  font-size: 1.02rem;
+}
+.cmd-button-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cmd-button-count {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.3);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+/* Rubrique vide ou entièrement bloquée : le bouton reste lisible, mais il n'attire plus. */
+.cmd-button-blocked {
+  filter: saturate(0.3);
+}
+.cmd-attack {
+  --cmd-bg: linear-gradient(180deg, #b5434c, #8e2f37);
+  --cmd-border: #d0606a;
+  --cmd-fg: #ffe9ea;
+}
+.cmd-ability {
+  --cmd-bg: linear-gradient(180deg, #6a4bb5, #4a3187);
+  --cmd-border: #9b7ce0;
+  --cmd-fg: #ece4ff;
+}
+.cmd-switch {
+  --cmd-bg: linear-gradient(180deg, #2f7d63, #21604a);
+  --cmd-border: #4fbf95;
+  --cmd-fg: #dffaef;
+}
+.cmd-pass {
+  --cmd-bg: linear-gradient(180deg, #4a5262, #363d4a);
+  --cmd-border: #69738a;
+  --cmd-fg: #dfe4ee;
+}
+.cmd-sub-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.cmd-back {
+  padding: 2px 9px;
   font-size: 0.95rem;
-  padding: 8px 16px;
-  font-weight: 600;
+  line-height: 1.3;
 }
-.menu-button-open {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-soft);
+.cmd-sub-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
 }
-.menu-dropdown {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 0;
-  z-index: 20;
-  min-width: 200px;
-  max-width: min(320px, calc(100vw - 24px));
-  max-height: 320px;
-  overflow-y: auto;
-  background: var(--panel-raised);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-md);
-  padding: 4px;
+.cmd-options {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  box-shadow: var(--shadow-lg);
-  animation: menu-pop-in 0.14s var(--ease);
-  transform-origin: bottom left;
+  gap: 4px;
+  max-height: 216px;
+  overflow-y: auto;
 }
-@keyframes menu-pop-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-.menu-dropdown-option {
+.cmd-option {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 10px;
   width: 100%;
   text-align: left;
-  background: transparent;
-  border: none;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
-  padding: 7px 9px;
-  transition: background-color 0.12s var(--ease);
+  background: var(--panel-alt);
 }
-.menu-dropdown-option:hover:not(:disabled) {
+.cmd-option:hover:not(:disabled) {
   background: var(--accent-soft);
-  border-color: transparent;
+  border-color: var(--accent);
 }
-.menu-dropdown-option:disabled {
-  opacity: 0.5;
+.cmd-option:disabled {
+  opacity: 0.55;
   cursor: not-allowed;
 }
-.menu-dropdown-option-detail {
+.cmd-option-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.cmd-option-label {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cmd-option-sub {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+.cmd-option-detail {
   font-size: 0.78rem;
   color: var(--text-dim);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
-/* Why an action is greyed out (stun, per-turn limit, a terrain forbidding it...). */
-.menu-dropdown-option-detail.blocked {
+/* Pourquoi une action est grisée (stun, limite par tour, un terrain qui l'interdit...). */
+.cmd-option-detail.blocked {
   color: var(--danger);
   font-style: italic;
   white-space: normal;
-  max-width: 190px;
   text-align: right;
+  max-width: 48%;
 }
-/* Every option under this menu is currently blocked. */
-.menu-button-blocked {
-  opacity: 0.62;
-}
-.menu-dropdown-empty {
+.cmd-options-empty {
   margin: 0;
-  padding: 7px 9px;
+  padding: 8px 10px;
   color: var(--text-dim);
   font-size: 0.85rem;
-  white-space: nowrap;
-}
-.pass-button {
-  background: linear-gradient(180deg, #e8656e, var(--danger));
-  border-color: var(--danger);
-  color: #fff;
-  box-shadow: 0 2px 10px rgba(224, 85, 95, 0.3);
-}
-.pass-button:hover:not(:disabled) {
-  filter: brightness(1.08);
-  box-shadow: 0 4px 14px rgba(224, 85, 95, 0.4);
 }
 
-.event-log {
-  flex-shrink: 0;
+/* Journal de combat : fenêtre flottante, déplaçable par son en-tête et réductible en
+   pastille de notification. Tant qu'elle n'a pas été déplacée sa position vient d'ici
+   (coin bas-gauche) ; le premier glisser fige des coordonnées explicites en ligne. */
+.event-log.floating {
+  position: fixed;
+  left: 10px;
+  bottom: 10px;
+  z-index: 9;
+  width: 300px;
+  max-width: calc(100vw - 20px);
+  display: flex;
+  flex-direction: column;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 6px 10px 8px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
 }
-.event-log-toggle {
+.event-log-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  width: 100%;
-  background: none;
-  border: none;
-  padding: 4px 0;
-  cursor: pointer;
+  gap: 8px;
+  padding: 6px 8px;
+  background: linear-gradient(180deg, var(--panel-raised), var(--panel));
+  border-bottom: 1px solid var(--border-soft);
+  cursor: grab;
+  user-select: none;
+  /* Sans ça, un glisser au doigt fait défiler la page au lieu de déplacer la fenêtre. */
+  touch-action: none;
 }
-.event-log-toggle:hover:not(:disabled) {
-  background: none;
-  border: none;
+.event-log-head:active {
+  cursor: grabbing;
 }
-.event-log-chevron {
+.event-log-grip {
   color: var(--text-dim);
-  font-size: 0.7rem;
-  transition: transform 0.15s var(--ease);
+  font-size: 0.9rem;
 }
-.event-log-chevron.collapsed {
-  transform: rotate(-90deg);
-}
-.event-log h3 {
+.event-log-head h3 {
+  flex: 1;
   margin: 0;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 700;
 }
-.event-log ul {
+.event-log-minimize {
+  padding: 0 8px;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+  background: transparent;
+  border-color: var(--border-soft);
+}
+.event-log.floating ul {
   list-style: none;
-  margin: 4px 0 0;
-  padding: 0;
+  margin: 0;
+  padding: 6px 8px 8px;
   font-size: 0.82rem;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 132px;
+  max-height: 220px;
   overflow-y: auto;
   scroll-behavior: smooth;
+}
+.event-log.minimized {
+  width: auto;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  overflow: visible;
+}
+.event-log-pill {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 1.2rem;
+  background: linear-gradient(180deg, var(--panel-raised), var(--panel));
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  cursor: grab;
+  touch-action: none;
+}
+.event-log-unread {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.64rem;
+  font-weight: 700;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
 }
 .log-entry {
   display: grid;
@@ -1544,11 +2610,6 @@ input::placeholder {
 }
 
 /* Deck manager / builder */
-.deck-manager-link {
-  font-size: 1rem;
-  padding: 10px 18px;
-  font-weight: 600;
-}
 .deck-manager {
   max-width: 1460px;
   max-height: 94dvh;
@@ -1572,6 +2633,43 @@ input::placeholder {
   font-size: 1.7rem;
   font-weight: 800;
 }
+/* En-tête de l'éditeur de deck : reste sous les yeux pendant qu'on parcourt le pool, pour
+   que « Retour » et « Enregistrer » ne demandent jamais de remonter la page. */
+.deck-editor-header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  gap: 12px;
+  padding-bottom: 10px;
+  background: linear-gradient(180deg, var(--panel) 70%, transparent);
+}
+.deck-editor-header h1 {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.deck-back-button {
+  flex-shrink: 0;
+  font-weight: 600;
+}
+/* Quitter l'éditeur avec des modifications non enregistrées : confirmation en deux temps,
+   à même l'en-tête, plutôt qu'une boîte de dialogue du navigateur. */
+.deck-editor-discard {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--danger);
+  white-space: nowrap;
+}
+.deck-editor-discard button.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
 .deck-list {
   list-style: none;
   margin: 16px 0 0;
@@ -1794,8 +2892,7 @@ textarea {
 }
 
 @media (max-width: 1100px) {
-  .deck-editor-layout,
-  .lobby-layout {
+  .deck-editor-layout {
     flex-direction: column;
   }
   .deck-selected-panel {
@@ -1803,17 +2900,12 @@ textarea {
     position: static;
     max-height: none;
   }
-  .lobby-layout {
-    align-items: stretch;
-  }
-  .lobby {
-    width: 100%;
-  }
 }
 
-/* Hover-and-hold preview on deck-pool cards: appears after the mouse rests on a
-   card for a moment, showing it enlarged next to its full description. */
-.deck-card-preview {
+/* Aperçu « carte en grand + texte complet ». Il sert au survol prolongé d'une carte du
+   deck-builder, au survol d'une carte en partie, et au panneau épinglé du plateau --
+   pour que la même carte se lise exactement de la même façon partout. */
+.card-preview {
   position: fixed;
   z-index: 60;
   display: flex;
@@ -1824,9 +2916,9 @@ textarea {
   border-radius: var(--radius-lg);
   padding: 16px;
   box-shadow: var(--shadow-lg), 0 0 0 1px var(--accent-soft);
-  animation: deck-card-preview-in 0.14s var(--ease);
+  animation: card-preview-in 0.14s var(--ease);
 }
-@keyframes deck-card-preview-in {
+@keyframes card-preview-in {
   from {
     opacity: 0;
     transform: scale(0.94);
@@ -1836,18 +2928,18 @@ textarea {
     transform: scale(1);
   }
 }
-.deck-card-preview .tcg-card-large {
+.card-preview .tcg-card-large {
   width: 320px;
   flex-shrink: 0;
 }
-.deck-card-preview .tcg-card-large .tcg-card-art {
+.card-preview .tcg-card-large .tcg-card-art {
   font-size: 4.2rem;
 }
-.deck-card-preview .tcg-card-large .tcg-card-name-banner {
+.card-preview .tcg-card-large .tcg-card-name-banner {
   font-size: 1.15rem;
   padding: 9px 12px;
 }
-.deck-card-preview-text {
+.card-preview-text {
   width: 320px;
   max-height: 480px;
   overflow-y: auto;
@@ -1855,32 +2947,99 @@ textarea {
 
 /* Tap-opened preview: card + text stacked and scaled to fit a narrow viewport, unlike
    the desktop hover layout which sits them side by side. */
-.deck-card-preview.pinned {
+.card-preview.pinned {
   position: fixed;
   flex-direction: column;
   align-items: center;
   overflow-y: auto;
 }
-.deck-card-preview.pinned .tcg-card-large {
+.card-preview.pinned .tcg-card-large {
   width: min(48vw, 200px);
 }
-.deck-card-preview.pinned .tcg-card-large .tcg-card-art {
+.card-preview.pinned .tcg-card-large .tcg-card-art {
   font-size: 2.6rem;
 }
-.deck-card-preview.pinned .deck-card-preview-text {
+.card-preview.pinned .card-preview-text {
   width: 100%;
   max-height: none;
   overflow-y: visible;
 }
 
+/* Carte épinglée pendant une partie : elle reste plantée dans le coin de l'écran,
+   au-dessus du plateau, jusqu'à ce qu'on la referme par la croix. */
+.card-preview.corner-pinned,
+.hover-card-popover.corner-pinned {
+  position: fixed;
+  top: 64px;
+  right: 12px;
+  left: auto;
+  bottom: auto;
+  width: 300px;
+  max-width: calc(100vw - 24px);
+  max-height: 74dvh;
+  overflow-y: auto;
+  z-index: 45;
+  animation: fade-slide-in 0.18s var(--ease);
+}
+.card-preview.corner-pinned {
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.card-preview.corner-pinned .tcg-card-large {
+  width: 150px;
+}
+.card-preview.corner-pinned .tcg-card-large .tcg-card-art {
+  font-size: 2.4rem;
+}
+.card-preview.corner-pinned .card-preview-text {
+  width: 100%;
+  min-width: 0;
+  max-height: none;
+  overflow-y: visible;
+}
+
+/* Écran étroit : le « versus » gauche/droite ne tient plus côte à côte, les deux camps
+   s'empilent -- adversaire en haut, joueur en bas -- sans changer une ligne de JSX. */
+@media (max-width: 980px) {
+  .battlefield {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'plateO'
+      'benchO'
+      'activeO'
+      'railO'
+      'railS'
+      'activeS'
+      'lowerS'
+      'plateS';
+    row-gap: 6px;
+  }
+  .zone-plate-self,
+  .zone-plate-opp,
+  .zone-lower-self,
+  .zone-bench-opp {
+    align-self: auto;
+  }
+  .rail {
+    flex-direction: row;
+    justify-content: center;
+    gap: 20px;
+    padding: 6px 10px;
+  }
+  .active-slot.self,
+  .active-slot.opponent,
+  .bench-row.self,
+  .bench-row.opponent {
+    justify-content: center;
+  }
+  .cmd-panel {
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
 @media (max-width: 760px) {
-  .slot-row {
-    grid-template-columns: repeat(6, minmax(40px, 64px));
-    gap: 4px;
-  }
-  .center-row {
-    gap: 8px;
-  }
   .board {
     padding: 6px 8px 8px;
     gap: 6px;
@@ -1897,52 +3056,64 @@ textarea {
     padding: 2px 8px;
     font-size: 0.7rem;
   }
-  .player-zone {
-    padding: 7px;
+  .board-forfeit-confirm {
+    font-size: 0.7rem;
+    gap: 4px;
   }
-  .player-zone-meta {
-    font-size: 0.65rem;
+  /* Pas de « coin » sur un écran de téléphone : la carte épinglée devient un panneau
+     collé en bas, qui laisse encore voir le haut du plateau. */
+  .card-preview.corner-pinned,
+  .hover-card-popover.corner-pinned {
+    right: 6px;
+    left: 6px;
+    top: auto;
+    bottom: 6px;
+    width: auto;
+    max-height: 62dvh;
   }
-  .graveyard-thumb {
-    width: 40px;
+  .card-preview.corner-pinned .tcg-card-large {
+    width: min(42vw, 170px);
+  }
+  .card-preview.corner-pinned .tcg-card-large .tcg-card-art {
+    font-size: 2.4rem;
   }
 
-  /* Six action buttons at desktop size wrap onto three rows and eat the board. */
-  .menu-bar {
-    padding: 7px 8px;
-    gap: 6px;
+  /* Plateau compacté : mêmes zones, cartes plus petites. */
+  .board {
+    --card-hand-w: 66px;
+    --card-bench-w: 58px;
+    --card-pile-w: 54px;
+    --card-opp-hand-w: 38px;
+    --active-card-w: min(94vw, 300px);
+    --active-card-h: 112px;
   }
-  .menu-button {
+  .tcg-card-landscape .tcg-card-name-banner {
     font-size: 0.82rem;
-    padding: 7px 10px;
+    padding: 5px 8px;
   }
-  .menu-item-pass {
-    margin-left: auto;
+  .cmd-panel {
+    width: 100%;
   }
-  /* Anchored to its own button, a dropdown near the right edge opened off-screen.
-     Neutralising .menu-item's positioning context makes it resolve against the whole
-     action bar instead: full width, and always clearing the bar however many rows the
-     buttons wrap onto. */
-  .menu-bar {
-    position: relative;
+  .cmd-button {
+    padding: 9px;
+    font-size: 0.8rem;
   }
-  .menu-item {
-    position: static;
+  .cmd-options {
+    max-height: 40dvh;
   }
-  .menu-dropdown {
-    left: 0;
-    right: 0;
-    min-width: 0;
-    max-width: none;
-    max-height: 45dvh;
-  }
-  .menu-dropdown-option-detail.blocked {
+  .cmd-option-detail.blocked {
     max-width: 45vw;
   }
-
-  .event-log ul {
-    max-height: 96px;
+  .bench-menu {
+    max-width: min(260px, 86vw);
   }
+  .event-log.floating {
+    width: min(300px, calc(100vw - 20px));
+  }
+  .event-log.floating ul {
+    max-height: 34dvh;
+  }
+
   .modal {
     min-width: 0;
     width: 100%;
@@ -1963,19 +3134,16 @@ textarea {
   textarea {
     font-size: 16px;
   }
+}
 
-  /* The active character is otherwise forced to "large" (130px) at all times, which
-     eats a third of a phone screen's width; tapping it now opens the same full-detail
-     popover other cards use, so it no longer needs to sit enlarged in the layout. */
-  .active-character-zone .tcg-card-large {
-    width: 96px;
+/* Portable 768p : la colonne « main adverse / plateau / main du joueur » est haute, et
+   c'est la hauteur qui manque en premier -- pas la largeur. */
+@media (max-height: 800px) {
+  .cmd-options {
+    max-height: 172px;
   }
-  .active-character-zone .tcg-card-large .tcg-card-art {
-    font-size: 1.6rem;
-  }
-  .active-character-zone .tcg-card-large .tcg-card-name-banner {
-    font-size: 0.72rem;
-    padding: 3px 6px;
+  .event-log.floating ul {
+    max-height: 168px;
   }
 }
 
@@ -2013,4 +3181,154 @@ textarea {
   margin-left: 8px;
   font-variant-numeric: tabular-nums;
   opacity: 0.8;
+}
+
+
+/* ---------------------------------------------------------------------------
+   Glossaire des effets : volet consultable à tout moment depuis la barre du haut.
+   Il se superpose au plateau plutôt que de le réduire, pour qu'on puisse vérifier
+   une règle sans perdre de vue la position en cours.
+   --------------------------------------------------------------------------- */
+.glossary-button {
+  white-space: nowrap;
+  /* Au-dessus du voile d'un choix en attente (`.modal-backdrop`, z-index 10) : le moment
+     où l'on hésite sur une cible est précisément celui où l'on veut relire une règle, et
+     le compte à rebours de 120 s tourne pendant ce temps-là. */
+  position: relative;
+  z-index: 11;
+}
+.glossary-button:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.glossary-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 59;
+  background: rgba(0, 0, 0, 0.45);
+  animation: fade-slide-in 0.12s var(--ease);
+}
+.glossary-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  width: min(94vw, 380px);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(165deg, var(--panel-raised), var(--panel) 60%);
+  border-left: 1px solid var(--accent);
+  box-shadow: var(--shadow-lg), 0 0 0 1px var(--accent-soft);
+  animation: glossary-slide-in 0.16s var(--ease);
+}
+@keyframes glossary-slide-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.glossary-header {
+  position: relative;
+  flex-shrink: 0;
+  padding: 14px 46px 12px 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.glossary-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.glossary-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 16px 18px;
+}
+.glossary-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.glossary-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+  border-left: 3px solid var(--glossary-accent, var(--border));
+  background: var(--panel-alt);
+}
+.glossary-icon {
+  flex-shrink: 0;
+  width: 22px;
+  text-align: center;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  color: var(--glossary-accent, var(--text));
+}
+.glossary-entry-text {
+  min-width: 0;
+}
+.glossary-entry-text strong {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--glossary-accent, var(--text));
+}
+.glossary-entry-text p {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--text);
+}
+.glossary-rules {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+  background: var(--panel-alt);
+}
+.glossary-rules h4 {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  color: var(--accent);
+}
+.glossary-rules p {
+  margin: 0 0 4px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+.glossary-rules p:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 760px) {
+  /* Sur téléphone, le volet devient une feuille qui monte du bas : la barre du haut
+     et les cartes actives restent visibles au-dessus. */
+  .glossary-panel {
+    top: auto;
+    left: 0;
+    width: auto;
+    max-height: 78dvh;
+    border-left: none;
+    border-top: 1px solid var(--accent);
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    animation: fade-slide-in 0.14s var(--ease);
+  }
+  .glossary-button {
+    padding: 2px 7px;
+    font-size: 0.78rem;
+  }
+  .glossary-button-label {
+    display: none;
+  }
 }

@@ -12,13 +12,13 @@ export const guts: CharacterCardDef = {
   id: 'guts',
   name: 'Guts',
   baseMaxHP: 250,
-  attacks: [simpleAttack('coup-depee', "Coup d'épée", 50, "Attaque simple : inflige 50 dégâts (+ bonus Berserk) à l'actif adverse.")],
+  attacks: [simpleAttack('coup-depee', "Coup d'épée", 50, "Inflige 50 dégâts à l'actif adverse.")],
   abilities: [
     {
       id: 'berserk',
       name: 'Berserk',
       kind: 'passive',
-      description: `Tous les ${HP_CHUNK} HP que Guts perd au cours de la partie (cumulatif, ne redescend jamais même s'il est soigné), "Coup d'épée" inflige ${BONUS_PER_CHUNK} dégâts supplémentaires de façon permanente.`,
+      description: `Tous les ${HP_CHUNK} HP que Guts perd au cours de la partie, "Coup d'épée" inflige ${BONUS_PER_CHUNK} dégâts supplémentaires de façon permanente.`,
       trigger: 'afterDamage',
       // Le décompte doit valoir même si Guts encaisse les dégâts depuis le banc (AoE).
       usableFromBench: true,

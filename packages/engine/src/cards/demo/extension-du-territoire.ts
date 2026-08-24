@@ -6,7 +6,7 @@ export const extensionDuTerritoire: ObjectCardDef = {
   type: 'object',
   id: 'extension-du-territoire',
   name: 'Extension du territoire',
-  description: `Exemplaire unique. Rajoute ${EXTRA_TURNS} tours au terrain actif du joueur qui la joue (aucun effet si ce terrain est de durée indéfinie, ou si le joueur n'a pas de terrain en jeu).`,
+  description: `Exemplaire unique. Rajoute ${EXTRA_TURNS} tours au terrain actif du joueur qui la joue.`,
   maxCopies: 1,
   async execute(ctx) {
     const terrainInstanceId = ctx.state.players[ctx.ownerId].activeTerrainInstanceId;

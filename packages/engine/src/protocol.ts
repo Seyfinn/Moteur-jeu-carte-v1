@@ -12,6 +12,8 @@ export type ClientMessage =
   /** Reclaim a seat after a reload/disconnect, using the token handed out when the seat was taken. */
   | { type: 'resume-session'; sessionToken: string }
   | { type: 'action'; action: PlayerAction }
+  /** Abandon : recevable à tout moment, tour de l'adversaire ou choix en attente compris. */
+  | { type: 'forfeit' }
   | { type: 'answer-choice'; choiceId: string; answer: ChoiceAnswer };
 
 export type ServerMessage =

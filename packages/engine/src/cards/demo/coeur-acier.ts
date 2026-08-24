@@ -63,7 +63,7 @@ export const coeurAcier: TerrainCardDef = {
       id: 'coeur-acier-onplay',
       name: 'Coeur acier',
       kind: 'passive',
-      description: "Marque immédiatement le personnage actif adverse à la pose (1ère des activations).",
+      description: "Marque immédiatement le personnage actif adverse à la pose.",
       trigger: 'onTerrainPlayed',
       // Only for THIS terrain's own arrival. Without the guard, the event emitted when
       // *any* terrain hits the table (including the opponent's) re-fired this on-play

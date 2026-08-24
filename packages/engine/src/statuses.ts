@@ -2,12 +2,16 @@ import type { BuiltinStatusId, CharacterInstance, GameState, PlayerId, StatusIns
 import type { EngineApi } from './engine-api.js';
 import { cardName } from './names.js';
 
-/** Fixed damage-per-tick formulas -- not customizable via a status's `data`. */
-const BURN_DAMAGE = 50;
-const POISON_FLAT_DAMAGE = 10;
-const POISON_PERCENT_OF_MAX_HP = 0.1;
-const BLEED_PERCENT_PER_STACK = 0.1;
-const BLEED_MAX_STACKS = 10;
+/** Fixed damage-per-tick formulas -- not customizable via a status's `data`.
+ * Exported so the in-game glossary (web/components/EffectsGlossary) states the rules the
+ * engine actually applies instead of a hand-copied duplicate that can drift. */
+export const BURN_DAMAGE = 50;
+export const POISON_FLAT_DAMAGE = 10;
+export const POISON_PERCENT_OF_MAX_HP = 0.1;
+export const BLEED_PERCENT_PER_STACK = 0.1;
+export const BLEED_MAX_STACKS = 10;
+/** 'vulnerable': every damage instance the bearer takes is raised by this percentage. */
+export const VULNERABLE_DAMAGE_BONUS_PERCENT = 50;
 
 /**
  * Every status id the engine itself gives meaning to. A card is free to invent any other
@@ -35,6 +39,7 @@ export const BUILTIN_STATUS_IDS: ReadonlySet<string> = new Set<BuiltinStatusId>(
   'damage-reflect',
   'bench-damage-bonus',
   'hit-bounty',
+  'vulnerable',
 ]);
 
 /** Human labels for the three damage-over-time statuses, used in the event log. */
@@ -73,6 +78,22 @@ export function isEvasive(char: CharacterInstance): boolean {
 
 export function isCritical(char: CharacterInstance): boolean {
   return hasStatus(char, 'critical');
+}
+
+export function isVulnerable(char: CharacterInstance): boolean {
+  return hasStatus(char, 'vulnerable');
+}
+
+/**
+ * Vulnerable: a flat damage amplification on the RECEIVING side (+50%), applied in
+ * match.ts's dealDamage before any card's `getIncomingDamageAmount` reduction, so a
+ * reduction still applies to the real incoming number. Damage a character inflicts on
+ * itself as a cost (`ignoreDamageReduction`) is deliberately left alone -- amplifying a
+ * self-paid HP cost would punish the bearer twice for the same debuff.
+ * Returns 1 (no-op) when the status is absent.
+ */
+export function getVulnerableDamageMultiplier(char: CharacterInstance): number {
+  return isVulnerable(char) ? 1 + VULNERABLE_DAMAGE_BONUS_PERCENT / 100 : 1;
 }
 
 /**

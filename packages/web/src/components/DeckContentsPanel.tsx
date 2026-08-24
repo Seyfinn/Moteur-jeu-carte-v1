@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { DECK_LIMITS, type DeckPoolEntry } from 'engine';
 import { CardFrame } from './CardFrame';
+import { CardPreviewPanel } from './CardPreviewPanel';
 import { characterDetailBody, objectDetailBody, terrainDetailBody } from './cardDetails';
 import type { Deck } from '../decks';
 import { usePointerCoarse } from '../hooks/usePointerCoarse';
@@ -101,23 +102,21 @@ export function CardPreviewProvider({ children }: { children: ReactNode }) {
       {children}
       {pinned && <div className="hover-card-backdrop" onClick={() => setState(null)} />}
       {state && (
-        <div className={`deck-card-preview${pinned ? ' pinned' : ''}`} style={style}>
+        <div className={`card-preview${pinned ? ' pinned' : ''}`} style={style}>
           {pinned && (
             <button className="hover-card-close" onClick={() => setState(null)} aria-label="Fermer">
               ×
             </button>
           )}
-          <CardFrame
-            cardId={state.entry.id}
-            kind={state.entry.type}
-            name={state.entry.name}
-            size="large"
-            unique={state.entry.maxCopies === 1}
+          <CardPreviewPanel
+            card={{
+              cardId: state.entry.id,
+              kind: state.entry.type,
+              name: state.entry.name,
+              unique: state.entry.maxCopies === 1,
+            }}
+            body={detailBodyFor(state.entry)}
           />
-          <div className="deck-card-preview-text">
-            <div className="hover-card-title">{state.entry.name}</div>
-            <div className="hover-card-content">{detailBodyFor(state.entry)}</div>
-          </div>
         </div>
       )}
     </CardPreviewCtx.Provider>
@@ -177,19 +176,77 @@ export function SelectedCardTile({
   );
 }
 
+/** Ligne d'une carte dans la vue « liste » : une bande de l'illustration en fond, le nom
+    par-dessus et la quantité. Une grille de vignettes complètes sature vite un panneau
+    latéral -- ici, une carte = une ligne, et l'illustration reste une simple ambiance.
+    L'aperçu complet (survol prolongé, ou tap sur mobile) reste la façon de vraiment lire
+    la carte, exactement comme sur les vignettes. */
+export function DeckCardRow({
+  entry,
+  count,
+  onRemove,
+}: {
+  entry: DeckPoolEntry;
+  count: number;
+  onRemove?: () => void;
+}) {
+  const preview = useCardPreview();
+  const coarse = usePointerCoarse();
+  return (
+    <li
+      className="deck-row"
+      style={{ '--row-art': `url(/cards/${entry.id}.png)` } as CSSProperties}
+      onClick={coarse ? () => preview.showCentered(entry) : undefined}
+      onMouseEnter={coarse ? undefined : (e) => preview.requestShow(entry, e.currentTarget)}
+      onMouseLeave={coarse ? undefined : preview.cancel}
+    >
+      <span className="deck-row-art" />
+      <span className="deck-row-scrim" />
+      {/* Le badge « unique » se colle au nom : posé à côté du compteur, « 1× ×1 » se lit
+          comme deux quantités contradictoires. */}
+      <span className="deck-row-main">
+        <span className="deck-row-name">{entry.name}</span>
+        {entry.maxCopies === 1 && (
+          <span className="deck-row-unique" title="Carte unique exemplaire (1 max par deck)">
+            1×
+          </span>
+        )}
+      </span>
+      <span className="deck-row-count">×{count}</span>
+      {onRemove && (
+        <button
+          type="button"
+          className="deck-row-remove"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          aria-label={`Retirer ${entry.name}`}
+        >
+          −
+        </button>
+      )}
+    </li>
+  );
+}
+
 /** Read-or-edit panel listing every card currently in a deck, grouped by category.
     Used both as the live "Deck actuel" tracker while building a deck, and as a
-    read-only preview of the deck picked in the lobby before starting a game. */
+    read-only preview of the deck picked in the lobby before starting a game.
+    `variant` choisit la densité : `grid` (vignettes) pour le deck-builder, où l'on
+    compare des cartes, `list` (lignes) pour le salon, où l'on relit juste son deck. */
 export function DeckContentsPanel({
   title,
   deck,
   pool,
   onRemove,
+  variant = 'grid',
 }: {
   title: string;
   deck: Deck;
   pool: Record<CardKind, DeckPoolEntry[]>;
   onRemove?: (key: DeckSectionKey, id: string) => void;
+  variant?: 'grid' | 'list';
 }) {
   const poolById = useMemo(() => {
     const map = new Map<string, DeckPoolEntry>();
@@ -213,6 +270,21 @@ export function DeckContentsPanel({
               </h3>
               {groups.length === 0 ? (
                 <p className="subtitle">Aucune carte pour l'instant.</p>
+              ) : variant === 'list' ? (
+                <ul className="deck-row-list">
+                  {groups.map(({ id, count }) => {
+                    const entry = poolById.get(id);
+                    if (!entry) return null;
+                    return (
+                      <DeckCardRow
+                        key={id}
+                        entry={entry}
+                        count={count}
+                        onRemove={onRemove ? () => onRemove(section.key, id) : undefined}
+                      />
+                    );
+                  })}
+                </ul>
               ) : (
                 <div className="deck-selected-grid">
                   {groups.map(({ id, count }) => {

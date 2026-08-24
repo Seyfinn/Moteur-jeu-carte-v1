@@ -11,7 +11,7 @@ export const hulk: CharacterCardDef = {
   id: 'hulk',
   name: 'Hulk',
   baseMaxHP: 500,
-  attacks: [simpleAttack('smash', 'Smash', 30, "Attaque simple : inflige 30 dégâts (+ bonus Enervement) à l'actif adverse.")],
+  attacks: [simpleAttack('smash', 'Smash', 30, "Inflige 30 dégâts à l'actif adverse.")],
   abilities: [
     {
       id: 'enervement',

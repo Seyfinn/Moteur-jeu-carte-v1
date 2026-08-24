@@ -18,7 +18,7 @@ export const aizen: CharacterCardDef = {
       baseATK: HADO_BASE_ATK,
       description:
         `Inflige ${HADO_BASE_ATK} dégâts à l'actif adverse en traversant tous les boucliers et toutes les ` +
-        "réductions de dégâts. Seule une protection contre la mort (Détermination) peut encore empêcher le KO.",
+        'réductions de dégâts.',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -45,10 +45,7 @@ export const aizen: CharacterCardDef = {
       id: 'inversion-de-la-realite',
       name: 'Inversion de la Réalité',
       kind: 'active',
-      description:
-        "Échange les altérations d'Aizen (buffs comme malus) avec celles du personnage actif adverse. " +
-        "Le bouclier, les HP et l'ATK de base ne bougent pas, et les compteurs internes de chaque carte " +
-        "restent chez leur propriétaire.",
+      description: "Échange les altérations d'Aizen (buffs comme malus) avec celles du personnage actif adverse.",
       async execute(ctx) {
         const opponentActive = ctx.getActive(ctx.opponentId);
         if (!opponentActive) return;

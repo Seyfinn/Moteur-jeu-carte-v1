@@ -59,6 +59,8 @@ export interface GameConnection {
   applyAction(action: PlayerAction): void;
   answerChoice(choiceId: string, answer: ChoiceAnswer): void;
   clearError(): void;
+  /** Concedes the match: the opponent wins immediately, whoever's turn it is. */
+  forfeit(): void;
   /** Closes the socket and returns to the lobby (used once a game is over). */
   leave(): void;
 }
@@ -218,6 +220,9 @@ export function useGameConnection(): GameConnection {
     [send]
   );
   const clearError = useCallback(() => setError(null), []);
+  // Deliberately keeps the socket open: the server ends the match and both sides get the
+  // result screen from the state broadcast, exactly like a game won on the board.
+  const forfeit = useCallback(() => send({ type: 'forfeit' }), [send]);
 
   const leave = useCallback(() => {
     writeSessionToken(null);
@@ -246,6 +251,7 @@ export function useGameConnection(): GameConnection {
     applyAction,
     answerChoice,
     clearError,
+    forfeit,
     leave,
     choiceDeadline,
     resuming,

@@ -21,7 +21,7 @@ const espritDeGlace: AttackDef = {
   id: 'esprit-de-glace',
   name: 'Esprit de glace',
   baseATK: ICE_ATK,
-  description: `Inflige ${ICE_ATK} dégâts à l'actif adverse. Si les dégâts passent réellement (pas d'esquive), ${STUN_CHANCE_PERCENT}% de chance d'appliquer Stun pendant ${STUN_EFFECTIVE_TURNS} tour.`,
+  description: `Inflige ${ICE_ATK} dégâts à l'actif adverse. Si les dégâts passent, ${STUN_CHANCE_PERCENT}% de chance d'appliquer Stun pendant ${STUN_EFFECTIVE_TURNS} tour.`,
   async execute(ctx) {
     const target = ctx.getActive(ctx.opponentId);
     if (!target) return;

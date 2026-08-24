@@ -13,7 +13,8 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5173,
-      "autoPort": true
+      "autoPort": true,
+      "env": { "SERVER_PORT": "8787" }
     }
   ]
 }

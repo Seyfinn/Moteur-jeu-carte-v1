@@ -8,7 +8,7 @@ export const pointFaible: TerrainCardDef = {
   type: 'terrain',
   id: 'point-faible',
   name: 'Point faible',
-  description: `Pendant ${DURATION_TURNS} tours, les coups critiques du joueur qui a posé ce terrain infligent ${MULTIPLIER} fois les dégâts de base au lieu de 2 fois (n'affecte pas les crits adverses).`,
+  description: `Pendant ${DURATION_TURNS} tours, les coups critiques du joueur qui a posé ce terrain infligent ${MULTIPLIER} fois les dégâts de base au lieu de 2 fois.`,
   durationTurns: DURATION_TURNS,
   modifiers: [
     {

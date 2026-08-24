@@ -35,7 +35,7 @@ export const zoe: CharacterCardDef = {
       id: 'sleepy-bubble',
       name: 'Sleepy Bubble',
       baseATK: BASE_ATK,
-      description: `Inflige ${BASE_ATK} dégâts à l'actif adverse. Si des dégâts passent réellement (pas d'esquive), ${SILENCE_CHANCE_PERCENT}% de chance d'appliquer Silence Ultime pendant ${SILENCE_EFFECTIVE_TURNS} tour.`,
+      description: `Inflige ${BASE_ATK} dégâts à l'actif adverse. Si des dégâts passent, ${SILENCE_CHANCE_PERCENT}% de chance d'appliquer Silence Ultime pendant ${SILENCE_EFFECTIVE_TURNS} tour.`,
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -109,7 +109,7 @@ export const zoe: CharacterCardDef = {
       id: 'spell-thief',
       name: 'Spell Thief',
       kind: 'active',
-      description: `Rejoue immédiatement la dernière capacité active utilisée par l'adversaire, mais lancée par Zoé. Une capacité qui dépend d'un compteur propre à son porteur d'origine peut être moins efficace. Rechargement : ${SPELL_THIEF_COOLDOWN_EFFECTIVE_TURNS} tours.`,
+      description: `Rejoue immédiatement la dernière capacité active utilisée par l'adversaire, mais lancée par Zoé. Rechargement : ${SPELL_THIEF_COOLDOWN_EFFECTIVE_TURNS} tours.`,
       condition(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);
         if (hasStatus(self, SPELL_THIEF_COOLDOWN_STATUS_ID)) return false;

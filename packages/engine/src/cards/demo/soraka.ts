@@ -32,7 +32,7 @@ export const soraka: CharacterCardDef = {
       id: 'soin-sacrificiel',
       name: 'Soin Sacrificiel',
       kind: 'active',
-      description: `Sacrifie ${SACRIFICE_COST}HP pour rendre ${SACRIFICE_HEAL}HP au personnage de votre choix. Utilisable sur le banc. Nécessite plus de ${SACRIFICE_COST}HP actuels (ne peut pas se tuer avec cette ability).`,
+      description: `Sacrifie ${SACRIFICE_COST}HP pour rendre ${SACRIFICE_HEAL}HP au personnage de votre choix. Utilisable sur le banc. Nécessite plus de ${SACRIFICE_COST}HP actuels.`,
       usableFromBench: true,
       condition(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);

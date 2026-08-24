@@ -41,7 +41,9 @@ export type BuiltinStatusId =
   /** Bearer's damage against the enemy BENCH is multiplied by `data.multiplier` (default 2). */
   | 'bench-damage-bonus'
   /** The first attack that really lands on the bearer grants `data.bonusMaxHP` max HP to its attacker, then the status is consumed. */
-  | 'hit-bounty';
+  | 'hit-bounty'
+  /** Bearer takes VULNERABLE_DAMAGE_BONUS_PERCENT% more damage from every incoming damage instance (never consumed). */
+  | 'vulnerable';
 
 export interface DealDamageOptions {
   /** Bypasses shield entirely: damage hits `damage` directly, ignoring any current `shield` value. */
@@ -183,7 +185,10 @@ export interface PlayerState {
 
 export type GamePhase = 'setup' | 'main' | 'ended';
 
-export type GameResult = { kind: 'win'; winner: PlayerId } | { kind: 'draw' };
+export type GameResult =
+  /** `reason` distingue une victoire gagnée sur le plateau d'un abandon adverse. */
+  | { kind: 'win'; winner: PlayerId; reason?: 'forfeit' }
+  | { kind: 'draw' };
 
 export interface LogEntry {
   id: string;

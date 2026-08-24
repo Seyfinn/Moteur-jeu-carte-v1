@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { listDeckPool, validateRoster, type DeckPoolEntry } from 'engine';
 import { CardFrame } from './CardFrame';
 import { CardPreviewProvider, DeckContentsPanel, SECTIONS, useCardPreview, type CardKind, type DeckSectionKey } from './DeckContentsPanel';
@@ -119,21 +119,87 @@ function PoolCardTile({
   );
 }
 
+/**
+ * En-tête collant de l'éditeur. « Annuler » et « Enregistrer » ne vivaient qu'en bas de
+ * page, après les trois grilles de cartes : sortir d'un deck en cours d'édition (ou le
+ * sauvegarder) obligeait à traverser tout le pool au scroll. La sortie demande
+ * confirmation tant qu'il reste des modifications non enregistrées, et Échap fait la
+ * même chose que le bouton.
+ */
+function DeckEditorHeader({
+  title,
+  dirty,
+  canSave,
+  onBack,
+  onSave,
+}: {
+  title: string;
+  dirty: boolean;
+  canSave: boolean;
+  onBack: () => void;
+  onSave: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+
+  const requestBack = useCallback(() => {
+    if (dirty) setConfirming(true);
+    else onBack();
+  }, [dirty, onBack]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (confirming) setConfirming(false);
+      else requestBack();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [confirming, requestBack]);
+
+  return (
+    <div className="deck-manager-header deck-editor-header">
+      <button className="deck-back-button" onClick={requestBack}>
+        ← Retour
+      </button>
+      <h1>{title}</h1>
+      {confirming ? (
+        <span className="deck-editor-discard">
+          Quitter sans enregistrer ?
+          <button className="danger" onClick={onBack}>
+            Oui
+          </button>
+          <button onClick={() => setConfirming(false)}>Non</button>
+        </span>
+      ) : (
+        <button className="primary" disabled={!canSave} onClick={onSave}>
+          Enregistrer
+        </button>
+      )}
+    </div>
+  );
+}
+
 function DeckEditor({
   deck,
   pool,
+  title,
   onChange,
   onSave,
   onCancel,
 }: {
   deck: Deck;
   pool: Record<CardKind, DeckPoolEntry[]>;
+  title: string;
   onChange: (deck: Deck) => void;
   onSave: () => void;
   onCancel: () => void;
 }) {
   const validation = validateRoster(deckToRoster(deck));
   const canSave = deck.name.trim().length > 0 && validation.ok;
+  // Instantané pris au montage (le composant est monté avec une `key` par deck édité) :
+  // sortir sans avoir rien touché ne doit pas réclamer de confirmation.
+  const [initialSnapshot] = useState(() => JSON.stringify(deck));
+  const dirty = JSON.stringify(deck) !== initialSnapshot;
   const [collapsedSections, setCollapsedSections] = useState<Partial<Record<DeckSectionKey, boolean>>>({});
   const [sortBySections, setSortBySections] = useState<Partial<Record<DeckSectionKey, SortValue>>>({});
 
@@ -158,6 +224,8 @@ function DeckEditor({
     <div className="deck-editor-layout">
       <CardPreviewProvider>
         <div className="deck-editor">
+          <DeckEditorHeader title={title} dirty={dirty} canSave={canSave} onBack={onCancel} onSave={onSave} />
+
           <label className="field">
             Nom du deck
             <input value={deck.name} onChange={(e) => onChange({ ...deck, name: e.target.value })} placeholder="Mon deck" autoFocus />
@@ -267,6 +335,9 @@ export function DeckBuilder({
 }) {
   const [decks, setDecks] = useState<Deck[]>(() => loadDecks());
   const [editing, setEditing] = useState<Deck | null>(() => (initialView === 'new' ? createEmptyDeck() : null));
+  // « Créer un deck » depuis le lobby ouvre directement l'éditeur : en sortir doit rendre
+  // au lobby, pas à une liste de decks que le joueur n'a jamais vue.
+  const [editorIsRoot, setEditorIsRoot] = useState(initialView === 'new');
   const [sharingId, setSharingId] = useState<string | null>(null);
   const [importCode, setImportCode] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
@@ -284,6 +355,31 @@ export function DeckBuilder({
   useEffect(() => {
     if (initialView === 'import') importInputRef.current?.focus();
   }, [initialView]);
+
+  // Échap remonte d'un cran depuis la liste, comme le bouton « Retour ». L'éditeur a le
+  // sien (avec sa confirmation), donc on ne s'en mêle pas quand il est ouvert.
+  useEffect(() => {
+    if (editing) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onBack();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [editing, onBack]);
+
+  function openEditor(deck: Deck) {
+    setEditorIsRoot(false);
+    setEditing(deck);
+  }
+
+  /** Sortie de l'éditeur : d'un cran vers la liste, ou jusqu'au lobby si on y a atterri direct. */
+  function closeEditor() {
+    setEditing(null);
+    if (editorIsRoot) {
+      setEditorIsRoot(false);
+      onBack();
+    }
+  }
 
   function persist(next: Deck[]) {
     setDecks(next);
@@ -313,9 +409,18 @@ export function DeckBuilder({
   }
 
   if (editing) {
+    const known = decks.some((d) => d.id === editing.id);
     return (
       <div className="deck-manager">
-        <DeckEditor deck={editing} pool={poolByType} onChange={setEditing} onSave={saveEditing} onCancel={() => setEditing(null)} />
+        <DeckEditor
+          key={editing.id}
+          deck={editing}
+          pool={poolByType}
+          title={known ? 'Modifier le deck' : 'Nouveau deck'}
+          onChange={setEditing}
+          onSave={saveEditing}
+          onCancel={closeEditor}
+        />
       </div>
     );
   }
@@ -324,10 +429,12 @@ export function DeckBuilder({
     <div className="deck-manager">
       <div className="deck-manager-header">
         <h1>Mes decks</h1>
-        <button onClick={onBack}>Retour</button>
+        <button className="deck-back-button" onClick={onBack}>
+          ← Retour
+        </button>
       </div>
 
-      <button className="primary" onClick={() => setEditing(createEmptyDeck())}>
+      <button className="primary" onClick={() => openEditor(createEmptyDeck())}>
         + Nouveau deck
       </button>
 
@@ -343,7 +450,7 @@ export function DeckBuilder({
               </div>
               <div className="deck-list-actions">
                 <button onClick={() => setSharingId((id) => (id === deck.id ? null : deck.id))}>Partager</button>
-                <button onClick={() => setEditing({ ...deck })}>Modifier</button>
+                <button onClick={() => openEditor({ ...deck })}>Modifier</button>
                 <button onClick={() => removeDeck(deck.id)}>Supprimer</button>
               </div>
             </div>

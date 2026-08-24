@@ -13,7 +13,7 @@ export const mundo: CharacterCardDef = {
   name: 'Mundo',
   baseMaxHP: BASE_HP,
   attacks: [
-    simpleAttack('hache-volante', 'Hache Volante', HACHE_VOLANTE_ATK, `Inflige ${HACHE_VOLANTE_ATK} dégâts (+ bonus Surcroissance) à l'actif adverse.`),
+    simpleAttack('hache-volante', 'Hache Volante', HACHE_VOLANTE_ATK, `Inflige ${HACHE_VOLANTE_ATK} dégâts à l'actif adverse.`),
   ],
   abilities: [
     {

@@ -19,7 +19,7 @@ export const caitlyn: CharacterCardDef = {
       id: 'headshot',
       name: 'Headshot',
       baseATK: HEADSHOT_DAMAGE,
-      description: `Inflige ${HEADSHOT_DAMAGE} dégâts à l'actif adverse. Peut critiquer : ${BASE_CRIT_PERCENT}% de base grâce à "Execution", ${EXECUTION_CRIT_PERCENT}% dès que Caitlyn a tué un ennemi (pour le reste de la partie).`,
+      description: `Inflige ${HEADSHOT_DAMAGE} dégâts à l'actif adverse.`,
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
