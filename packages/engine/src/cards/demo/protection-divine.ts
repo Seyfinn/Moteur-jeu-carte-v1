@@ -21,6 +21,12 @@ export const protectionDivine: TerrainCardDef = {
       kind: 'passive',
       description: `Déclenche l'effet immédiatement à la pose (1ère des ${DURATION_TURNS} activations).`,
       trigger: 'onTerrainPlayed',
+      // Only for THIS terrain's own arrival. Without the guard, the event emitted when
+      // *any* terrain hits the table (including the opponent's) re-fired this on-play
+      // effect for every terrain already in play.
+      condition(ctx) {
+        return ctx.event?.data['terrainInstanceId'] === ctx.sourceInstanceId;
+      },
       async execute(ctx) {
         grantShield(ctx);
       },

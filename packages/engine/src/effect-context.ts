@@ -5,6 +5,7 @@ import { evaluateTransform, findCharacter, getCriticalMultiplier, getEffectiveAT
 import { getStatus } from './statuses.js';
 import { chancePercent } from './rng.js';
 import { findCharacterOwner } from './zones.js';
+import { cardName } from './names.js';
 import { otherPlayer, type EngineEvent, type GameState, type PlayerId } from './types.js';
 
 export function buildEffectContext(
@@ -22,7 +23,8 @@ export function buildEffectContext(
   function consumeMissedConcentration(char: ReturnType<typeof findCharacter>): void {
     api.removeStatus(char.instanceId, 'concentration');
     api.applyStatus(char.instanceId, { statusId: 'disarmed', label: 'Concentration ratée', remainingTurns: 2 });
-    api.log(`${char.cardId} rate sa Concentration : aucun dégât, ne pourra pas attaquer au prochain tour`, {
+    api.log(`${cardName(char.cardId)} rate sa Concentration : aucun dégât, et ne pourra pas attaquer au prochain tour`, {
+      kind: 'concentration-missed',
       characterInstanceId: char.instanceId,
     });
   }
@@ -66,7 +68,7 @@ export function buildEffectContext(
     },
     flipCoin() {
       const result = api.flipCoin();
-      api.log(`Coin flip: ${result}`, { sourceInstanceId, result });
+      api.log(`Pile ou face : ${result === 'heads' ? 'pile' : 'face'}`, { kind: 'coin-flip', sourceInstanceId, result });
       return result;
     },
 
@@ -143,7 +145,7 @@ export function buildEffectContext(
       if (!options?.skipEvasionRoll && canRollAgainst(targetInstanceId)) {
         const target = findCharacter(state, targetInstanceId);
         if (rollEvasion(state, target)) {
-          api.log(`${target.cardId} esquive l'attaque`, { targetInstanceId, sourceInstanceId });
+          api.log(`${cardName(target.cardId)} esquive l'attaque`, { kind: 'evasion', targetInstanceId, sourceInstanceId });
           if (concentration) consumeMissedConcentration(source!);
           return;
         }
@@ -174,7 +176,8 @@ export function buildEffectContext(
             });
             const chosen = answer.kind === 'select-characters' ? answer.selected[0] : undefined;
             if (chosen && api.isOnBoard(chosen)) {
-              api.log(`Les dégâts sont redirigés vers ${findCharacter(state, chosen).cardId}`, {
+              api.log(`Les dégâts sont redirigés vers ${cardName(findCharacter(state, chosen).cardId)}`, {
+                kind: 'redirect',
                 from: targetInstanceId,
                 to: chosen,
               });
@@ -191,7 +194,7 @@ export function buildEffectContext(
           api.removeStatus(source!.instanceId, 'concentration');
           const multiplier = getCriticalMultiplier(state, sourceInstanceId);
           finalAmount = amount * multiplier;
-          api.log(`${source!.cardId} se concentre et critique (x${multiplier}) !`, { sourceInstanceId, targetInstanceId: resolvedTargetId, baseAmount: amount, amount: finalAmount });
+          api.log(`${cardName(source!.cardId)} se concentre et fait un critique (x${multiplier}) !`, { kind: 'critical', sourceInstanceId, targetInstanceId: resolvedTargetId, baseAmount: amount, amount: finalAmount });
         } else {
           consumeMissedConcentration(source!);
           finalAmount = 0;
@@ -199,7 +202,7 @@ export function buildEffectContext(
       } else if (source && rollCritical(state, source)) {
         const multiplier = getCriticalMultiplier(state, sourceInstanceId);
         finalAmount = amount * multiplier;
-        api.log(`${source.cardId} inflige un coup critique (x${multiplier}) !`, { sourceInstanceId, targetInstanceId: resolvedTargetId, baseAmount: amount, amount: finalAmount });
+        api.log(`${cardName(source.cardId)} inflige un coup critique (x${multiplier}) !`, { kind: 'critical', sourceInstanceId, targetInstanceId: resolvedTargetId, baseAmount: amount, amount: finalAmount });
       }
 
       // 'bench-damage-bonus' (e.g. "Couteau dans le dos"): the bearer's damage against
@@ -213,7 +216,7 @@ export function buildEffectContext(
           if (targetOwner !== ownerId && state.players[targetOwner].benchCharacterInstanceIds.includes(resolvedTargetId)) {
             const multiplier = Number(benchBonus.data?.['multiplier'] ?? 2);
             finalAmount = Math.round(finalAmount * multiplier);
-            api.log(`${source.cardId} frappe dans le dos : dégâts au banc x${multiplier}`, { sourceInstanceId, targetInstanceId: resolvedTargetId, amount: finalAmount });
+            api.log(`${cardName(source.cardId)} frappe dans le dos : dégâts au banc x${multiplier}`, { kind: 'info', sourceInstanceId, targetInstanceId: resolvedTargetId, amount: finalAmount });
           }
         }
       }
@@ -231,7 +234,8 @@ export function buildEffectContext(
           const percent = Number(mirror.data?.['percent'] ?? 50);
           const reflected = Math.round(finalAmount * (percent / 100));
           if (reflected > 0) {
-            api.log(`${target.cardId} renvoie ${reflected} dégâts à ${source.cardId}`, {
+            api.log(`${cardName(target.cardId)} renvoie ${reflected} dégâts à ${cardName(source.cardId)}`, {
+              kind: 'info',
               targetInstanceId: source.instanceId,
               amount: reflected,
             });
@@ -252,7 +256,8 @@ export function buildEffectContext(
           const bonus = Number(bounty.data?.['bonusMaxHP'] ?? 0);
           if (bonus > 0) {
             api.raiseMaxHP(source.instanceId, bonus);
-            api.log(`${source.cardId} encaisse la prime : +${bonus} HP max`, {
+            api.log(`${cardName(source.cardId)} encaisse la prime : +${bonus} HP max`, {
+              kind: 'info',
               sourceInstanceId: source.instanceId,
               targetInstanceId: resolvedTargetId,
             });
@@ -291,7 +296,7 @@ export function buildEffectContext(
       if (!options?.skipEvasionRoll && canRollAgainst(targetInstanceId)) {
         const target = findCharacter(state, targetInstanceId);
         if (rollEvasion(state, target)) {
-          api.log(`${target.cardId} esquive l'altération ${status.statusId}`, { targetInstanceId, statusId: status.statusId, sourceInstanceId });
+          api.log(`${cardName(target.cardId)} esquive l'altération « ${status.label || status.statusId} »`, { kind: 'evasion', targetInstanceId, statusId: status.statusId, sourceInstanceId });
           return;
         }
       }
@@ -302,7 +307,7 @@ export function buildEffectContext(
       const target = findCharacter(state, targetInstanceId);
       const evaded = rollEvasion(state, target);
       if (evaded) {
-        api.log(`${target.cardId} esquive`, { targetInstanceId, sourceInstanceId });
+        api.log(`${cardName(target.cardId)} esquive`, { kind: 'evasion', targetInstanceId, sourceInstanceId });
       }
       return evaded;
     },

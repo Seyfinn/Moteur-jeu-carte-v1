@@ -13,15 +13,21 @@ export const absorptionVitale: TerrainCardDef = {
   id: 'absorption-vitale',
   name: 'Absorption Vitale',
   description:
-    `Pendant ${DURATION_EFFECTIVE_TURNS} tours, empêche votre personnage actif du moment de la pose de switch et d'utiliser ses abilities (actives et passives). S'il est toujours actif et vivant à l'issue des ${DURATION_EFFECTIVE_TURNS} tours, il meurt et vous choisissez un personnage de votre cimetière à ranimer sur votre banc avec la moitié de ses HP max. S'il meurt ou est forcé hors du poste actif avant la fin, ce terrain part au cimetière sans effet.`,
+    `Votre personnage actif est scellé : pendant ${DURATION_EFFECTIVE_TURNS} tours il ne peut ni switcher ni utiliser ses capacités (il peut toujours attaquer). S'il tient jusqu'au bout, il meurt et vous ranimez sur votre banc, à la moitié de ses HP max, un autre personnage de votre cimetière (jamais celui qui vient d'être sacrifié). S'il meurt ou quitte le poste actif avant la fin, le terrain part au cimetière sans rien donner.`,
   durationTurns: DURATION_TURNS,
   abilities: [
     {
       id: 'absorption-vitale-onplay',
       name: 'Absorption Vitale',
       kind: 'passive',
-      description: "Verrouille le personnage actif à la pose (chained + silence-ultimate, sans limite de durée propre -- levés par le suivi ci-dessous).",
+      description: "Scelle le personnage actif au moment de la pose.",
       trigger: 'onTerrainPlayed',
+      // Only for THIS terrain's own arrival. Without the guard, the event emitted when
+      // *any* terrain hits the table (including the opponent's) re-fired this on-play
+      // effect for every terrain already in play.
+      condition(ctx) {
+        return ctx.event?.data['terrainInstanceId'] === ctx.sourceInstanceId;
+      },
       async execute(ctx) {
         const active = ctx.getActive(ctx.ownerId);
         const terrain = ctx.getTerrain(ctx.sourceInstanceId);
@@ -38,7 +44,7 @@ export const absorptionVitale: TerrainCardDef = {
       id: 'absorption-vitale-tick',
       name: 'Absorption Vitale',
       kind: 'passive',
-      description: 'Vérifie chaque tour que le personnage verrouillé est toujours actif et vivant ; au bout de 3 tours, résout la mort + résurrection.',
+      description: `Vérifie à chaque tour que le personnage scellé est toujours actif et vivant ; au bout de ${DURATION_EFFECTIVE_TURNS} tours, déclenche le sacrifice et la résurrection.`,
       trigger: 'onTurnStart',
       condition(ctx) {
         return ctx.event?.playerId === ctx.ownerId;
@@ -65,7 +71,9 @@ export const absorptionVitale: TerrainCardDef = {
         ctx.removeStatus(trackedId, 'silence-ultimate');
         await ctx.koCharacter(trackedId);
 
-        const graveyard = ctx.state.players[ctx.ownerId].graveyardCharacterInstanceIds;
+        // Le personnage qu'on vient de sacrifier est exclu : le ranimer lui-même reviendrait
+        // à annuler le coût de la carte (il repart simplement au banc à mi-PV).
+        const graveyard = ctx.state.players[ctx.ownerId].graveyardCharacterInstanceIds.filter((id) => id !== trackedId);
         if (graveyard.length === 0) return;
         const options = graveyard.map((id) => ({
           key: id,
@@ -78,6 +86,26 @@ export const absorptionVitale: TerrainCardDef = {
         const chosenChar = ctx.getCharacter(chosenId);
         const reviveHP = Math.floor(chosenChar.currentMaxHP / 2);
         await ctx.reviveCharacter(chosenId, reviveHP, 'bench');
+      },
+    },
+    {
+      id: 'absorption-vitale-cleanup',
+      name: 'Absorption Vitale',
+      kind: 'passive',
+      description: 'Libère le personnage scellé si ce terrain quitte le jeu avant la fin.',
+      trigger: 'onTerrainRemoved',
+      // The lock is deliberately open-ended (no remainingTurns of its own) because the
+      // tick above is what lifts it. If the terrain leaves play some other way -- an
+      // Annulation de territoire, or simply posing another terrain over it -- that tick
+      // never runs again and the character stayed chained + silenced for the whole game.
+      condition(ctx) {
+        return ctx.event?.data['terrainInstanceId'] === ctx.sourceInstanceId;
+      },
+      async execute(ctx) {
+        const trackedId = ctx.getTerrain(ctx.sourceInstanceId).data?.['trackedCharacterId'] as string | undefined;
+        if (!trackedId) return;
+        ctx.removeStatus(trackedId, 'chained');
+        ctx.removeStatus(trackedId, 'silence-ultimate');
       },
     },
   ],

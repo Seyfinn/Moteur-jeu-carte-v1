@@ -20,6 +20,10 @@ export const couteauDansLeDos: ObjectCardDef = {
         sourcePlayerId: ctx.ownerId,
         sourceCardInstanceId: ctx.sourceInstanceId,
         remainingTurns: BUFF_DURATION_TURNS,
+        // This lands on all six of your characters at once, five of them benched --
+        // where durations are normally suspended. Without this the buff was permanent
+        // for everyone who never took the active slot.
+        ticksOnBench: true,
         data: { multiplier: DAMAGE_MULTIPLIER },
       });
     }

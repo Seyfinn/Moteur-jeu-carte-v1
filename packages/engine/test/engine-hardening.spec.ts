@@ -280,7 +280,7 @@ describe('bench immunity scoping (Bouclier Ultime)', () => {
 });
 
 describe('event resolution', () => {
-  it('fires each reacting passive exactly once even if the ordering answer repeats a key', async () => {
+  it('rejects a malformed ordering answer and still fires each reacting passive exactly once', async () => {
     const match = await createReadyMatch(
       { p1Name: 'A', p2Name: 'B', p1Roster: TICKER_ROSTER, p2Roster: TICKER_ROSTER, seed: 4 },
       {}
@@ -288,8 +288,11 @@ describe('event resolution', () => {
 
     const active = match.state.activePlayerId;
     await drive(match, active, { kind: 'pass' }, (choice) => {
-      // A hostile/buggy client answering "resolve source 0, then source 0 again".
-      if (choice.spec.kind === 'order') return { kind: 'order', orderedKeys: ['0', '0'] };
+      if (choice.spec.kind !== 'order') return defaultAnswer(choice);
+      // A hostile/buggy client answering "resolve source 0, then source 0 again" is
+      // turned away at the boundary rather than reaching the resolution loop.
+      const rejected = match.answerChoice(choice.playerId, choice.id, { kind: 'order', orderedKeys: ['0', '0'] });
+      expect(rejected).toMatchObject({ ok: false });
       return defaultAnswer(choice);
     });
     await settle(match);
@@ -313,7 +316,7 @@ describe('event resolution', () => {
     await drive(match, attacker, { kind: 'attack', characterInstanceId: attackerActive, attackId: 'tap' });
     await settle(match);
 
-    expect(match.state.log.some((entry) => entry.message.includes('Trigger chain too deep'))).toBe(true);
+    expect(match.state.log.some((entry) => entry.message.includes('Chaîne de déclenchements trop profonde'))).toBe(true);
     expect(match.state.result).toBeUndefined();
   });
 

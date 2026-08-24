@@ -6,7 +6,7 @@ export const confiscation: TerrainCardDef = {
   type: 'terrain',
   id: 'confiscation',
   name: 'Confiscation',
-  description: `Empêche toutes les cartes du jeu, ennemies et alliées, d'utiliser leurs actives et passifs pendant ${DURATION_TURNS} tours (le compte à rebours ne descend que sur les tours du joueur qui l'a posée). N'affecte pas les attaques.`,
+  description: `Pendant ${DURATION_TURNS} tours, aucun personnage (allié comme ennemi) ne peut utiliser ses capacités actives ou passives. Les attaques et les cartes Terrain ne sont pas concernées. Le compte à rebours ne descend que pendant les tours du joueur qui l'a posé.`,
   durationTurns: DURATION_TURNS,
   modifiers: [
     {

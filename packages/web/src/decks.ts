@@ -39,14 +39,18 @@ function sanitizeDeck(raw: unknown): Deck | null {
   const source = raw as Record<string, unknown>;
   if (typeof source['id'] !== 'string') return null;
 
-  const known = new Set(listDeckPool().map((entry) => entry.id));
+  // Per-card `maxCopies` (a "1x" card) rather than the general cap, so a stored deck
+  // that predates a card becoming unique is trimmed here instead of being rejected
+  // later with an opaque server error.
+  const maxCopiesById = new Map(listDeckPool().map((entry) => [entry.id, entry.maxCopies] as const));
   const trim = (ids: string[], max: number) => {
     const kept: string[] = [];
     const copies = new Map<string, number>();
     for (const id of ids) {
-      if (!known.has(id) || kept.length >= max) continue;
+      const maxCopies = maxCopiesById.get(id);
+      if (maxCopies === undefined || kept.length >= max) continue;
       const used = copies.get(id) ?? 0;
-      if (used >= DECK_LIMITS.maxCopiesPerCard) continue;
+      if (used >= maxCopies) continue;
       copies.set(id, used + 1);
       kept.push(id);
     }

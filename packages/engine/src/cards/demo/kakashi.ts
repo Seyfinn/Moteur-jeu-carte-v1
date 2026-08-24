@@ -57,6 +57,7 @@ export const kakashi: CharacterCardDef = {
         ctx.applyStatus(ctx.sourceInstanceId, {
           statusId: LAST_ENEMY_ATTACK_STATUS_ID,
           label: 'Copie de Technique (mémoire)',
+          hidden: true, // mémoire interne, aucune information utile à afficher sur la carte
           data: { characterInstanceId: data.characterInstanceId, attackId: data.attackId },
         });
       },
@@ -66,7 +67,7 @@ export const kakashi: CharacterCardDef = {
       name: 'Copie de Technique',
       kind: 'active',
       description:
-        "Copie et exécute immédiatement la dernière attaque utilisée par l'adversaire lors de la partie, avec Kakashi comme source (les attaques qui dépendent d'un compteur propre au personnage d'origine peuvent être dégradées). Utilisation unique.",
+        "Rejoue immédiatement la dernière attaque utilisée par l'adversaire, mais lancée par Kakashi. Une attaque qui dépend d'un compteur propre à son porteur d'origine peut être moins efficace. Utilisation unique.",
       usesPerGame: 1,
       condition(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);

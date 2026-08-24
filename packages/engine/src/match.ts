@@ -32,6 +32,7 @@ import {
 } from './queries.js';
 import { endTurn, startTurn } from './turn.js';
 import { getPlayerView } from './view.js';
+import { cardName, playerName } from './names.js';
 
 export interface RosterConfig {
   characterCardIds: string[];
@@ -117,6 +118,50 @@ function createPlayerState(id: PlayerId, displayName: string, roster: RosterConf
   };
 }
 
+/**
+ * Answers arrive from the network: `kind` matching the prompt is not enough, the payload
+ * itself is untrusted. Without this, a malformed (or hostile) answer put arbitrary
+ * strings straight into card effects -- most of which then call `findCharacter`, which
+ * throws, aborting the action *mid-resolution* and leaving the board in a half-applied
+ * state (e.g. Absorption Vitale having already KO'd its target but never reviving).
+ * Returns an error message, or null when the answer is well-formed.
+ */
+function validateChoiceAnswer(spec: ChoiceSpec, answer: ChoiceAnswer): string | null {
+  const isStringArray = (value: unknown): value is string[] =>
+    Array.isArray(value) && value.every((v) => typeof v === 'string');
+
+  switch (spec.kind) {
+    case 'select-characters': {
+      if (answer.kind !== 'select-characters' || !isStringArray(answer.selected)) {
+        return 'Réponse malformée : liste de personnages attendue';
+      }
+      if (new Set(answer.selected).size !== answer.selected.length) return 'Réponse malformée : doublons dans la sélection';
+      if (answer.selected.some((id) => !spec.options.includes(id))) return 'Réponse malformée : personnage non proposé';
+      if (answer.selected.length < spec.min || answer.selected.length > spec.max) {
+        return `Réponse malformée : entre ${spec.min} et ${spec.max} personnage(s) attendu(s)`;
+      }
+      return null;
+    }
+    case 'select-option': {
+      if (answer.kind !== 'select-option' || typeof answer.key !== 'string') return 'Réponse malformée : option attendue';
+      if (!spec.options.some((o) => o.key === answer.key)) return 'Réponse malformée : option non proposée';
+      return null;
+    }
+    case 'yes-no':
+      return answer.kind === 'yes-no' && typeof answer.value === 'boolean' ? null : 'Réponse malformée : oui/non attendu';
+    case 'order': {
+      if (answer.kind !== 'order' || !isStringArray(answer.orderedKeys)) return 'Réponse malformée : ordre attendu';
+      // A permutation, nothing else: emitEvent repairs partial answers, but accepting a
+      // wrong-length or duplicate-laden one here just hides a broken client.
+      const keys = spec.items.map((i) => i.key);
+      if (answer.orderedKeys.length !== keys.length) return "Réponse malformée : l'ordre doit lister tous les éléments";
+      if (new Set(answer.orderedKeys).size !== answer.orderedKeys.length) return 'Réponse malformée : doublons dans l’ordre';
+      if (answer.orderedKeys.some((k) => !keys.includes(k))) return 'Réponse malformée : élément inconnu dans l’ordre';
+      return null;
+    }
+  }
+}
+
 export class Match {
   readonly state: GameState;
   private resolvers = new Map<string, (answer: ChoiceAnswer) => void>();
@@ -155,12 +200,12 @@ export class Match {
 
     const startingPlayerId: PlayerId = rngFlipCoin(state.rng) === 'heads' ? 'p1' : 'p2';
     state.startingPlayerId = startingPlayerId;
-    match.api.log(`Coin flip for initiative: ${startingPlayerId} starts`, { startingPlayerId }, startingPlayerId);
+    match.api.log(`Pile ou face : ${playerName(state, startingPlayerId)} commence`, { kind: 'initiative', startingPlayerId }, startingPlayerId);
 
     match.inFlight = match
       .runSetup()
       .catch((err) => {
-        match.api.log(`Setup error: ${(err as Error).message}`, { error: String(err) });
+        match.api.log(`Erreur pendant la mise en place : ${(err as Error).message}`, { kind: 'error', error: String(err) });
       })
       .finally(() => {
         match.inFlight = null;
@@ -254,7 +299,7 @@ export class Match {
 
     this.inFlight = this.runAction(playerId, action)
       .catch((err) => {
-        this.api.log(`Action error: ${(err as Error).message}`, { error: String(err) });
+        this.api.log(`Erreur pendant l'action : ${(err as Error).message}`, { kind: 'error', error: String(err) });
       })
       .finally(() => {
         this.inFlight = null;
@@ -269,6 +314,8 @@ export class Match {
     if (pending.id !== choiceId) return { ok: false, error: 'Ce choix a déjà été remplacé' };
     if (pending.playerId !== playerId) return { ok: false, error: "Ce choix n'est pas le vôtre" };
     if (answer.kind !== pending.spec.kind) return { ok: false, error: 'Réponse incompatible avec le choix demandé' };
+    const shapeError = validateChoiceAnswer(pending.spec, answer);
+    if (shapeError) return { ok: false, error: shapeError };
     const resolve = this.resolvers.get(choiceId);
     if (!resolve) return { ok: false, error: 'Choix déjà répondu' };
     this.resolvers.delete(choiceId);
@@ -408,7 +455,7 @@ export class Match {
         endsTurn = true;
         break;
       case 'pass':
-        this.api.log(`${playerId} passes`, {}, playerId);
+        this.api.log(`${playerName(state, playerId)} passe son tour`, { kind: 'pass' }, playerId);
         endsTurn = true;
         break;
     }
@@ -428,7 +475,7 @@ export class Match {
     zones.moveObjectFromPoolToInPlay(state, playerId, objectInstanceId);
     player.objectsPlayedThisTurn += 1;
 
-    this.api.log(`${playerId} plays object ${def.name}`, { objectInstanceId, cardId: def.id }, playerId);
+    this.api.log(`${playerName(state, playerId)} joue l'objet ${def.name}`, { kind: 'play-object', objectInstanceId, cardId: def.id }, playerId);
     await this.api.emitEvent({ name: 'onObjectPlayed', playerId, data: { objectInstanceId } });
 
     const ctx = this.api.buildEffectContext(objectInstanceId, playerId, undefined, 'other'); // object effect, not an attack/ability
@@ -454,12 +501,18 @@ export class Match {
 
   private async handlePlayTerrain(playerId: PlayerId, terrainInstanceId: string): Promise<void> {
     const state = this.state;
+    // moveTerrainFromPoolToActive already stamps the new terrain's duration before it
+    // announces the replaced one, so a card reacting to `onTerrainRemoved` never sees
+    // the incoming terrain with an undefined (= "indefinite") duration.
     await zones.moveTerrainFromPoolToActive(state, playerId, terrainInstanceId, this.api);
     const terrain = state.players[playerId].terrains[terrainInstanceId]!;
     const def = getTerrainCard(terrain.cardId);
-    terrain.remainingTurns = def.durationTurns;
     state.players[playerId].terrainsPlayedThisTurn += 1;
-    this.api.log(`${playerId} plays terrain ${def.name}`, { terrainInstanceId, cardId: def.id }, playerId);
+    this.api.log(`${playerName(state, playerId)} pose le terrain ${def.name}`, { kind: 'play-terrain', terrainInstanceId, cardId: def.id }, playerId);
+    // A reaction to the replacement could already have destroyed what we just posed;
+    // firing its on-play effects afterwards would be announcing an arrival that no
+    // longer holds.
+    if (state.players[playerId].activeTerrainInstanceId !== terrainInstanceId) return;
     await this.api.emitEvent({ name: 'onTerrainPlayed', playerId, data: { terrainInstanceId } });
   }
 
@@ -469,7 +522,7 @@ export class Match {
     const def = getCharacterCard(char.cardId);
     const ability = def.abilities.find((a) => a.id === abilityId)!;
     recordAbilityUse(char, abilityId);
-    this.api.log(`${playerId} uses ability ${ability.name}`, { characterInstanceId, abilityId }, playerId);
+    this.api.log(`${cardName(char.cardId)} utilise ${ability.name}`, { kind: 'use-ability', characterInstanceId, abilityId }, playerId);
     const ctx = this.api.buildEffectContext(characterInstanceId, playerId);
     await ability.execute(ctx);
     await this.api.emitEvent({ name: 'onAbilityUsed', playerId, data: { characterInstanceId, abilityId } });
@@ -481,7 +534,7 @@ export class Match {
     const def = getCharacterCard(char.cardId);
     const attack = def.attacks.find((a) => a.id === attackId)!;
 
-    this.api.log(`${playerId} attacks with ${attack.name}`, { characterInstanceId, attackId }, playerId);
+    this.api.log(`${cardName(char.cardId)} attaque avec ${attack.name}`, { kind: 'attack', characterInstanceId, attackId }, playerId);
     await this.api.emitEvent({ name: 'onAttackDeclared', playerId, data: { characterInstanceId, attackId } });
     if (state.result) return true;
 
@@ -531,7 +584,8 @@ export class Match {
           shieldAbsorbed = hp.absorbWithShield(target, finalAmount);
           finalAmount -= shieldAbsorbed;
           if (shieldAbsorbed > 0) {
-            api.log(`${target.cardId}'s shield absorbs ${shieldAbsorbed} damage`, {
+            api.log(`Le bouclier de ${cardName(target.cardId)} absorbe ${shieldAbsorbed} dégâts`, {
+              kind: 'shield-absorb',
               targetInstanceId,
               absorbed: shieldAbsorbed,
               shieldRemaining: target.shield,
@@ -544,7 +598,7 @@ export class Match {
         }
 
         hp.dealDamage(target, finalAmount);
-        api.log(`${target.cardId} takes ${finalAmount} damage`, { targetInstanceId, amount: finalAmount });
+        api.log(`${cardName(target.cardId)} subit ${finalAmount} dégâts`, { kind: 'damage', targetInstanceId, amount: finalAmount });
         await api.emitEvent({
           name: 'afterDamage',
           data: { targetInstanceId, amount: finalAmount, shieldAbsorbed, ...attribution },
@@ -563,8 +617,15 @@ export class Match {
         );
         const finalAmount = Math.max(0, reduced);
         hp.applyValeurLock(target, finalAmount);
-        api.log(`${target.cardId} loses ${finalAmount} max HP (valeur lock)`, { targetInstanceId, amount: finalAmount });
-        if (hp.isKO(target)) await api.koCharacter(targetInstanceId);
+        api.log(`${cardName(target.cardId)} perd ${finalAmount} HP max (valeur lock)`, {
+          kind: 'valeur-lock',
+          targetInstanceId,
+          amount: finalAmount,
+        });
+        // Same attribution as ordinary damage: a valeur-lock kill (Mahito's Paume
+        // Transfiguratrice, a Sang Maudit poison tick) has to name its killer too,
+        // otherwise every "on kill" passive silently misses it.
+        if (hp.isKO(target)) await api.koCharacter(targetInstanceId, options?.attackerInstanceId);
       },
 
       poisonTicksAsValeurLock(targetInstanceId) {
@@ -581,40 +642,58 @@ export class Match {
         // that is already (nearly) full otherwise logs a number nothing on the board matches.
         const restored = Math.min(finalAmount, target.damage);
         hp.heal(target, finalAmount);
-        api.log(`${target.cardId} heals ${restored}`, { targetInstanceId, amount: restored, requested: finalAmount });
+        // A heal that restores nothing (the target is already full) still counts as a
+        // heal for bleed, but logging "récupère 0 HP" is pure noise on the board.
+        if (restored > 0) {
+          api.log(`${cardName(target.cardId)} récupère ${restored} HP`, { kind: 'heal', targetInstanceId, amount: restored, requested: finalAmount });
+        }
         if (statusesMod.hasStatus(target, 'bleed')) {
           statusesMod.removeStatus(target, 'bleed');
-          api.log(`${target.cardId}'s bleed is cured by healing`, { targetInstanceId });
+          api.log(`Le saignement de ${cardName(target.cardId)} est stoppé par le soin`, { kind: 'heal', targetInstanceId });
         }
       },
 
       raiseMaxHP(targetInstanceId, amount) {
+        if (!api.isOnBoard(targetInstanceId)) return;
         const target = findCharacter(state, targetInstanceId);
         hp.raiseMaxHP(target, amount);
-        api.log(`${target.cardId} gains +${amount} max HP`, { targetInstanceId, amount });
+        api.log(`${cardName(target.cardId)} gagne +${amount} HP max`, { kind: 'max-hp', targetInstanceId, amount });
       },
 
       addShield(targetInstanceId, amount) {
+        if (!api.isOnBoard(targetInstanceId)) return;
         const target = findCharacter(state, targetInstanceId);
         hp.addShield(target, amount);
-        api.log(`${target.cardId} gains ${amount} shield`, { targetInstanceId, amount, shield: target.shield });
+        api.log(`${cardName(target.cardId)} gagne ${amount} de bouclier`, { kind: 'shield', targetInstanceId, amount, shield: target.shield });
       },
 
       removeShield(targetInstanceId, amount) {
+        if (!api.isOnBoard(targetInstanceId)) return;
         const target = findCharacter(state, targetInstanceId);
         hp.removeShield(target, amount);
-        api.log(`${target.cardId} loses shield`, { targetInstanceId, amount: amount ?? 'all', shield: target.shield });
+        const lost = amount === undefined ? 'tout son bouclier' : amount + ' de bouclier';
+        api.log(`${cardName(target.cardId)} perd ${lost}`, { kind: 'shield', targetInstanceId, amount: amount ?? 'all', shield: target.shield });
       },
 
       applyStatus(targetInstanceId, status) {
+        // Same rule as dealDamage/heal: a character in the graveyard is out of the game.
+        // Buffing or debuffing a corpse only ever produced ghost badges on the graveyard
+        // thumbnails (a revive wipes statuses anyway).
+        if (!api.isOnBoard(targetInstanceId)) return;
         const target = findCharacter(state, targetInstanceId);
         statusesMod.applyStatus(target, status);
-        api.log(`${target.cardId} gains status ${status.statusId}`, { targetInstanceId, statusId: status.statusId });
+        // A card's private bookkeeping status is not an event anyone wants to read about.
+        if (status.hidden) return;
+        api.log(`${cardName(target.cardId)} : ${status.label || status.statusId}`, { kind: 'status', targetInstanceId, statusId: status.statusId });
       },
 
       removeStatus(targetInstanceId, statusId) {
-        const target = findCharacter(state, targetInstanceId);
-        statusesMod.removeStatus(target, statusId);
+        // Deliberately NOT board-gated: cleaning a status off a character that just died
+        // (Coeur Acier's mark, Absorption Vitale's seal) has to keep working.
+        const target = zones.safeFindCharacterOwner(state, targetInstanceId)
+          ? findCharacter(state, targetInstanceId)
+          : undefined;
+        if (target) statusesMod.removeStatus(target, statusId);
       },
 
       async koCharacter(characterInstanceId, killerInstanceId) {
@@ -624,7 +703,7 @@ export class Match {
       async reviveCharacter(characterInstanceId, hp, placement) {
         const ownerId = zones.findCharacterOwner(state, characterInstanceId);
         zones.reviveCharacter(state, characterInstanceId, hp, placement);
-        api.log(`${ownerId}'s ${characterInstanceId} is revived`, { characterInstanceId, hp, placement });
+        api.log(`${cardName(findCharacter(state, characterInstanceId).cardId)} revient en jeu avec ${hp} HP`, { kind: 'revive', characterInstanceId, hp, placement });
         await api.emitEvent({ name: 'onCharacterRevived', playerId: ownerId, data: { characterInstanceId } });
       },
 
@@ -636,7 +715,8 @@ export class Match {
         const target = findCharacter(state, targetCharacterInstanceId);
         const max = getMaxAttachedObjects(state, targetCharacterInstanceId);
         if (target.attachedObjectInstanceIds.length >= max) {
-          api.log(`Cannot attach object: ${target.cardId} already has the max number of attached objects`, {
+          api.log(`Équipement impossible : ${cardName(target.cardId)} porte déjà le maximum d'objets`, {
+            kind: 'info',
             targetCharacterInstanceId,
           });
           return;
@@ -648,14 +728,14 @@ export class Match {
         const owner = zones.findObjectOwner(state, objectInstanceId);
         const obj = state.players[owner].objects[objectInstanceId];
         zones.destroyObject(state, objectInstanceId);
-        api.log(`${obj?.cardId} is destroyed`, { objectInstanceId, ownerId: owner });
+        api.log(`${cardName(obj?.cardId ?? '')} est détruit`, { kind: 'destroy-object', objectInstanceId, ownerId: owner });
       },
 
       extendTerrain(terrainInstanceId, turns) {
         const owner = zones.findTerrainOwner(state, terrainInstanceId);
         const terrain = state.players[owner].terrains[terrainInstanceId];
         zones.extendTerrainDuration(state, terrainInstanceId, turns);
-        api.log(`${terrain?.cardId}'s duration is extended by ${turns} turn(s)`, { terrainInstanceId, turns, remainingTurns: terrain?.remainingTurns });
+        api.log(`${cardName(terrain?.cardId ?? '')} : durée prolongée de ${turns} tour(s)`, { kind: 'terrain-duration', terrainInstanceId, turns, remainingTurns: terrain?.remainingTurns });
       },
 
       async shortenTerrain(terrainInstanceId, turns) {
@@ -663,7 +743,7 @@ export class Match {
         const terrain = state.players[owner].terrains[terrainInstanceId];
         const cardId = terrain?.cardId;
         await zones.shortenTerrainDuration(state, terrainInstanceId, turns, api);
-        api.log(`${cardId}'s duration is shortened by ${turns} turn(s)`, { terrainInstanceId, turns, remainingTurns: terrain?.remainingTurns });
+        api.log(`${cardName(cardId ?? '')} : durée réduite de ${turns} tour(s)`, { kind: 'terrain-duration', terrainInstanceId, turns, remainingTurns: terrain?.remainingTurns });
       },
 
       async destroyTerrain(terrainInstanceId) {
@@ -672,7 +752,7 @@ export class Match {
         if (player.activeTerrainInstanceId !== terrainInstanceId) return;
         const cardId = player.terrains[terrainInstanceId]?.cardId;
         zones.removeActiveTerrain(state, owner);
-        api.log(`${cardId} is destroyed`, { terrainInstanceId }, owner);
+        api.log(`${cardName(cardId ?? '')} est détruit`, { kind: 'terrain-removed', terrainInstanceId }, owner);
         await api.emitEvent({ name: 'onTerrainRemoved', playerId: owner, data: { terrainInstanceId, reason: 'destroyed' } });
       },
 
@@ -689,7 +769,7 @@ export class Match {
         const player = state.players[ownerId];
         player.objects[instanceId] = { instanceId, cardId, ownerId };
         player.unplayedObjectInstanceIds.push(instanceId);
-        api.log(`${ownerId} gains a new object: ${cardId}`, { instanceId, cardId });
+        api.log(`${playerName(state, ownerId)} récupère une nouvelle carte objet`, { kind: 'gain-object', instanceId, cardId }, ownerId);
         return instanceId;
       },
 

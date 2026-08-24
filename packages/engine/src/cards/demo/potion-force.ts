@@ -7,7 +7,7 @@ export const potionForce: ObjectCardDef = {
   type: 'object',
   id: 'potion-force',
   name: 'Potion force',
-  description: `Augmente les dégâts des attaques du personnage sur le poste actif de ${BOOST_AMOUNT} pendant ${BOOST_DURATION_TURNS} tour.`,
+  description: `Votre personnage actif inflige ${BOOST_AMOUNT} dégâts de plus avec ses attaques jusqu'à la fin de ce tour.`,
   async execute(ctx) {
     const active = ctx.getActive(ctx.ownerId);
     if (!active) return;
@@ -17,6 +17,9 @@ export const potionForce: ObjectCardDef = {
       sourcePlayerId: ctx.ownerId,
       sourceCardInstanceId: ctx.sourceInstanceId,
       remainingTurns: BOOST_DURATION_TURNS,
+      // Counts down even if its bearer is benched right after: otherwise a switch froze
+      // the buff (bench suspends durations) and it came back intact much later.
+      ticksOnBench: true,
       data: { amount: BOOST_AMOUNT },
     });
   },

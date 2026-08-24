@@ -41,7 +41,7 @@ export const muzan: CharacterCardDef = {
       name: 'Sang Maudit',
       kind: 'passive',
       description:
-        "Tant que Muzan est le personnage actif, tout poison présent sur les personnages adverses (peu importe sa source) s'applique sous forme de réduction de HP max au lieu de dégâts soignables classiques. Revérifié à chaque tic : redevient du poison normal dès que Muzan quitte le poste actif.",
+        "Tant que Muzan est actif, le poison des personnages adverses (quelle qu'en soit la source) ronge leurs HP max au lieu d'infliger des dégâts soignables. Redevient du poison normal dès que Muzan quitte le poste actif.",
       // Purement descriptif : la logique vit dans le modifier 'poisonTicksAsValeurLock'
       // ci-dessous, consulté directement par tickStatusesAtTurnStart (statuses.ts) à
       // chaque tic de poison -- il n'y a pas d'event dédié à écouter ici.

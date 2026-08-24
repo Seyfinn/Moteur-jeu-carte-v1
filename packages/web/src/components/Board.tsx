@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
+  DEFAULT_MAX_OBJECTS_PER_TURN,
+  DEFAULT_MAX_TERRAINS_PER_TURN,
   canAttack,
   canPlayObject,
   canPlayTerrain,
@@ -7,6 +9,9 @@ import {
   canUseAbility,
   describeDenials,
   getCharacterCard,
+  getEffectiveATK,
+  getMaxObjectsPerTurn,
+  getMaxTerrainsPerTurn,
   getObjectCard,
   getTerrainCard,
   otherPlayer,
@@ -166,7 +171,7 @@ function ActionErrorBanner({ message, onDismiss }: { message: string; onDismiss:
   );
 }
 
-function ActiveTerrainBadge({ cardId }: { cardId: string }) {
+function ActiveTerrainBadge({ cardId, remainingTurns }: { cardId: string; remainingTurns?: number }) {
   const hover = useHoverCard();
   const coarse = usePointerCoarse();
   const name = terrainName(cardId);
@@ -185,6 +190,13 @@ function ActiveTerrainBadge({ cardId }: { cardId: string }) {
               onMouseLeave: hover.hide,
             }
       }
+      // How long a terrain still has to run drives most decisions around it, and it was
+      // only readable by counting turns by hand.
+      footer={
+        <span className="terrain-remaining">
+          {remainingTurns === undefined ? '∞' : `${remainingTurns} tour${remainingTurns > 1 ? 's' : ''}`}
+        </span>
+      }
     />
   );
 }
@@ -202,12 +214,14 @@ function PlayerZone({
   player,
   isSelf,
   label,
+  isTheirTurn,
   conn,
   badgesByCharacter,
 }: {
   player: PlayerState;
   isSelf: boolean;
   label: string;
+  isTheirTurn: boolean;
   conn: GameConnection;
   badgesByCharacter: Map<string, CharacterBadge[]>;
 }) {
@@ -293,7 +307,10 @@ function PlayerZone({
       <div className="terrain-zone">
         <span className="zone-label">Magie active</span>
         {player.activeTerrainInstanceId ? (
-          <ActiveTerrainBadge cardId={player.terrains[player.activeTerrainInstanceId]!.cardId} />
+          <ActiveTerrainBadge
+            cardId={player.terrains[player.activeTerrainInstanceId]!.cardId}
+            remainingTurns={player.terrains[player.activeTerrainInstanceId]!.remainingTurns}
+          />
         ) : (
           <span className="terrain-badge empty">Aucun</span>
         )}
@@ -301,9 +318,20 @@ function PlayerZone({
     </div>
   );
 
+  const alive = bench.length + (active ? 1 : 0);
+  // Denominator from the full roster, not alive+graveyard: during setup nobody is on the
+  // board yet and the counter read a meaningless "0/0".
+  const total = Object.keys(player.characters).length;
+
   return (
-    <div className={`player-zone player-mat${isSelf ? ' self' : ' opponent'}`}>
-      <h2>{label}</h2>
+    <div className={`player-zone player-mat${isSelf ? ' self' : ' opponent'}${isTheirTurn ? ' active-turn' : ''}`}>
+      <h2 className="player-zone-head">
+        <span className="player-zone-name">{label}</span>
+        <span className="player-zone-meta">
+          <span title="Personnages encore en jeu">{alive}/{total} perso</span>
+          {isTheirTurn && <span className="player-zone-turn-pill">joue</span>}
+        </span>
+      </h2>
       {isSelf ? (
         <>
           {centerRow}
@@ -441,14 +469,26 @@ function ActionMenu({ state, you, conn }: { state: GameState; you: PlayerId; con
   const attackDenial = activeId ? denial(() => canAttack(state, activeId)) : 'aucun personnage actif';
   const attackOptions: MenuOption[] =
     activeDef && activeId
-      ? activeDef.attacks.map((attack) => ({
-          key: attack.id,
-          label: attack.name,
-          detail: `${attack.baseATK} ATK`,
-          disabledReason: attackDenial,
-          hover: { title: attack.name, subtitle: `${attack.baseATK} ATK`, body: <p>{attack.description}</p> },
-          run: () => conn.applyAction({ kind: 'attack', characterInstanceId: activeId, attackId: attack.id }),
-        }))
+      ? activeDef.attacks.map((attack) => {
+          // Effective ATK, not the printed one: buffs, debuffs and stacking passives
+          // (Berserk, Enervement, Potion force, Adrénaline...) all land here, and the
+          // player had no way to see the number they were actually about to deal.
+          let effective = attack.baseATK;
+          try {
+            effective = getEffectiveATK(state, activeId, attack.baseATK);
+          } catch {
+            /* client-side view can't resolve it -- fall back to the printed value */
+          }
+          const suffix = effective === attack.baseATK ? '' : ` (base ${attack.baseATK})`;
+          return {
+            key: attack.id,
+            label: attack.name,
+            detail: `${effective} ATK`,
+            disabledReason: attackDenial,
+            hover: { title: attack.name, subtitle: `${effective} ATK${suffix}`, body: <p>{attack.description}</p> },
+            run: () => conn.applyAction({ kind: 'attack', characterInstanceId: activeId, attackId: attack.id }),
+          };
+        })
       : [];
 
   // Abilities flagged `usableFromBench` are legal from the bench, but only the active
@@ -520,10 +560,13 @@ function ActionMenu({ state, you, conn }: { state: GameState; you: PlayerId; con
         onOpen={() => setOpenMenu('attack')}
         onClose={() => setOpenMenu(null)}
       />
+      {/* Deliberately NOT autoFireSingle: abilities are heterogeneous and often costly
+          (a once-per-game ultimate, a bench ally paying 100 HP for a heal). Firing the
+          only available one straight off the button spent it with no confirmation and no
+          chance to read what it does. */}
       <ActionMenuButton
         label="Capacité"
         options={abilityOptions}
-        autoFireSingle
         emptyMessage="Pas de capacité activable"
         isOpen={openMenu === 'ability'}
         onOpen={() => setOpenMenu('ability')}
@@ -578,21 +621,45 @@ export function Board({ conn }: { conn: GameConnection }) {
         <button className="primary" onClick={conn.leave}>
           Retour au lobby
         </button>
-        <EventLog log={state.log} />
+        <EventLog log={state.log} you={you} />
       </div>
     );
   }
 
   const pendingChoice = state.pendingChoice;
+  const me = state.players[you];
+  const myTurn = state.activePlayerId === you;
+  const opponentName = state.players[opponentId].displayName || 'Adversaire';
+  // Same queries the engine uses, so the counters can never disagree with what the
+  // server will actually accept. Wrapped: a query that can't resolve client-side must
+  // degrade to the default rather than blank the header.
+  const safe = (compute: () => number, fallback: number) => {
+    try {
+      return compute();
+    } catch {
+      return fallback;
+    }
+  };
+  const maxObjects = safe(() => getMaxObjectsPerTurn(state, you), DEFAULT_MAX_OBJECTS_PER_TURN);
+  const maxTerrains = safe(() => getMaxTerrainsPerTurn(state, you), DEFAULT_MAX_TERRAINS_PER_TURN);
 
   return (
     <div className="board">
-      <header className="board-header">
-        <span>
+      <header className={`board-header${myTurn ? ' my-turn' : ''}`}>
+        <span className="board-header-room">
           Salon <strong>{conn.roomCode}</strong>
         </span>
-        <span>Tour {state.turnNumber}</span>
-        <span>{state.activePlayerId === you ? 'À vous de jouer' : "Tour de l'adversaire"}</span>
+        <span className="board-header-turn">
+          Tour {state.turnNumber} · <strong>{myTurn ? 'à vous de jouer' : `${opponentName} joue`}</strong>
+        </span>
+        <span className="board-header-budget" title="Cartes encore jouables pendant votre tour">
+          🎒 {Math.max(0, maxObjects - me.objectsPlayedThisTurn)} · 🗺️ {Math.max(0, maxTerrains - me.terrainsPlayedThisTurn)}
+        </span>
+        {/* Leaving was only possible from the result screen: a player whose opponent
+            never comes back had no way out short of reloading. */}
+        <button className="board-leave" onClick={conn.leave} title="Quitter la partie et revenir au lobby">
+          Quitter
+        </button>
       </header>
 
       {conn.opponentDisconnected && <p className="warning">L'adversaire s'est déconnecté.</p>}
@@ -602,11 +669,25 @@ export function Board({ conn }: { conn: GameConnection }) {
 
       <div className="board-scroll">
         <div className="board-grid">
-          <PlayerZone player={state.players[opponentId]} isSelf={false} label="Adversaire" conn={conn} badgesByCharacter={badgesByCharacter} />
-          <PlayerZone player={state.players[you]} isSelf label="Vous" conn={conn} badgesByCharacter={badgesByCharacter} />
+          <PlayerZone
+            player={state.players[opponentId]}
+            isSelf={false}
+            label={opponentName}
+            isTheirTurn={!myTurn}
+            conn={conn}
+            badgesByCharacter={badgesByCharacter}
+          />
+          <PlayerZone
+            player={state.players[you]}
+            isSelf
+            label={`${state.players[you].displayName || 'Vous'} (vous)`}
+            isTheirTurn={myTurn}
+            conn={conn}
+            badgesByCharacter={badgesByCharacter}
+          />
         </div>
 
-        <EventLog log={state.log} />
+        <EventLog log={state.log} you={you} />
       </div>
 
       <ActionMenu state={state} you={you} conn={conn} />

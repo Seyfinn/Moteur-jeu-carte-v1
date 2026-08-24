@@ -7,7 +7,7 @@ export const briseBouclier: TerrainCardDef = {
   type: 'terrain',
   id: 'brise-bouclier',
   name: 'Brise bouclier',
-  description: `Pendant ${DURATION_TURNS} tours, le bouclier (shield) des personnages ennemis n'absorbe plus aucun dégât -- sa valeur reste inchangée mais ne protège plus tant que le terrain est en jeu (redevient efficace à l'expiration). N'affecte que le shield générique, pas les mécaniques de bouclier propres à une carte (ex: Mana Barrier de Blitzcrank).`,
+  description: `Pendant ${DURATION_TURNS} tours, le bouclier des personnages ennemis n'absorbe plus rien : sa valeur reste affichée mais ne protège plus, et redevient efficace dès l'expiration du terrain. Ne touche pas les boucliers propres à une carte (Mana Barrier de Blitzcrank par exemple).`,
   durationTurns: DURATION_TURNS,
   modifiers: [
     {

@@ -1,7 +1,8 @@
 import { randomUUID } from './uuid.js';
 import { otherPlayer, type CharacterInstance, type GameState, type PlayerId, type PlayerState, type TerrainInstance } from './types.js';
 import type { EngineApi } from './engine-api.js';
-import { getCharacterCard } from './cards/registry.js';
+import { getCharacterCard, getTerrainCard } from './cards/registry.js';
+import { cardName, playerName } from './names.js';
 
 export function findCharacterOwner(state: GameState, instanceId: string): PlayerId {
   for (const playerId of ['p1', 'p2'] as PlayerId[]) {
@@ -14,6 +15,14 @@ export function findCharacterOwner(state: GameState, instanceId: string): Player
 export function safeFindCharacterOwner(state: GameState, instanceId: string): PlayerId | undefined {
   for (const playerId of ['p1', 'p2'] as PlayerId[]) {
     if (state.players[playerId].characters[instanceId]) return playerId;
+  }
+  return undefined;
+}
+
+/** Non-throwing counterpart to findObjectOwner. */
+export function safeFindObjectOwner(state: GameState, objectInstanceId: string): PlayerId | undefined {
+  for (const playerId of ['p1', 'p2'] as PlayerId[]) {
+    if (state.players[playerId].objects[objectInstanceId]) return playerId;
   }
   return undefined;
 }
@@ -66,15 +75,20 @@ export async function koCharacter(
 
   const char = player.characters[characterInstanceId]!;
   for (const objectInstanceId of [...char.attachedObjectInstanceIds]) {
-    const idx = player.inPlayObjectInstanceIds.indexOf(objectInstanceId);
-    if (idx !== -1) player.inPlayObjectInstanceIds.splice(idx, 1);
-    player.graveyardObjectInstanceIds.push(objectInstanceId);
-    const obj = player.objects[objectInstanceId];
+    // An object doesn't have to belong to the player who owns the character it is
+    // equipped on (attachObjectToCharacter explicitly supports equipping an enemy), so
+    // it has to be filed through its OWN owner. Pushing it into this player's graveyard
+    // left an id listed in a zone whose `objects` record doesn't contain it, which then
+    // crashed anything walking that graveyard (Echange équivalent, Déchetterie...).
+    const objectOwnerId = safeFindObjectOwner(state, objectInstanceId);
+    if (!objectOwnerId) continue;
+    moveObjectToGraveyard(state, objectOwnerId, objectInstanceId);
+    const obj = state.players[objectOwnerId].objects[objectInstanceId];
     if (obj) obj.attachedToCharacterInstanceId = undefined;
   }
   char.attachedObjectInstanceIds = [];
 
-  api.log(`${char.cardId} is KO'd`, { characterInstanceId, ownerId, killerInstanceId }, ownerId);
+  api.log(`${cardName(char.cardId)} est KO`, { kind: 'ko', characterInstanceId, ownerId, killerInstanceId }, ownerId);
   await api.emitEvent({
     name: 'onCharacterKO',
     playerId: ownerId,
@@ -187,7 +201,11 @@ export async function switchActive(state: GameState, playerId: PlayerId, newActi
   if (previousActiveId) player.benchCharacterInstanceIds.push(previousActiveId);
   player.activeCharacterInstanceId = newActiveInstanceId;
 
-  api.log(`${playerId} switches active character`, { newActiveInstanceId, previousActiveInstanceId: previousActiveId }, playerId);
+  api.log(
+    `${playerName(state, playerId)} envoie ${cardName(player.characters[newActiveInstanceId]?.cardId ?? '')} au poste actif`,
+    { kind: 'switch', newActiveInstanceId, previousActiveInstanceId: previousActiveId },
+    playerId
+  );
   await api.emitEvent({
     name: 'onSwitch',
     playerId,
@@ -345,9 +363,15 @@ export async function moveTerrainFromPoolToActive(
     removeActiveTerrain(state, playerId);
   }
   player.activeTerrainInstanceId = terrainInstanceId;
+  // Stamp the duration here, *before* the replacement event: a card reacting to
+  // `onTerrainRemoved` already sees the new terrain as active, and used to read
+  // `remainingTurns === undefined` on it -- which every duration check in the codebase
+  // interprets as "indefinite".
+  const incoming = player.terrains[terrainInstanceId];
+  if (incoming) incoming.remainingTurns = getTerrainCard(incoming.cardId).durationTurns;
 
   if (replacedId) {
-    api.log(`${replaced?.cardId} is replaced and goes to the graveyard`, { terrainInstanceId: replacedId }, playerId);
+    api.log(`${cardName(replaced?.cardId ?? '')} est remplacé et part au cimetière`, { kind: 'terrain-removed', terrainInstanceId: replacedId }, playerId);
     await api.emitEvent({
       name: 'onTerrainRemoved',
       playerId,
@@ -377,7 +401,7 @@ async function expireTerrainIfDepleted(
   if (terrain.remainingTurns === undefined || terrain.remainingTurns > 0) return;
   if (state.players[playerId].activeTerrainInstanceId !== terrainInstanceId) return;
   removeActiveTerrain(state, playerId);
-  api.log(`${terrain.cardId} expires`, { terrainInstanceId }, playerId);
+  api.log(`${cardName(terrain.cardId)} expire`, { kind: 'terrain-removed', terrainInstanceId }, playerId);
   await api.emitEvent({ name: 'onTerrainRemoved', playerId, data: { terrainInstanceId, reason: 'expired' } });
 }
 

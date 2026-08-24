@@ -50,7 +50,9 @@ export const soraka: CharacterCardDef = {
         });
         if (!targetId) return;
 
-        await ctx.dealDamage(ctx.sourceInstanceId, SACRIFICE_COST);
+        // Self-inflicted cost: bypasses shield/damage reduction so "sacrifie 100HP"
+        // really costs 100 HP instead of being soaked up by Soraka's own shield.
+        await ctx.dealDamage(ctx.sourceInstanceId, SACRIFICE_COST, { ignoreShield: true, ignoreDamageReduction: true });
         ctx.heal(targetId, SACRIFICE_HEAL);
       },
     },

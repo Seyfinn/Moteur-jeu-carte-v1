@@ -1,5 +1,6 @@
-import type { CharacterInstance, GameState, PlayerId, StatusInstance } from './types.js';
+import type { BuiltinStatusId, CharacterInstance, GameState, PlayerId, StatusInstance } from './types.js';
 import type { EngineApi } from './engine-api.js';
+import { cardName } from './names.js';
 
 /** Fixed damage-per-tick formulas -- not customizable via a status's `data`. */
 const BURN_DAMAGE = 50;
@@ -7,6 +8,41 @@ const POISON_FLAT_DAMAGE = 10;
 const POISON_PERCENT_OF_MAX_HP = 0.1;
 const BLEED_PERCENT_PER_STACK = 0.1;
 const BLEED_MAX_STACKS = 10;
+
+/**
+ * Every status id the engine itself gives meaning to. A card is free to invent any other
+ * string for its own bookkeeping, but those belong to that card alone -- which is what
+ * lets a "swap/steal all statuses" effect know what it may legitimately move around
+ * (moving a card's private counter onto a card that cannot read it just deletes it).
+ */
+export const BUILTIN_STATUS_IDS: ReadonlySet<string> = new Set<BuiltinStatusId>([
+  'stun',
+  'disarmed',
+  'silence-active',
+  'silence-passive',
+  'silence-ultimate',
+  'atk-reduction',
+  'atk-boost',
+  'atk-multiplier',
+  'burn',
+  'poison',
+  'bleed',
+  'evasive',
+  'critical',
+  'chained',
+  'death-ward',
+  'concentration',
+  'damage-reflect',
+  'bench-damage-bonus',
+  'hit-bounty',
+]);
+
+/** Human labels for the three damage-over-time statuses, used in the event log. */
+const STATUS_TICK_LABELS: Record<string, string> = {
+  burn: 'brûlure',
+  poison: 'poison',
+  bleed: 'saignement',
+};
 
 /** Innate rates every character has on their attacks/abilities, with no status required. */
 export const BASE_EVASION_CHANCE_PERCENT = 5;
@@ -162,10 +198,16 @@ export async function tickStatusesAtTurnStart(state: GameState, playerId: Player
       // no longer on the character.
       if (!char.statuses.includes(status)) continue;
 
-      const tickAlwaysOnBench = status.statusId === 'burn' || status.statusId === 'poison' || status.statusId === 'bleed';
-      if (!isActive && !tickAlwaysOnBench) continue; // suspended while benched
+      // Poison/Burn/Bleed are the documented exception that keeps *dealing damage* on the
+      // bench. `ticksOnBench` is the weaker, opt-in version a card can set on any status:
+      // the duration keeps counting down while benched (no damage implied), so a buff
+      // whose text is scoped to a turn ("pendant ce tour") can't be parked on the bench
+      // to freeze it forever.
+      const damagesOnBench = status.statusId === 'burn' || status.statusId === 'poison' || status.statusId === 'bleed';
+      const countsDownOnBench = damagesOnBench || status.ticksOnBench === true;
+      if (!isActive && !countsDownOnBench) continue; // suspended while benched
 
-      if (tickAlwaysOnBench) {
+      if (damagesOnBench) {
         let amount: number;
         if (status.statusId === 'burn') amount = BURN_DAMAGE;
         else if (status.statusId === 'poison') amount = POISON_FLAT_DAMAGE + Math.round(char.currentMaxHP * POISON_PERCENT_OF_MAX_HP);
@@ -177,10 +219,10 @@ export async function tickStatusesAtTurnStart(state: GameState, playerId: Player
           // fresh every tick, so it only applies for whichever ticks currently
           // qualify (see cards/demo/muzan.ts).
           if (status.statusId === 'poison' && api.poisonTicksAsValeurLock(instanceId)) {
-            api.log(`poison (Sang Maudit) reduces max HP by ${amount}`, { characterInstanceId: instanceId, statusId: status.statusId, amount });
+            api.log(`${cardName(char.cardId)} : le poison (Sang Maudit) retire ${amount} HP max`, { kind: 'status-tick', characterInstanceId: instanceId, statusId: status.statusId, amount });
             await api.applyValeurLock(instanceId, amount);
           } else {
-            api.log(`${status.statusId} inflicts ${amount} damage`, { characterInstanceId: instanceId, statusId: status.statusId, amount });
+            api.log(`${cardName(char.cardId)} subit ${amount} dégâts de ${STATUS_TICK_LABELS[status.statusId] ?? status.statusId}`, { kind: 'status-tick', characterInstanceId: instanceId, statusId: status.statusId, amount });
             await api.dealDamage(instanceId, amount, { source: status.statusId });
           }
         }

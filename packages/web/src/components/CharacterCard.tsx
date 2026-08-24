@@ -53,6 +53,10 @@ export function CharacterCard({
   const dead = currentHP <= 0;
   const name = cardName(char.cardId);
 
+  // A card's private bookkeeping statuses (Guts' damage record, Kakashi's memory of the
+  // last enemy attack...) carry no information for the player and only crowd the card.
+  const visibleStatuses = char.statuses.filter((s) => !s.hidden);
+
   const prevDamageRef = useRef(char.damage);
   const floaterSeqRef = useRef(0);
   const [flashing, setFlashing] = useState(false);
@@ -97,7 +101,7 @@ export function CharacterCard({
       }
       effects={
         <>
-          <StatusEffectLayers statusIds={char.statuses.map((s) => s.statusId)} />
+          <StatusEffectLayers statusIds={visibleStatuses.map((s) => s.statusId)} />
           {char.shield > 0 && <div className="fx-layer fx-shield" />}
           {badges && <CharacterActionBadges badges={badges} />}
           {flashing && <div className="fx-damage-flash" />}
@@ -124,9 +128,9 @@ export function CharacterCard({
             {currentHP} / {char.currentMaxHP} HP
             {char.shield > 0 && <span className="shield-text"> +{char.shield} 🛡</span>}
           </div>
-          {char.statuses.length > 0 && (
+          {visibleStatuses.length > 0 && (
             <div className="statuses">
-              {char.statuses.map((s, i) => (
+              {visibleStatuses.map((s, i) => (
                 <span key={i} className="status-badge" title={`${s.label} (${s.statusId})`}>
                   {statusBadgeText(s)}
                 </span>
