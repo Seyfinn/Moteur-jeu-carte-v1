@@ -19,8 +19,9 @@ import { EventLog } from './EventLog';
 import { GraveyardPile } from './GraveyardPile';
 import { InitiativeWheel } from './InitiativeWheel';
 import { ProcWheels } from './ProcWheel';
+import { CardSpotlights } from './CardSpotlight';
 import { OpponentHand, PlayerHand } from './HandFan';
-import { useCardInspect, useHoverCard } from './HoverCard';
+import { COMBAT_PREVIEW_DELAY_MS, DECK_PREVIEW_DELAY_MS, useCardInspect, useHoverCard } from './HoverCard';
 import { characterDetailBody, terrainDetailBody } from './cardDetails';
 import {
   abilityOptionsFor,
@@ -386,7 +387,7 @@ export function Board({ conn }: { conn: GameConnection }) {
   const state = conn.state!;
   const you = conn.you!;
   const opponentId = otherPlayer(you);
-  const { badgesByCharacter, tableEvents, procRolls } = useGameEvents(state);
+  const { badgesByCharacter, tableEvents, procRolls, spotlights } = useGameEvents(state);
   // La roue d'initiative ne se joue qu'une fois, à l'ouverture : `phase` quitte 'setup'
   // dès la mise en place terminée, donc une reconnexion en cours de partie ne la rejoue
   // pas. `useCallback` parce que le plateau se redessine à chaque état reçu du serveur et
@@ -396,6 +397,15 @@ export function Board({ conn }: { conn: GameConnection }) {
   // Un refus que le client a vu venir (jouer une carte hors de son tour, deuxième terrain
   // du tour...) : il n'atteint jamais le serveur, donc il n'apparaît pas dans conn.error.
   const [localError, setLocalError] = useState<string | null>(null);
+
+  // En combat, l'aperçu au survol attend franchement plus longtemps que dans le
+  // deck-builder : la souris traverse le plateau en permanence sans chercher à lire quoi
+  // que ce soit, et l'aperçu clignoterait sans arrêt.
+  const hover = useHoverCard();
+  useEffect(() => {
+    hover.setPreviewDelay(COMBAT_PREVIEW_DELAY_MS);
+    return () => hover.setPreviewDelay(DECK_PREVIEW_DELAY_MS);
+  }, [hover]);
 
   if (state.result) {
     // Une victoire par abandon se lit autrement qu'une victoire au plateau : sans le
@@ -487,6 +497,7 @@ export function Board({ conn }: { conn: GameConnection }) {
 
       <TableEventBanners events={tableEvents} />
       <ProcWheels rolls={procRolls} />
+      <CardSpotlights spotlights={spotlights} />
 
       <div className="arena">
         <OpponentHand player={opponent} />
@@ -570,6 +581,8 @@ export function Board({ conn }: { conn: GameConnection }) {
       </div>
 
       <PlayerHand
+        state={state}
+        you={you}
         player={me}
         objectDenial={turnGate ?? objectDenial(state, you)}
         terrainDenial={turnGate ?? terrainDenial(state, you)}

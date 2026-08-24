@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { getCharacterCard, type ChoiceAnswer, type ChoiceOption, type CharacterInstance, type GameState, type PendingChoice } from 'engine';
 import { CardFrame } from './CardFrame';
 import { useHoverCard } from './HoverCard';
-import { characterDetailBody } from './cardDetails';
+import { characterDetailBody, objectDetailBody, terrainDetailBody } from './cardDetails';
 
 function findCharacterInstance(state: GameState, instanceId: string): CharacterInstance | undefined {
   return state.players.p1.characters[instanceId] ?? state.players.p2.characters[instanceId];
@@ -101,6 +101,19 @@ function SelectCharacters({
   );
 }
 
+/** Corps de fiche correspondant au type de carte, pour l'aperçu au survol. */
+function detailBodyFor(card: NonNullable<ChoiceOption['card']>) {
+  if (card.kind === 'character') return characterDetailBody(card.cardId);
+  if (card.kind === 'terrain') return terrainDetailBody(card.cardId);
+  return objectDetailBody(card.cardId);
+}
+
+/**
+ * Choisir « une option » recouvre deux cas très différents : une vraie alternative
+ * abstraite (« vers l'actif » / « vers le banc »), qui reste un bouton de texte, et le
+ * choix d'une carte précise (cimetière, réserve, deck) -- là, la carte porte un `card` et
+ * on affiche l'illustration réelle, comme dans la sélection de personnages.
+ */
 function SelectOption({
   spec,
   onAnswer,
@@ -108,6 +121,40 @@ function SelectOption({
   spec: Extract<PendingChoice['spec'], { kind: 'select-option' }>;
   onAnswer: (answer: ChoiceAnswer) => void;
 }) {
+  const hover = useHoverCard();
+  const cards = spec.options.filter((opt) => opt.card);
+
+  if (cards.length === spec.options.length && cards.length > 0) {
+    return (
+      <div className="modal-card-grid">
+        {spec.options.map((opt: ChoiceOption) => {
+          const card = opt.card!;
+          return (
+            <CardFrame
+              key={opt.key}
+              cardId={card.cardId}
+              kind={card.kind}
+              name={opt.label}
+              onClick={() => onAnswer({ kind: 'select-option', key: opt.key })}
+              hoverProps={{
+                onMouseEnter: (e) =>
+                  hover.show(
+                    {
+                      title: opt.label,
+                      card: { cardId: card.cardId, kind: card.kind, name: opt.label },
+                      body: detailBodyFor(card),
+                    },
+                    e.currentTarget
+                  ),
+                onMouseLeave: hover.hide,
+              }}
+            />
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className="modal-options">
       {spec.options.map((opt: ChoiceOption) => (
@@ -216,15 +263,22 @@ export function ChoiceModal({
   deadline: number | null;
   onAnswer: (answer: ChoiceAnswer) => void;
 }) {
+  const hover = useHoverCard();
+  // Répondre fait disparaître la modale sous la souris : son `onMouseLeave` ne partira
+  // jamais, donc l'aperçu au survol resterait planté sur le plateau.
+  const answerAndClose = (answer: ChoiceAnswer) => {
+    hover.hide();
+    onAnswer(answer);
+  };
   return (
     <div className="modal-backdrop">
       <div className="modal">
         <p className="modal-prompt">{choice.spec.prompt}</p>
         {deadline !== null && <ChoiceCountdown deadline={deadline} />}
-        {choice.spec.kind === 'select-characters' && <SelectCharacters state={state} spec={choice.spec} onAnswer={onAnswer} />}
-        {choice.spec.kind === 'select-option' && <SelectOption spec={choice.spec} onAnswer={onAnswer} />}
-        {choice.spec.kind === 'yes-no' && <YesNo onAnswer={onAnswer} />}
-        {choice.spec.kind === 'order' && <OrderChoice spec={choice.spec} onAnswer={onAnswer} />}
+        {choice.spec.kind === 'select-characters' && <SelectCharacters state={state} spec={choice.spec} onAnswer={answerAndClose} />}
+        {choice.spec.kind === 'select-option' && <SelectOption spec={choice.spec} onAnswer={answerAndClose} />}
+        {choice.spec.kind === 'yes-no' && <YesNo onAnswer={answerAndClose} />}
+        {choice.spec.kind === 'order' && <OrderChoice spec={choice.spec} onAnswer={answerAndClose} />}
       </div>
     </div>
   );

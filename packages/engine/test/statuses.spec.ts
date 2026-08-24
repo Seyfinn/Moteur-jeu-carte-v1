@@ -97,7 +97,7 @@ describe('Statuses (section 6)', () => {
     expect(p1.characters[activeId]!.damage).toBe(damageBefore + 50);
   });
 
-  it('re-applying burn/poison while already present refreshes the existing instance instead of stacking a second one', async () => {
+  it('re-applying burn while already present adds up the durations on a single instance', async () => {
     const match = await createReadyMatch(
       { p1Name: 'A', p2Name: 'B', p1Roster: FX_ROSTER, p2Roster: FX_ROSTER, seed: 25 },
       { p1ActiveCardId: 'fx-striker', p2ActiveCardId: 'fx-tank' }
@@ -111,12 +111,46 @@ describe('Statuses (section 6)', () => {
 
     const burnEntries = p1.characters[activeId]!.statuses.filter((s) => s.statusId === 'burn');
     expect(burnEntries.length).toBe(1); // merged, not two independently-ticking instances
-    expect(burnEntries[0]!.remainingTurns).toBe(2); // refreshed to the longer of the two
+    expect(burnEntries[0]!.remainingTurns).toBe(3); // 1 + 2: rebrûler une cible en feu allonge l'incendie
     expect(burnEntries[0]!.label).toBe('Burn (again)'); // most recent application wins attribution
 
     const damageBefore = p1.characters[activeId]!.damage;
     await tickStatusesAtTurnStart(match.state, 'p1', api);
     expect(p1.characters[activeId]!.damage).toBe(damageBefore + 50); // a single tick, not 100
+  });
+
+  it('re-applying poison keeps the longer duration instead of adding them up (unlike burn)', async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: FX_ROSTER, p2Roster: FX_ROSTER, seed: 26 },
+      { p1ActiveCardId: 'fx-striker', p2ActiveCardId: 'fx-tank' }
+    );
+    const p1 = match.state.players.p1;
+    const activeId = p1.activeCharacterInstanceId!;
+    const api = match['api'] as EngineApi;
+
+    api.applyStatus(activeId, { statusId: 'poison', label: 'Poison', remainingTurns: 3 });
+    api.applyStatus(activeId, { statusId: 'poison', label: 'Poison (again)', remainingTurns: 2 });
+
+    const entries = p1.characters[activeId]!.statuses.filter((s) => s.statusId === 'poison');
+    expect(entries.length).toBe(1);
+    expect(entries[0]!.remainingTurns).toBe(3); // max(3, 2) -- ni raccourci, ni cumulé
+  });
+
+  it('chained blocks a forced switch too, not just the standard switch action', async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: FX_ROSTER, p2Roster: FX_ROSTER, seed: 27 },
+      { p1ActiveCardId: 'fx-striker', p2ActiveCardId: 'fx-tank' }
+    );
+    const p1 = match.state.players.p1;
+    const activeId = p1.activeCharacterInstanceId!;
+    const benchId = p1.benchCharacterInstanceIds[0]!;
+    p1.characters[activeId]!.statuses.push({ statusId: 'chained', label: 'Enchaîné' });
+
+    const api = match['api'] as EngineApi;
+    await api.switchActive('p1', benchId); // le chemin qu'empruntent tous les ctx.forceSwitch
+
+    expect(p1.activeCharacterInstanceId).toBe(activeId); // rien n'a bougé
+    expect(p1.benchCharacterInstanceIds).toContain(benchId);
   });
 });
 

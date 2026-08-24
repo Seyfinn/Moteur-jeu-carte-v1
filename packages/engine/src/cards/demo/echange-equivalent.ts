@@ -14,11 +14,13 @@ export const echangeEquivalent: ObjectCardDef = {
     const sacrificePool = [
       ...player.unplayedObjectInstanceIds.map((instanceId) => ({
         instanceId,
+        cardId: player.objects[instanceId]!.cardId,
         kind: 'object' as const,
         name: getObjectCard(player.objects[instanceId]!.cardId).name,
       })),
       ...player.unplayedTerrainInstanceIds.map((instanceId) => ({
         instanceId,
+        cardId: player.terrains[instanceId]!.cardId,
         kind: 'terrain' as const,
         name: getTerrainCard(player.terrains[instanceId]!.cardId).name,
       })),
@@ -33,7 +35,12 @@ export const echangeEquivalent: ObjectCardDef = {
     for (let i = 0; i < SACRIFICE_COUNT; i++) {
       const chosenId = await ctx.chooseOption(
         `Echange équivalent : choisissez la carte à sacrifier (${i + 1}/${SACRIFICE_COUNT})`,
-        remaining.map((c) => ({ key: c.instanceId, label: `${c.name} (${c.kind === 'object' ? 'objet' : 'terrain'})` }))
+        // `card` : la modale affiche l'illustration réelle plutôt qu'une ligne de texte.
+        remaining.map((c) => ({
+          key: c.instanceId,
+          label: `${c.name} (${c.kind === 'object' ? 'objet' : 'terrain'})`,
+          card: { cardId: c.cardId, kind: c.kind },
+        }))
       );
       const pickedIndex = remaining.findIndex((c) => c.instanceId === chosenId);
       const picked = pickedIndex === -1 ? remaining[0] : remaining[pickedIndex];
@@ -59,11 +66,13 @@ export const echangeEquivalent: ObjectCardDef = {
     const recoverPool = [
       ...player.graveyardObjectInstanceIds.map((instanceId) => ({
         instanceId,
+        cardId: player.objects[instanceId]!.cardId,
         kind: 'object' as const,
         name: getObjectCard(player.objects[instanceId]!.cardId).name,
       })),
       ...player.graveyardTerrainInstanceIds.map((instanceId) => ({
         instanceId,
+        cardId: player.terrains[instanceId]!.cardId,
         kind: 'terrain' as const,
         name: getTerrainCard(player.terrains[instanceId]!.cardId).name,
       })),
@@ -72,7 +81,11 @@ export const echangeEquivalent: ObjectCardDef = {
 
     const recoveredId = await ctx.chooseOption(
       'Echange équivalent : choisissez la carte objet ou terrain à récupérer de votre cimetière',
-      recoverPool.map((c) => ({ key: c.instanceId, label: `${c.name} (${c.kind === 'object' ? 'objet' : 'terrain'})` }))
+      recoverPool.map((c) => ({
+        key: c.instanceId,
+        label: `${c.name} (${c.kind === 'object' ? 'objet' : 'terrain'})`,
+        card: { cardId: c.cardId, kind: c.kind },
+      }))
     );
     const recovered = recoverPool.find((c) => c.instanceId === recoveredId);
     if (!recovered) return;

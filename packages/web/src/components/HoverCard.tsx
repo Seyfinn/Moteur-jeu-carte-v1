@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { CardPreviewPanel, type PreviewCard } from './CardPreviewPanel';
+import { CardFrame } from './CardFrame';
 import type { HoverHandlers } from './CardFrame';
 import { usePointerCoarse } from '../hooks/usePointerCoarse';
 
@@ -31,27 +32,40 @@ export interface HoverPayload {
 interface HoverCardApi {
   /** Aperçu volatil ancré à la carte survolée. */
   show: (payload: HoverPayload, target: HTMLElement) => void;
-  /** Épingle la carte en grand dans un coin, jusqu'à fermeture explicite par la croix. */
+  /**
+   * Inspection : la carte seule, en très grand au centre de l'écran, jusqu'à fermeture
+   * (croix, voile ou Échap). Aucun texte à côté -- l'illustration porte déjà le texte
+   * imprimé de la carte, et c'est précisément pour le lire qu'on ouvre cette vue.
+   */
   pin: (payload: HoverPayload) => void;
-  /** Variante centrée + voile, pour le tactile qui n'a pas de survol pour ouvrir/fermer. */
+  /** Alias historique de `pin` : le tactile n'a pas de survol, le tap ouvre la même vue. */
   showCentered: (payload: HoverPayload) => void;
-  /** Remplace le contenu du panneau épinglé s'il montre déjà ce `payload.id` (no-op sinon). */
+  /** Remplace le contenu de la fiche ouverte si elle montre déjà ce `payload.id` (no-op sinon). */
   refreshPinned: (payload: HoverPayload) => void;
   hide: () => void;
+  /**
+   * Délai avant l'aperçu au survol. En plein combat il doit être franchement long : la
+   * souris traverse le plateau en permanence et l'aperçu clignoterait sans arrêt.
+   */
+  setPreviewDelay: (ms: number) => void;
 }
 
 const HoverCardCtx = createContext<HoverCardApi | null>(null);
 
 const POPOVER_WIDTH = 320;
 const POPOVER_MAX_HEIGHT = 420;
-/** Largeur de l'aperçu « carte en grand + texte », identique à celle du deck-builder. */
-const PREVIEW_WIDTH = 700;
-const PREVIEW_MAX_HEIGHT = 480;
-const CORNER_PANEL_WIDTH = 300;
-/** Comme dans le deck-builder : l'aperçu géant attend que la souris se pose vraiment sur
-    une carte, sinon il clignote à chaque traversée du plateau. Un simple encart de texte
-    (options du menu d'action) reste instantané. */
-const PREVIEW_DELAY_MS = 200;
+/** Largeur de l'aperçu « carte en grand + texte » (la carte y occupe la majeure partie). */
+const PREVIEW_WIDTH = 800;
+const PREVIEW_MAX_HEIGHT = 700;
+/**
+ * Délai par défaut avant l'aperçu au survol : celui du deck-builder, où l'on parcourt une
+ * grille de cartes pour les lire. Le plateau le remonte à `COMBAT_PREVIEW_DELAY_MS` via
+ * `setPreviewDelay` -- en combat la souris traverse sans arrêt des cartes qu'on ne cherche
+ * pas à lire, et l'aperçu clignoterait en permanence. Un simple encart de texte (options
+ * du menu d'action) reste instantané dans les deux cas.
+ */
+export const DECK_PREVIEW_DELAY_MS = 300;
+export const COMBAT_PREVIEW_DELAY_MS = 1000;
 const HIDE_DELAY_MS = 60;
 
 interface AnchoredState {
@@ -61,14 +75,12 @@ interface AnchoredState {
 
 interface PinnedState {
   payload: HoverPayload;
-  /** `true` = centré avec un voile (tactile) ; `false` = épinglé dans le coin de l'écran. */
-  centered: boolean;
 }
 
-function anchoredStyle(rect: DOMRect, wide: boolean, reservedRight: number): CSSProperties {
+function anchoredStyle(rect: DOMRect, wide: boolean): CSSProperties {
   const width = wide ? PREVIEW_WIDTH : POPOVER_WIDTH;
   const maxHeight = wide ? PREVIEW_MAX_HEIGHT : POPOVER_MAX_HEIGHT;
-  const spaceRight = window.innerWidth - rect.right - reservedRight;
+  const spaceRight = window.innerWidth - rect.right;
   const left = spaceRight > width + 16 ? rect.right + 10 : Math.max(8, rect.left - width - 10);
   const top = Math.min(Math.max(8, rect.top), Math.max(8, window.innerHeight - maxHeight - 8));
   return { left, top };
@@ -93,6 +105,7 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
   const hideTimer = useRef<number | null>(null);
   const showTimer = useRef<number | null>(null);
   const visibleRef = useRef(false);
+  const delayRef = useRef(DECK_PREVIEW_DELAY_MS);
 
   const clearTimers = useCallback(() => {
     if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
@@ -118,7 +131,7 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
         showTimer.current = null;
         visibleRef.current = true;
         setAnchored({ payload, rect });
-      }, PREVIEW_DELAY_MS);
+      }, delayRef.current);
     },
     [clearTimers]
   );
@@ -146,20 +159,14 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
       clearTimers();
       visibleRef.current = false;
       setAnchored(null);
-      setPinned({ payload, centered: false });
+      setPinned({ payload });
     },
     [clearTimers]
   );
 
-  const showCentered = useCallback(
-    (payload: HoverPayload) => {
-      clearTimers();
-      visibleRef.current = false;
-      setAnchored(null);
-      setPinned({ payload, centered: true });
-    },
-    [clearTimers]
-  );
+  const setPreviewDelay = useCallback((ms: number) => {
+    delayRef.current = ms;
+  }, []);
 
   const refreshPinned = useCallback((payload: HoverPayload) => {
     setPinned((prev) => {
@@ -169,8 +176,8 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const api = useMemo<HoverCardApi>(
-    () => ({ show, pin, showCentered, refreshPinned, hide }),
-    [show, pin, showCentered, refreshPinned, hide]
+    () => ({ show, pin, showCentered: pin, refreshPinned, hide, setPreviewDelay }),
+    [show, pin, refreshPinned, hide, setPreviewDelay]
   );
 
   // Échap ferme d'abord l'aperçu volatil, puis le panneau épinglé -- la sortie clavier
@@ -191,8 +198,6 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [anchored, pinned, clearTimers]);
 
-  const cornerOpen = pinned !== null && !pinned.centered;
-
   return (
     <HoverCardCtx.Provider value={api}>
       {children}
@@ -200,7 +205,7 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
       {anchored && (
         <div
           className={anchored.payload.card ? 'card-preview' : 'hover-card-popover'}
-          style={anchoredStyle(anchored.rect, Boolean(anchored.payload.card), cornerOpen ? CORNER_PANEL_WIDTH + 24 : 0)}
+          style={anchoredStyle(anchored.rect, Boolean(anchored.payload.card))}
           onMouseEnter={cancelHide}
           onMouseLeave={hide}
         >
@@ -208,17 +213,27 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
         </div>
       )}
 
-      {pinned && pinned.centered && <div className="hover-card-backdrop" onClick={() => setPinned(null)} />}
+      {pinned && <div className="hover-card-backdrop" onClick={() => setPinned(null)} />}
       {pinned && (
-        <div
-          className={`${pinned.payload.card ? 'card-preview' : 'hover-card-popover'} ${
-            pinned.centered ? 'pinned' : 'corner-pinned'
-          }`}
-        >
+        // Inspection : rien que la carte, en très grand. Le texte imprimé est sur
+        // l'illustration -- le doubler d'un pavé de description à côté ne ferait que voler
+        // la place qui la rend lisible. Un payload sans carte (cas rare : une fiche
+        // purement textuelle) retombe sur l'ancien encart.
+        <div className={pinned.payload.card ? 'card-inspect' : 'hover-card-popover pinned'}>
           <button className="hover-card-close" onClick={() => setPinned(null)} aria-label="Fermer">
             ×
           </button>
-          {payloadBody(pinned.payload)}
+          {pinned.payload.card ? (
+            <CardFrame
+              cardId={pinned.payload.card.cardId}
+              kind={pinned.payload.card.kind}
+              name={pinned.payload.card.name}
+              size="large"
+              unique={pinned.payload.card.unique}
+            />
+          ) : (
+            payloadBody(pinned.payload)
+          )}
           {pinned.payload.actionLabel && (
             <button
               className="hover-card-action"
@@ -243,15 +258,15 @@ export function useHoverCard(): HoverCardApi {
 }
 
 /**
- * Branchement standard d'une carte du plateau : survol = aperçu volatil en grand, clic =
- * le même aperçu épinglé dans le coin jusqu'à ce qu'on le ferme. Sur écran tactile, où il
- * n'y a pas de survol, le tap ouvre la version centrée.
+ * Branchement standard d'une carte du plateau : survol = aperçu carte + texte à côté de la
+ * carte survolée, clic = la carte seule en très grand au centre, jusqu'à fermeture. Sur
+ * écran tactile, où il n'y a pas de survol, le tap ouvre directement cette dernière.
  */
 export function useCardInspect(payload: HoverPayload): { onClick: () => void; hoverProps?: HoverHandlers } {
   const hover = useHoverCard();
   const coarse = usePointerCoarse();
   return {
-    onClick: () => (coarse ? hover.showCentered(payload) : hover.pin(payload)),
+    onClick: () => hover.pin(payload),
     hoverProps: coarse
       ? undefined
       : {

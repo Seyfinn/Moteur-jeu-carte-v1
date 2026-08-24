@@ -45,7 +45,7 @@ const ENTRIES: GlossaryEntry[] = [
     name: 'Burn (Brûlure)',
     icon: '🔥',
     color: '#ff8a3d',
-    text: `${BURN_DAMAGE} HP par tour.`,
+    text: `${BURN_DAMAGE} HP par tour. Rebrûler une cible déjà en feu additionne les durées.`,
   },
   {
     id: 'bleed',

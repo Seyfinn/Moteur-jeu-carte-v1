@@ -1,5 +1,4 @@
 import type { CharacterCardDef } from '../types.js';
-import { chancePercent } from '../../rng.js';
 import { hasStatus } from '../../statuses.js';
 
 const HEAVY_POINT_ATK = 60;
@@ -36,7 +35,7 @@ export const chopper: CharacterCardDef = {
         await ctx.dealDamage(target.instanceId, atk);
 
         const landed = ctx.getCharacter(target.instanceId).damage > damageBefore;
-        if (landed && chancePercent(ctx.state.rng, POISON_CHANCE_PERCENT)) {
+        if (landed && ctx.rollChance(POISON_CHANCE_PERCENT, 'Poison', { characterInstanceId: target.instanceId })) {
           ctx.applyStatus(target.instanceId, {
             statusId: 'poison',
             label: 'Poison (Heavy Point)',

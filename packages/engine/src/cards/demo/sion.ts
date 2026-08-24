@@ -1,5 +1,4 @@
 import type { AttackDef, CharacterCardDef } from '../types.js';
-import { chancePercent } from '../../rng.js';
 
 const BASE_ATK = 35;
 const DISARM_CHANCE_PERCENT = 33;
@@ -24,7 +23,7 @@ const hacheGeante: AttackDef = {
     await ctx.dealDamage(target.instanceId, atk);
 
     const landed = ctx.getCharacter(target.instanceId).damage > damageBefore;
-    if (landed && chancePercent(ctx.state.rng, DISARM_CHANCE_PERCENT)) {
+    if (landed && ctx.rollChance(DISARM_CHANCE_PERCENT, 'Désarmement', { characterInstanceId: target.instanceId })) {
       ctx.applyStatus(target.instanceId, {
         statusId: 'disarmed',
         label: 'Désarmé (Hache géante)',

@@ -42,18 +42,14 @@ function tableEventContent(e: TableEvent): { icon: string; text: string } {
   switch (e.kind) {
     case 'turn-transition':
       return { icon: '🔁', text: `Tour ${e.turnNumber} -- ${e.startingName}` };
-    case 'object':
-      return { icon: '🎒', text: `${e.playerName} joue ${e.label}` };
-    case 'terrain':
-      return { icon: '🗺️', text: `${e.playerName} pose ${e.label}` };
     case 'coin-flip':
       return { icon: '🪙', text: e.label };
   }
 }
 
-/** Fixed banner stack overlaid on the board for table-level events (turn changes, object/terrain
- * plays, coin flips). Character-level events (attack/ability/crit/evasion) render on their card
- * instead via CharacterActionBadges. */
+/** Fixed banner stack overlaid on the board for table-level events (turn changes, coin flips).
+ * Character-level events (attack/ability/crit/evasion) render on their card instead via
+ * CharacterActionBadges, and a card being played is projected full-size by CardSpotlights. */
 export function TableEventBanners({ events }: { events: TableEvent[] }) {
   if (events.length === 0) return null;
   return (

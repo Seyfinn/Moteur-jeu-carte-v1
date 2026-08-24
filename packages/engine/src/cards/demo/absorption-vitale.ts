@@ -75,13 +75,14 @@ export const absorptionVitale: TerrainCardDef = {
         // à annuler le coût de la carte (il repart simplement au banc à mi-PV).
         const graveyard = ctx.state.players[ctx.ownerId].graveyardCharacterInstanceIds.filter((id) => id !== trackedId);
         if (graveyard.length === 0) return;
-        const options = graveyard.map((id) => ({
-          key: id,
-          name: getCharacterCard(ctx.getCharacter(id).cardId).name,
-        }));
+        // `card` : la modale affiche l'illustration réelle plutôt qu'une ligne de texte.
+        const options = graveyard.map((id) => {
+          const cardId = ctx.getCharacter(id).cardId;
+          return { key: id, label: getCharacterCard(cardId).name, card: { cardId, kind: 'character' as const } };
+        });
         const chosenId = await ctx.chooseOption(
           'Absorption Vitale : choisissez le personnage à ranimer sur votre banc',
-          options.map((o) => ({ key: o.key, label: o.name }))
+          options
         );
         const chosenChar = ctx.getCharacter(chosenId);
         const reviveHP = Math.floor(chosenChar.currentMaxHP / 2);

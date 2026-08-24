@@ -6,6 +6,7 @@ import {
   canSwitchStandard,
   canUseAbility,
   describeDenials,
+  describeObjectUnplayable,
   getCharacterCard,
   getEffectiveATK,
   getObjectCard,
@@ -159,6 +160,19 @@ export function switchOptions(state: GameState, you: PlayerId, conn: GameConnect
 
 export function objectDenial(state: GameState, you: PlayerId): string | null {
   return denialOf(() => canPlayObject(state, you));
+}
+
+/**
+ * Le refus propre à UNE carte objet ("aucun terrain adverse à annuler"...), en plus du refus
+ * global d'`objectDenial`. Même fonction que celle dont le serveur se sert pour rejeter
+ * l'action, donc la main dit exactement ce que dirait le message d'erreur.
+ */
+export function objectCardDenial(state: GameState, you: PlayerId, objectInstanceId: string): string | null {
+  try {
+    return describeObjectUnplayable(state, you, objectInstanceId);
+  } catch {
+    return null; // le serveur reste l'autorité
+  }
 }
 
 export function terrainDenial(state: GameState, you: PlayerId): string | null {

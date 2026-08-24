@@ -22,6 +22,11 @@ function cardName(cardId: string): string {
  */
 export function statusBadgeText(status: StatusInstance): string {
   const name = status.label || status.statusId;
+  // `data.shield` = réserve de bouclier portée par un statut (Mana Barrier de Blitzcrank).
+  // Elle fond à chaque coup encaissé : sans le chiffre, le badge ne disait pas ce qu'il
+  // reste à absorber.
+  const shieldPool = Number(status.data?.['shield'] ?? 0);
+  if (shieldPool > 0) return `${name} ${shieldPool} 🛡`;
   if (status.remainingTurns !== undefined) return `${name} (${status.remainingTurns})`;
   if (status.statusId === 'bleed') return `${name} x${Number(status.data?.['stacks'] ?? 1)}`;
   return name;
@@ -65,6 +70,13 @@ export function CharacterCard({
   // last enemy attack...) carry no information for the player and only crowd the card.
   const visibleStatuses = char.statuses.filter((s) => !s.hidden);
 
+  // Un bouclier peut venir du moteur (`char.shield`, addShield) ou d'un statut qui porte sa
+  // propre réserve dans `data.shield` (Mana Barrier de Blitzcrank, dont l'absorption est un
+  // modifier). Les deux se lisent pareil sur la carte : chiffre, segment de barre et halo.
+  const shieldTotal =
+    char.shield + char.statuses.reduce((sum, st) => sum + Math.max(0, Number(st.data?.['shield'] ?? 0)), 0);
+  const shieldPct = char.currentMaxHP > 0 ? Math.max(0, Math.min(100, (shieldTotal / char.currentMaxHP) * 100)) : 0;
+
   const inspectPayload: HoverPayload = {
     id: char.instanceId,
     title: name,
@@ -83,7 +95,9 @@ export function CharacterCard({
     char.damage,
     char.shield,
     char.attachedObjectInstanceIds.length,
-    char.statuses.map((s) => `${s.statusId}:${s.remainingTurns ?? ''}:${String(s.data?.['stacks'] ?? '')}`).join(','),
+    char.statuses
+      .map((s) => `${s.statusId}:${s.remainingTurns ?? ''}:${String(s.data?.['stacks'] ?? '')}:${String(s.data?.['shield'] ?? '')}`)
+      .join(','),
   ].join('|');
   useEffect(() => {
     hover.refreshPinned(inspectPayload);
@@ -129,7 +143,7 @@ export function CharacterCard({
       effects={
         <>
           <StatusEffectLayers statusIds={visibleStatuses.map((s) => s.statusId)} />
-          {char.shield > 0 && <div className="fx-layer fx-shield" />}
+          {shieldTotal > 0 && <div className="fx-layer fx-shield" />}
           {badges && <CharacterActionBadges badges={badges} />}
           {flashing && <div className="fx-damage-flash" />}
           {floaters.length > 0 && (
@@ -151,9 +165,16 @@ export function CharacterCard({
               style={{ width: `${pct}%` }}
             />
           </div>
+          {/* Barre de bouclier : une deuxième jauge, sous celle des PV, dans une autre
+              couleur -- c'est ce qui sera mangé en premier par les dégâts. */}
+          {shieldTotal > 0 && (
+            <div className="shield-bar" title={`${shieldTotal} points de bouclier`}>
+              <div className="shield-bar-fill" style={{ width: `${shieldPct}%` }} />
+            </div>
+          )}
           <div className="hp-text">
             {currentHP} / {char.currentMaxHP} HP
-            {char.shield > 0 && <span className="shield-text"> +{char.shield} 🛡</span>}
+            {shieldTotal > 0 && <span className="shield-text"> +{shieldTotal} 🛡</span>}
           </div>
           {visibleStatuses.length > 0 && (
             <div className="statuses">

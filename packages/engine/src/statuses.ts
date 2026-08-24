@@ -167,8 +167,14 @@ export function applyStatus(char: CharacterInstance, status: StatusInstance): vo
   // existing instance instead of pushing a second one. Both tick a FIXED amount every
   // turn regardless of remainingTurns (see tickStatusesAtTurnStart) rather than a
   // stack-scaled one, so two independent instances didn't stack damage -- they silently
-  // doubled it, ticking twice in the same turn for no visible reason on the card. The
-  // refreshed duration takes the longer of the two so re-applying never shortens it.
+  // doubled it, ticking twice in the same turn for no visible reason on the card.
+  //
+  // Where the two differ is what a re-application does to the countdown:
+  //  - burn ACCUMULATES (les durées s'additionnent) -- re-brûler une cible déjà en feu
+  //    allonge l'incendie, c'est la façon dont la brûlure "stack" ;
+  //  - poison takes the longer of the two, so re-poisoning never shortens the existing
+  //    countdown but ne boule pas de neige non plus.
+  // An absent `remainingTurns` means "indefinite" on either side: it stays indefinite.
   if (status.statusId === 'burn' || status.statusId === 'poison') {
     const existing = getStatus(char, status.statusId);
     if (existing) {
@@ -176,10 +182,13 @@ export function applyStatus(char: CharacterInstance, status: StatusInstance): vo
       existing.sourcePlayerId = status.sourcePlayerId;
       existing.sourceCardInstanceId = status.sourceCardInstanceId;
       existing.data = status.data;
-      existing.remainingTurns =
-        status.remainingTurns === undefined
-          ? undefined
-          : Math.max(existing.remainingTurns ?? 0, status.remainingTurns);
+      if (status.remainingTurns === undefined || existing.remainingTurns === undefined) {
+        existing.remainingTurns = undefined;
+      } else if (status.statusId === 'burn') {
+        existing.remainingTurns += status.remainingTurns;
+      } else {
+        existing.remainingTurns = Math.max(existing.remainingTurns, status.remainingTurns);
+      }
       return;
     }
   }

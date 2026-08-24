@@ -1,5 +1,4 @@
 import type { AttackDef, CharacterCardDef } from '../types.js';
-import { chancePercent } from '../../rng.js';
 
 const ICE_ATK = 30;
 const STUN_CHANCE_PERCENT = 65;
@@ -30,7 +29,7 @@ const espritDeGlace: AttackDef = {
     await ctx.dealDamage(target.instanceId, atk);
 
     const landed = ctx.getCharacter(target.instanceId).damage > damageBefore;
-    if (landed && chancePercent(ctx.state.rng, STUN_CHANCE_PERCENT)) {
+    if (landed && ctx.rollChance(STUN_CHANCE_PERCENT, 'Stun', { characterInstanceId: target.instanceId })) {
       ctx.applyStatus(target.instanceId, {
         statusId: 'stun',
         label: 'Stun (Esprit de glace)',

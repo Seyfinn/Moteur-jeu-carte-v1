@@ -102,6 +102,18 @@ export interface EffectContext {
   log(message: string, data?: Record<string, unknown>): void;
   flipCoin(): CoinResult;
 
+  /**
+   * Jet à pourcentage porté par la carte (chance de désarmer, d'étourdir, d'empoisonner...).
+   * Roule le dé **et** annonce le résultat : le client fait tourner une roue de pourcentage
+   * à l'écran, pour les deux joueurs. Toujours préférer ça à `chancePercent(ctx.state.rng, x)`
+   * appelé en direct, qui tire en silence et ne montre rien.
+   *
+   * `label` nomme le jet pour le joueur (« Désarmement », « Stun »...). `characterInstanceId`
+   * désigne le personnage que la roue nomme -- par défaut la source de l'effet ; passer la
+   * cible quand c'est elle qui subit le jet.
+   */
+  rollChance(percent: number, label: string, options?: { characterInstanceId?: string }): boolean;
+
   choose(spec: { kind: 'select-characters'; prompt: string; options: string[]; min: number; max: number }): Promise<string[]>;
   chooseOption(prompt: string, options: ChoiceOption[]): Promise<string>;
   chooseYesNo(prompt: string): Promise<boolean>;
@@ -241,6 +253,15 @@ export interface ObjectCardDef {
   description: string;
   /** Extra gating beyond the generic canPlayObject query -- e.g. requiring the owner active to be above an HP threshold. Checked before the action is allowed, not just inside execute(). */
   condition?(ctx: EffectContext): boolean;
+  /**
+   * Refus *lisible*, évalué sur le seul `GameState` (donc côté client aussi, qui n'a pas
+   * d'EffectContext sous la main). Renvoyer une phrase quand la carte n'aurait aucune
+   * cible et se consumerait dans le vide : le serveur refuse l'action avec ce message et
+   * la main grise la carte avec la même raison, au lieu de laisser le joueur la gâcher.
+   * `null`/absent = jouable. Complémentaire de `condition(ctx)`, qui reste pour les refus
+   * ayant réellement besoin du contexte d'effet (et dont le message reste générique).
+   */
+  unplayableReason?(state: GameState, ownerId: PlayerId): string | null;
   execute(ctx: EffectContext): Promise<void>;
   modifiers?: ModifierDef[];
   /** Card family for cross-card synergies (e.g. "NEN"). Absent = basic card, no family. */

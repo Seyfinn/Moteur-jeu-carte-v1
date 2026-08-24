@@ -2139,6 +2139,22 @@ input::placeholder {
   background: linear-gradient(90deg, #b3363f, #ff6b6b);
   box-shadow: 0 0 6px rgba(255, 107, 107, 0.5);
 }
+/* Deuxième jauge, sous celle des PV : les points de bouclier, dans une couleur qui ne
+   peut pas être confondue avec de la vie -- c'est ce qui sera mangé en premier. */
+.shield-bar {
+  height: 4px;
+  margin-top: 2px;
+  background: #10141a;
+  border-radius: 3px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.shield-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4a9fd4, #9adcff);
+  box-shadow: 0 0 6px rgba(127, 199, 242, 0.55);
+  transition: width 0.25s var(--ease);
+}
 .hp-text {
   font-size: 0.68rem;
   color: var(--text-dim);
@@ -3026,8 +3042,22 @@ textarea {
   }
 }
 .card-preview .tcg-card-large {
-  width: 320px;
+  /* Bornée par la hauteur de la fenêtre : la carte est en 5/7, donc 52vh de large fait
+     ~73vh de haut -- elle ne peut jamais déborder de l'écran. */
+  width: min(440px, 52vh);
   flex-shrink: 0;
+}
+/* L'illustration EST la carte (texte imprimé compris) : en grand format elle est affichée
+   entière, jamais rognée pour remplir un cadre au ratio légèrement différent. */
+.card-preview .tcg-card-large .tcg-card-art,
+.card-inspect .tcg-card-art,
+.card-spotlight .tcg-card-art {
+  aspect-ratio: 5 / 7;
+}
+.card-preview .tcg-card-large .tcg-card-art img,
+.card-inspect .tcg-card-art img,
+.card-spotlight .tcg-card-art img {
+  object-fit: contain;
 }
 .card-preview .tcg-card-large .tcg-card-art {
   font-size: 4.2rem;
@@ -3037,9 +3067,44 @@ textarea {
   padding: 9px 12px;
 }
 .card-preview-text {
-  width: 320px;
-  max-height: 480px;
+  width: 300px;
+  max-height: 68vh;
   overflow-y: auto;
+}
+
+/* « Voir la carte » : l'illustration seule, aussi grande que l'écran le permet. Pas de
+   texte à côté -- le texte imprimé est sur la carte, et c'est pour le lire qu'on ouvre
+   cette vue ; un pavé de description ne ferait que voler la place qui la rend lisible. */
+.card-inspect {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  animation: card-preview-in 0.16s var(--ease);
+}
+.card-inspect .tcg-card {
+  width: min(94vw, 64vh);
+  border-width: 2px;
+  border-color: var(--accent);
+  box-shadow: var(--shadow-lg), 0 0 32px var(--accent-glow);
+}
+.card-inspect .tcg-card-name-banner {
+  font-size: 1.3rem;
+  padding: 10px 14px;
+}
+.card-inspect .hover-card-close {
+  top: -14px;
+  right: -14px;
+  width: 34px;
+  height: 34px;
+  line-height: 32px;
+  font-size: 1.2rem;
+  z-index: 1;
 }
 
 /* Tap-opened preview: card + text stacked and scaled to fit a narrow viewport, unlike
@@ -3062,38 +3127,79 @@ textarea {
   overflow-y: visible;
 }
 
-/* Carte épinglée pendant une partie : elle reste plantée dans le coin de l'écran,
-   au-dessus du plateau, jusqu'à ce qu'on la referme par la croix. */
-.card-preview.corner-pinned,
-.hover-card-popover.corner-pinned {
+/* Carte jouée, projetée en très grand au centre du plateau pour les deux joueurs. Le
+   calque ne capte aucun clic : l'animation ne doit jamais avaler une action. */
+.card-spotlight-layer {
   position: fixed;
-  top: 64px;
-  right: 12px;
-  left: auto;
-  bottom: auto;
-  width: 300px;
-  max-width: calc(100vw - 24px);
-  max-height: 74dvh;
-  overflow-y: auto;
-  z-index: 45;
-  animation: fade-slide-in 0.18s var(--ease);
+  inset: 0;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
 }
-.card-preview.corner-pinned {
+.card-spotlight {
+  display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  padding: 18px 22px;
+  border-radius: var(--radius-lg);
+  background: radial-gradient(ellipse at 50% 40%, rgba(12, 15, 20, 0.82), rgba(8, 10, 14, 0.55) 70%, transparent);
+  animation: card-spotlight-in 1.7s var(--ease) forwards;
 }
-.card-preview.corner-pinned .tcg-card-large {
-  width: 150px;
+.card-spotlight .tcg-card {
+  width: min(74vw, 46vh);
+  border-width: 2px;
+  border-color: var(--accent);
+  box-shadow: var(--shadow-lg), 0 0 40px var(--accent-glow);
 }
-.card-preview.corner-pinned .tcg-card-large .tcg-card-art {
-  font-size: 2.4rem;
+.card-spotlight .tcg-card-name-banner {
+  font-size: 1.05rem;
+  padding: 8px 12px;
 }
-.card-preview.corner-pinned .card-preview-text {
-  width: 100%;
-  min-width: 0;
-  max-height: none;
-  overflow-y: visible;
+.card-spotlight-action,
+.card-spotlight-detail {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
+}
+.card-spotlight-action {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.card-spotlight-detail {
+  font-size: 1rem;
+  color: var(--accent);
+}
+/* Entrée franche, temps de lecture, sortie douce -- le tout calé sur la durée que
+   `useGameEvents` laisse à la mise en avant (SPOTLIGHT_DURATION_MS). */
+@keyframes card-spotlight-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.7) rotate(-4deg);
+  }
+  12% {
+    opacity: 1;
+    transform: scale(1.04) rotate(0deg);
+  }
+  20% {
+    transform: scale(1) rotate(0deg);
+  }
+  78% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.08) translateY(-14px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-spotlight {
+    animation: none;
+  }
 }
 
 /* Écran étroit : le « versus » gauche/droite ne tient plus côte à côte, les deux camps
@@ -3153,22 +3259,17 @@ textarea {
     font-size: 0.7rem;
     gap: 4px;
   }
-  /* Pas de « coin » sur un écran de téléphone : la carte épinglée devient un panneau
-     collé en bas, qui laisse encore voir le haut du plateau. */
-  .card-preview.corner-pinned,
-  .hover-card-popover.corner-pinned {
-    right: 6px;
-    left: 6px;
-    top: auto;
-    bottom: 6px;
-    width: auto;
-    max-height: 62dvh;
+  /* Téléphone : la carte inspectée prend toute la largeur disponible, la croix revient
+     à l'intérieur du cadre (elle dépasserait de l'écran). */
+  .card-inspect .tcg-card {
+    width: min(96vw, 70vh);
   }
-  .card-preview.corner-pinned .tcg-card-large {
-    width: min(42vw, 170px);
+  .card-inspect .hover-card-close {
+    top: 4px;
+    right: 4px;
   }
-  .card-preview.corner-pinned .tcg-card-large .tcg-card-art {
-    font-size: 2.4rem;
+  .card-spotlight .tcg-card {
+    width: min(80vw, 44vh);
   }
 
   /* Plateau compacté : mêmes zones, cartes plus petites. */

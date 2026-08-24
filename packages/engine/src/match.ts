@@ -27,6 +27,7 @@ import {
   canSwitchStandard,
   canUseAbility,
   describeDenials,
+  describeObjectUnplayable,
   evaluatePermission,
   evaluateTransform,
   findCharacter,
@@ -393,6 +394,11 @@ export class Match {
         }
         const obj = player.objects[action.objectInstanceId];
         const def = obj ? getObjectCard(obj.cardId) : undefined;
+        // Refus lisible propre à la carte, avant tout le reste : jouer une carte qui n'a
+        // rien à cibler la consumerait dans le vide (cf. Annulation de territoire sans
+        // terrain sur la table).
+        const unplayable = describeObjectUnplayable(state, playerId, action.objectInstanceId);
+        if (unplayable) return { ok: false, error: `${def?.name ?? 'Cette carte'} : ${unplayable}` };
         if (def?.condition) {
           const ctx = this.api.buildEffectContext(action.objectInstanceId, playerId, undefined, 'other');
           if (!def.condition(ctx)) {

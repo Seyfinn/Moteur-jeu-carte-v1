@@ -1,7 +1,6 @@
 import type { CharacterCardDef } from '../types.js';
 import { getCharacterCard } from '../registry.js';
 import { getStatus, hasStatus } from '../../statuses.js';
-import { chancePercent } from '../../rng.js';
 
 const BASE_ATK = 50;
 const SILENCE_CHANCE_PERCENT = 33;
@@ -44,7 +43,7 @@ export const zoe: CharacterCardDef = {
         await ctx.dealDamage(target.instanceId, atk);
 
         const landed = ctx.getCharacter(target.instanceId).damage > damageBefore;
-        if (landed && chancePercent(ctx.state.rng, SILENCE_CHANCE_PERCENT)) {
+        if (landed && ctx.rollChance(SILENCE_CHANCE_PERCENT, 'Silence Ultime', { characterInstanceId: target.instanceId })) {
           ctx.applyStatus(target.instanceId, {
             statusId: 'silence-ultimate',
             label: 'Silence Ultime (Sleepy Bubble)',

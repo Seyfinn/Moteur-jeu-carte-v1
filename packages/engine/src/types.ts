@@ -205,6 +205,13 @@ export interface LogEntry {
 export interface ChoiceOption {
   key: string;
   label: string;
+  /**
+   * Carte réelle derrière cette option. Quand elle est renseignée, le client affiche
+   * l'illustration de la carte à la place d'un simple bouton de texte -- c'est ce qu'on
+   * veut dès qu'on fait choisir une carte (cimetière, réserve, deck) plutôt qu'une
+   * option abstraite (« oui/non », « vers l'actif / vers le banc »).
+   */
+  card?: { cardId: string; kind: 'character' | 'object' | 'terrain' };
 }
 
 export type ChoiceSpec =

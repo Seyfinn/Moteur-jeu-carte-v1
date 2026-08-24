@@ -24,7 +24,8 @@ export const dechetterie: ObjectCardDef = {
 
     const options = candidates.map((instanceId) => {
       const obj = enemy.objects[instanceId]!;
-      return { key: instanceId, label: getObjectCard(obj.cardId).name };
+      // `card` : la modale affiche l'illustration réelle plutôt qu'une ligne de texte.
+      return { key: instanceId, label: getObjectCard(obj.cardId).name, card: { cardId: obj.cardId, kind: 'object' as const } };
     });
     const chosenId = await ctx.chooseOption('Déchetterie : choisissez la carte objet à récupérer', options);
 
