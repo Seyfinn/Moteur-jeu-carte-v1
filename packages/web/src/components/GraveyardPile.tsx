@@ -127,7 +127,15 @@ function GraveyardModal({ contents, title, onClose }: { contents: GraveyardConte
 }
 
 /** La pile du cimetière : un dos de carte empilé, cliquable, qui ouvre son contenu en modale. */
-export function GraveyardPile({ player, title }: { player: PlayerState; title: string }) {
+export function GraveyardPile({
+  player,
+  title,
+  orientation = 'portrait',
+}: {
+  player: PlayerState;
+  title: string;
+  orientation?: 'portrait' | 'landscape';
+}) {
   const [open, setOpen] = useState(false);
   const contents = readGraveyard(player);
 
@@ -135,7 +143,7 @@ export function GraveyardPile({ player, title }: { player: PlayerState; title: s
     <div className="graveyard-pile-zone">
       <span className="zone-label">Cimetière</span>
       <button
-        className={`graveyard-pile${contents.total === 0 ? ' empty' : ''}`}
+        className={`graveyard-pile graveyard-pile-${orientation}${contents.total === 0 ? ' empty' : ''}`}
         onClick={() => setOpen(true)}
         title={`${title} — ${contents.total} carte${contents.total > 1 ? 's' : ''}`}
       >

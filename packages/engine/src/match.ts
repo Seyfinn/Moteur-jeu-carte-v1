@@ -202,7 +202,9 @@ export class Match {
 
     const startingPlayerId: PlayerId = rngFlipCoin(state.rng) === 'heads' ? 'p1' : 'p2';
     state.startingPlayerId = startingPlayerId;
-    match.api.log(`Pile ou face : ${playerName(state, startingPlayerId)} commence`, { kind: 'initiative', startingPlayerId }, startingPlayerId);
+    // Le tirage se voit à l'écran (roue des joueurs) ; le journal n'en garde que le
+    // résultat, sans le « pile ou face » qui n'a plus de contrepartie visuelle.
+    match.api.log(`${playerName(state, startingPlayerId)} commence la partie`, { kind: 'initiative', startingPlayerId }, startingPlayerId);
 
     match.inFlight = match
       .runSetup()

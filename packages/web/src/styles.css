@@ -888,7 +888,9 @@ input::placeholder {
 /* Board */
 .board {
   --card-hand-w: clamp(58px, 8.2vh, 92px);
-  --card-bench-w: clamp(44px, 6.2vh, 72px);
+  --bench-card-w: clamp(116px, 15vh, 152px);
+  --bench-card-h: clamp(42px, 5.6vh, 56px);
+  --gy-card-w: clamp(92px, 12.5vh, 126px);
   --card-pile-w: clamp(48px, 6.5vh, 66px);
   --card-opp-hand-w: clamp(34px, 4.5vh, 56px);
   --active-card-w: clamp(240px, 32vh, 300px);
@@ -1115,7 +1117,7 @@ input::placeholder {
   grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) auto;
   grid-template-rows: auto auto auto;
   grid-template-areas:
-    'railS plateS  benchO  railO'
+    'railS plateS  .       railO'
     'railS activeS activeO railO'
     'railS lowerS  plateO  railO';
   align-content: center;
@@ -1139,10 +1141,6 @@ input::placeholder {
   grid-area: lowerS;
   align-self: start;
 }
-.zone-bench-opp {
-  grid-area: benchO;
-  align-self: end;
-}
 .zone-active-opp {
   grid-area: activeO;
 }
@@ -1156,12 +1154,27 @@ input::placeholder {
   align-self: center;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 8px;
   background: var(--panel);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
+}
+.rail-self {
+  align-items: flex-start;
+}
+.rail-opp {
+  align-items: flex-end;
+}
+/* La colonne du banc et la carte de terrain, côte à côte sous le cimetière. */
+.rail-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+/* Miroir : chez l'adversaire, le terrain passe à gauche de la colonne du banc. */
+.rail-opp .rail-row {
+  flex-direction: row-reverse;
 }
 .graveyard-pile-zone,
 .terrain-slot-zone {
@@ -1190,6 +1203,18 @@ input::placeholder {
     3px 3px 0 0 var(--border),
     6px 6px 0 -1px var(--panel-alt),
     6px 6px 0 0 var(--border);
+}
+/* Format paysage demandé pour la pile : elle coiffe le rail sur toute sa largeur. */
+.graveyard-pile.graveyard-pile-landscape {
+  width: var(--gy-card-w);
+  aspect-ratio: 5 / 3;
+}
+.graveyard-pile.graveyard-pile-landscape .tcg-card-art {
+  aspect-ratio: auto;
+  height: 100%;
+}
+.graveyard-pile.graveyard-pile-landscape.empty {
+  aspect-ratio: 5 / 3;
 }
 .graveyard-pile:hover:not(:disabled) {
   background: var(--panel-alt);
@@ -1333,6 +1358,8 @@ input::placeholder {
 
 /* Les deux actifs se font face au milieu du plateau. */
 .active-slot {
+  --landscape-w: var(--active-card-w);
+  --landscape-h: var(--active-card-h);
   display: flex;
 }
 .active-slot.self {
@@ -1352,38 +1379,55 @@ input::placeholder {
 }
 
 /* Banc : cartes verticales, sous l'actif du joueur et au-dessus de celui de l'adversaire. */
-.bench-row {
+/* Le banc est une colonne de cartes au format paysage, empilées verticalement. */
+.bench-column {
+  --landscape-w: var(--bench-card-w);
+  --landscape-h: var(--bench-card-h);
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-direction: column;
+  gap: 5px;
   min-height: 40px;
 }
-.bench-row.self {
-  justify-content: flex-end;
-  margin-top: 4px;
-}
-.bench-row.opponent {
-  justify-content: flex-start;
-}
-.bench-row-empty {
-  align-self: center;
+.bench-column-empty {
+  padding: 10px 6px;
   color: var(--text-dim);
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  white-space: nowrap;
 }
 .bench-card-wrap {
   position: relative;
 }
-.bench-card-wrap .tcg-card {
-  width: var(--card-bench-w);
+/* Une carte de banc en paysage est très basse : nom et PV doivent tenir sur une ligne
+   chacun, sinon la colonne enfle et pousse tout le rail hors de l'écran. */
+.bench-column .tcg-card-landscape .tcg-card-art {
+  flex: 0 0 32%;
+}
+.bench-column .tcg-card-landscape .tcg-card-name-banner {
+  font-size: 0.64rem;
+  padding: 3px 6px 1px;
+}
+.bench-column .tcg-card-landscape .tcg-card-body {
+  gap: 2px;
+  padding: 1px 6px 3px;
+}
+.bench-column .hp-text {
+  font-size: 0.56rem;
+}
+.bench-column .statuses {
+  gap: 2px;
+}
+.bench-column .status-badge {
+  font-size: 0.5rem;
+  padding: 0 3px;
 }
 /* Mini-menu d'un personnage de réserve, ouvert vers le haut (le banc du joueur est en
    bas de sa colonne). */
 .bench-menu {
   position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
+  top: 0;
+  left: calc(100% + 8px);
   z-index: 25;
   min-width: 208px;
   max-width: min(280px, 80vw);
@@ -1395,17 +1439,16 @@ input::placeholder {
   flex-direction: column;
   gap: 2px;
   box-shadow: var(--shadow-lg);
-  transform: translateX(-50%);
   animation: bench-menu-pop-in 0.14s var(--ease);
 }
 @keyframes bench-menu-pop-in {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(4px) scale(0.98);
+    transform: translateX(-6px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0) scale(1);
+    transform: translateX(0) scale(1);
   }
 }
 .bench-menu-head {
@@ -1590,8 +1633,8 @@ input::placeholder {
 .tcg-card.tcg-card-landscape {
   flex-direction: row;
   align-items: stretch;
-  width: var(--active-card-w, 300px);
-  min-height: var(--active-card-h, 132px);
+  width: var(--landscape-w, 300px);
+  min-height: var(--landscape-h, 132px);
 }
 .tcg-card-landscape .tcg-card-art {
   flex: 0 0 38%;
@@ -3075,16 +3118,12 @@ textarea {
   .zone-bench-opp {
     align-self: auto;
   }
-  .rail {
-    flex-direction: row;
-    justify-content: center;
-    gap: 20px;
-    padding: 6px 10px;
+  .rail-self,
+  .rail-opp {
+    align-items: center;
   }
   .active-slot.self,
-  .active-slot.opponent,
-  .bench-row.self,
-  .bench-row.opponent {
+  .active-slot.opponent {
     justify-content: center;
   }
   .cmd-panel {
@@ -3134,8 +3173,10 @@ textarea {
 
   /* Plateau compacté : mêmes zones, cartes plus petites. */
   .board {
-    --card-hand-w: 66px;
-    --card-bench-w: 58px;
+    --card-hand-w: 60px;
+    --bench-card-w: 132px;
+    --bench-card-h: 46px;
+    --gy-card-w: 104px;
     --card-pile-w: 54px;
     --card-opp-hand-w: 38px;
     --active-card-w: min(94vw, 300px);
@@ -3144,6 +3185,12 @@ textarea {
   .tcg-card-landscape .tcg-card-name-banner {
     font-size: 0.82rem;
     padding: 5px 8px;
+  }
+  /* Réserve latérale plus large : à cette taille la boîte englobante d'une carte
+     pivotée de l'éventail dépassait encore du cadre. */
+  .hand-fan {
+    padding-left: 18px;
+    padding-right: 18px;
   }
   .cmd-panel {
     width: 100%;
@@ -3386,3 +3433,229 @@ textarea {
     display: none;
   }
 }
+
+/* ==========================================================================
+   Roue d'initiative : qui commence la partie. Remplace le pile ou face annoncé
+   en texte dans le journal.
+   ========================================================================== */
+
+.initiative-backdrop {
+  z-index: 40;
+}
+.initiative-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 30px 20px;
+  background: linear-gradient(165deg, var(--panel-raised), var(--panel) 65%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  animation: modal-pop-in 0.22s var(--ease);
+}
+.initiative-title {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+}
+.initiative-wheel-holder {
+  position: relative;
+  width: min(62vw, 250px);
+  aspect-ratio: 1;
+}
+/* Aiguille fixe, à midi : c'est elle qui désigne la part gagnante. */
+.initiative-pointer {
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 2;
+  width: 0;
+  height: 0;
+  border-left: 11px solid transparent;
+  border-right: 11px solid transparent;
+  border-top: 19px solid var(--accent);
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.65));
+}
+.initiative-wheel {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid var(--border);
+  /* Deux parts égales : le joueur 1 de midi à six heures, le joueur 2 de six heures à
+     midi -- soit des centres de part à 90° et 270°, ceux qu'attend le composant. */
+  background: conic-gradient(#3b6fd4 0deg 180deg, #a34bd0 180deg 360deg);
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.35), var(--shadow-lg), inset 0 0 44px rgba(0, 0, 0, 0.5);
+  animation: initiative-spin var(--spin-ms) cubic-bezier(0.16, 0.72, 0.1, 1) forwards;
+}
+@keyframes initiative-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(var(--spin));
+  }
+}
+.initiative-slot {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  transform: rotate(var(--seg));
+}
+.initiative-name {
+  margin-top: 13%;
+  max-width: 44%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: #fff;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+  animation: initiative-counter-spin var(--spin-ms) cubic-bezier(0.16, 0.72, 0.1, 1) forwards;
+}
+/* Le nom annule à la fois le décalage de sa part et la rotation en cours : il reste
+   lisible pendant que la roue tourne, et droit une fois qu'elle s'arrête. */
+@keyframes initiative-counter-spin {
+  from {
+    transform: rotate(calc(var(--seg) * -1));
+  }
+  to {
+    transform: rotate(calc((var(--seg) + var(--spin)) * -1));
+  }
+}
+.initiative-result {
+  margin: 0;
+  min-height: 1.6em;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+}
+.initiative-result.settled {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* ==========================================================================
+   Mini-roue de chance : uniquement pour un jet dont le pourcentage vient d'une
+   carte. Le taux de base d'un personnage ne la déclenche jamais -- c'est le
+   moteur qui fait le tri en n'annonçant que ces jets-là.
+   ========================================================================== */
+
+.proc-wheel-stack {
+  position: fixed;
+  top: 92px;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 32;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.proc-wheel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 15px 6px 7px;
+  border-radius: 999px;
+  background: rgba(16, 19, 28, 0.93);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  animation: proc-wheel-in 0.9s var(--ease) forwards;
+}
+.proc-wheel.hit {
+  --proc-win: #3fbf7f;
+  --proc-lose: #2a3140;
+  border-color: rgba(63, 191, 127, 0.5);
+}
+.proc-wheel.miss {
+  --proc-win: #37624f;
+  --proc-lose: #552f35;
+  border-color: rgba(224, 85, 95, 0.45);
+}
+@keyframes proc-wheel-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.9);
+  }
+  14%,
+  78% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+}
+.proc-wheel-dial {
+  position: relative;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  /* La part gagnante occupe le pourcentage annoncé : l'aiguille s'arrête donc dans une
+     zone qui correspond visuellement à la chance réelle. */
+  background: conic-gradient(var(--proc-win) 0deg var(--slice), var(--proc-lose) var(--slice) 360deg);
+}
+.proc-wheel-needle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 45%;
+  border-radius: 1px;
+  background: #fff;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.75);
+  translate: -50% -100%;
+  transform-origin: 50% 100%;
+  animation: proc-needle-spin 0.55s cubic-bezier(0.18, 0.74, 0.12, 1) forwards;
+}
+@keyframes proc-needle-spin {
+  from {
+    rotate: 0deg;
+  }
+  to {
+    rotate: var(--spin);
+  }
+}
+.proc-wheel-text {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 9px;
+  line-height: 1.2;
+}
+.proc-wheel-verdict {
+  grid-row: 1 / 3;
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+.proc-wheel.hit .proc-wheel-verdict {
+  color: #4fd39a;
+}
+.proc-wheel.miss .proc-wheel-verdict {
+  color: #e0555f;
+}
+.proc-wheel-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.proc-wheel-percent {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.proc-wheel-who {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+}
+
