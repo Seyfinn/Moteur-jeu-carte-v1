@@ -15,6 +15,12 @@ export const destruction: TerrainCardDef = {
       kind: 'passive',
       description: 'Détruit tous les objets actuellement équipés des 2 joueurs.',
       trigger: 'onTerrainPlayed',
+      // Only for THIS terrain's own arrival. Without the guard, the event emitted when
+      // *any* terrain hits the table (including the opponent's) re-fired this on-play
+      // effect for every terrain already in play.
+      condition(ctx) {
+        return ctx.event?.data['terrainInstanceId'] === ctx.sourceInstanceId;
+      },
       async execute(ctx) {
         for (const playerId of ['p1', 'p2'] as const) {
           for (const char of ctx.getAllOnBoard(playerId)) {

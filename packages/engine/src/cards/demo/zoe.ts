@@ -100,6 +100,7 @@ export const zoe: CharacterCardDef = {
         ctx.applyStatus(ctx.sourceInstanceId, {
           statusId: LAST_ENEMY_ABILITY_STATUS_ID,
           label: 'Spell Thief (mémoire)',
+          hidden: true, // mémoire interne, aucune information utile à afficher sur la carte
           data: { characterInstanceId: data.characterInstanceId, abilityId: data.abilityId },
         });
       },
@@ -108,7 +109,7 @@ export const zoe: CharacterCardDef = {
       id: 'spell-thief',
       name: 'Spell Thief',
       kind: 'active',
-      description: `Récupère et utilise la dernière ability active utilisée par l'ennemi, avec Zoé comme source (les abilities qui dépendent d'un compteur propre au personnage d'origine peuvent être dégradées). Rechargement : ${SPELL_THIEF_COOLDOWN_EFFECTIVE_TURNS} tours après usage.`,
+      description: `Rejoue immédiatement la dernière capacité active utilisée par l'adversaire, mais lancée par Zoé. Une capacité qui dépend d'un compteur propre à son porteur d'origine peut être moins efficace. Rechargement : ${SPELL_THIEF_COOLDOWN_EFFECTIVE_TURNS} tours.`,
       condition(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);
         if (hasStatus(self, SPELL_THIEF_COOLDOWN_STATUS_ID)) return false;

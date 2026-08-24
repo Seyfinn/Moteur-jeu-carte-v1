@@ -1,7 +1,8 @@
 import type { EngineApi } from './engine-api.js';
 import { tickStatusesAtTurnStart } from './statuses.js';
 import { checkWinCondition, tickTerrainAtTurnStart } from './zones.js';
-import { otherPlayer, type GameState } from './types.js';
+import { otherPlayer, type GameState, type PlayerId } from './types.js';
+import { cardName } from './names.js';
 
 export async function startTurn(state: GameState, api: EngineApi): Promise<void> {
   const player = state.players[state.activePlayerId];
@@ -16,7 +17,11 @@ export async function startTurn(state: GameState, api: EngineApi): Promise<void>
   if (player.activeCharacterInstanceId === null && player.benchCharacterInstanceIds.length > 0) {
     const promoted = player.benchCharacterInstanceIds.shift()!;
     player.activeCharacterInstanceId = promoted;
-    api.log(`${player.id} has no active character: ${promoted} steps up`, { characterInstanceId: promoted }, player.id);
+    api.log(
+      `${player.displayName} n'a plus de personnage actif : ${cardName(player.characters[promoted]?.cardId ?? '')} prend sa place`,
+      { kind: 'switch', characterInstanceId: promoted },
+      player.id
+    );
     await api.emitEvent({
       name: 'onBecomeActive',
       playerId: player.id,
@@ -24,12 +29,20 @@ export async function startTurn(state: GameState, api: EngineApi): Promise<void>
     });
     if (state.result) return;
   }
-  const ids = [player.activeCharacterInstanceId, ...player.benchCharacterInstanceIds].filter(
-    (id): id is string => id !== null
-  );
-  for (const id of ids) {
-    const char = player.characters[id];
-    if (char) char.abilityUsesThisTurn = {};
+  // Per-turn ability budgets are refreshed for BOTH sides, not just the player whose
+  // turn is starting. An active ability is only ever usable on its owner's own turn, so
+  // this changes nothing for those -- but a *passive* reacting to an opponent's action
+  // (afterDamage, onCharacterKO...) used to be silently blocked by the use it had
+  // already spent during its own last turn, since its counter only reset two turns later.
+  for (const pid of ['p1', 'p2'] as PlayerId[]) {
+    const side = state.players[pid];
+    const ids = [side.activeCharacterInstanceId, ...side.benchCharacterInstanceIds].filter(
+      (id): id is string => id !== null
+    );
+    for (const id of ids) {
+      const char = side.characters[id];
+      if (char) char.abilityUsesThisTurn = {};
+    }
   }
 
   await api.emitEvent({ name: 'onTurnStart', playerId: state.activePlayerId, data: {} });

@@ -1,5 +1,6 @@
 import type { CharacterCardDef } from '../types.js';
 import { hasDeathWard } from '../../statuses.js';
+import { cardName } from '../../names.js';
 
 const BASE_ATK = 70;
 const EXECUTE_THRESHOLD_HP = 20;
@@ -15,7 +16,7 @@ export const akali: CharacterCardDef = {
       id: 'kunai',
       name: 'Kunaï',
       baseATK: BASE_ATK,
-      description: `Inflige ${BASE_ATK} dégâts à l'actif adverse. Si celui-ci se retrouve à ${EXECUTE_THRESHOLD_HP}HP ou moins après le coup, il meurt immédiatement (Perfect Execution) -- sauf s'il est protégé par un effet du type Détermination.`,
+      description: `Inflige ${BASE_ATK} dégâts à l'actif adverse. S'il lui reste ${EXECUTE_THRESHOLD_HP} HP ou moins après le coup, il est achevé sur le champ — sauf s'il est protégé contre la mort (Détermination).`,
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -26,7 +27,7 @@ export const akali: CharacterCardDef = {
         const current = ctx.getCharacter(target.instanceId);
         const remainingHP = current.currentMaxHP - current.damage;
         if (remainingHP <= EXECUTE_THRESHOLD_HP && !hasDeathWard(current)) {
-          ctx.log(`Perfect Execution : achève ${current.cardId} (${remainingHP} HP restants)`, {
+          ctx.log(`Perfect Execution : achève ${cardName(current.cardId)} (${remainingHP} HP restants)`, {
             characterInstanceId: current.instanceId,
           });
           await ctx.koCharacter(current.instanceId);

@@ -3,7 +3,8 @@ import { getCharacterCard, getTerrainCard } from './cards/registry.js';
 import type { EngineApi } from './engine-api.js';
 import { recordAbilityUse } from './abilities.js';
 import { canUseAbility, evaluateTransform, findCharacter } from './queries.js';
-import type { EngineEvent, GameState, PlayerId } from './types.js';
+import { cardName } from './names.js';
+import type { EngineEvent, EventName, GameState, PlayerId } from './types.js';
 
 interface TriggeredSource {
   ability: AbilityDef;
@@ -21,6 +22,35 @@ interface TriggeredSource {
  */
 const MAX_EVENT_DEPTH = 24;
 const eventDepth = new WeakMap<GameState, number>();
+
+/** Player-facing names for the engine's event ids, used in the resolution-order prompt. */
+const EVENT_LABELS: Partial<Record<EventName, string>> = {
+  onGameStart: 'début de partie',
+  onTurnStart: 'début de tour',
+  onTurnEnd: 'fin de tour',
+  onBecomeActive: 'entrée en poste actif',
+  onAttackDeclared: 'attaque déclarée',
+  beforeDamage: 'avant les dégâts',
+  afterDamage: 'après les dégâts',
+  onCharacterKO: 'KO',
+  onCharacterRevived: 'résurrection',
+  onObjectPlayed: 'objet joué',
+  onTerrainPlayed: 'terrain posé',
+  onTerrainRemoved: 'terrain retiré',
+  onStatusExpired: 'altération expirée',
+  onSwitch: 'switch',
+  onAbilityUsed: 'capacité utilisée',
+};
+
+/** "Gojo Satoru" / "Autel Démoniaque" rather than a raw instance uuid, for the order prompt. */
+function cardLabelFor(state: GameState, source: TriggeredSource): string {
+  const player = state.players[source.sourceOwnerId];
+  const cardId =
+    source.kind === 'terrain'
+      ? player.terrains[source.sourceInstanceId]?.cardId
+      : player.characters[source.sourceInstanceId]?.cardId;
+  return cardName(cardId ?? source.sourceInstanceId);
+}
 
 function getTriggeredSources(state: GameState, event: EngineEvent): TriggeredSource[] {
   const sources: TriggeredSource[] = [];
@@ -145,7 +175,8 @@ export async function emitEvent(state: GameState, event: EngineEvent, api: Engin
 
   const depth = eventDepth.get(state) ?? 0;
   if (depth >= MAX_EVENT_DEPTH) {
-    api.log(`Trigger chain too deep on ${event.name} -- further reactions are skipped`, {
+    api.log(`Chaîne de déclenchements trop profonde sur ${event.name} : les réactions suivantes sont ignorées`, {
+      kind: 'trigger-depth',
       eventName: event.name,
       depth,
     });
@@ -175,8 +206,8 @@ export async function emitEvent(state: GameState, event: EngineEvent, api: Engin
   if (eligible.length > 1) {
     const answer = await api.chooseFor(state.activePlayerId, {
       kind: 'order',
-      prompt: `Ordre de résolution : ${event.name}`,
-      items: eligible.map((e, i) => ({ key: String(i), label: `${e.source.ability.name} (${e.source.sourceInstanceId})` })),
+      prompt: `Ordre de résolution des effets déclenchés (${EVENT_LABELS[event.name] ?? event.name})`,
+      items: eligible.map((e, i) => ({ key: String(i), label: `${e.source.ability.name} — ${cardLabelFor(state, e.source)}` })),
     });
     if (answer.kind === 'order') ordered = applyOrderAnswer(eligible, answer.orderedKeys);
   }

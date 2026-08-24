@@ -7,7 +7,7 @@ export const cameleon: ObjectCardDef = {
   id: 'cameleon',
   name: 'Caméléon',
   description:
-    "Choisissez une carte objet de votre réserve non jouée, envoyez-la au cimetière, et remplacez-la par une autre carte objet de votre choix parmi celles de votre deck (impossible si la carte de remplacement a déjà atteint son nombre d'exemplaires maximum autorisé).",
+    "Défaussez une carte objet de votre réserve et remplacez-la par une autre carte objet de votre deck, au choix — à condition que celle-ci n'ait pas déjà atteint son nombre maximum d'exemplaires.",
   async execute(ctx) {
     const player = ctx.state.players[ctx.ownerId];
     if (player.unplayedObjectInstanceIds.length === 0) return;
@@ -44,6 +44,8 @@ export const cameleon: ObjectCardDef = {
     const chosenCardId = await ctx.chooseOption('Caméléon : choisissez la carte objet de remplacement', replacementOptions);
     ctx.createObject(chosenCardId);
 
-    ctx.log(`Caméléon : remplace ${removedCardId} par ${chosenCardId}`, { removedCardId, chosenCardId });
+    // The discarded card is public (it goes to the graveyard); the replacement is not --
+    // it lands face down in the pool, so naming it here would leak it to the opponent.
+    ctx.log(`Caméléon : ${getObjectCard(removedCardId).name} est défaussée et remplacée`, { removedCardId });
   },
 };

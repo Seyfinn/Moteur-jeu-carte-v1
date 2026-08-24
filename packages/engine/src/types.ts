@@ -96,6 +96,13 @@ export interface StatusInstance {
    * Burn/poison damage is a fixed engine formula and ignores `data`.
    */
   data?: Record<string, unknown>;
+  /**
+   * Pure bookkeeping: a status a card uses as its own private storage (a counter, a
+   * "last move used" memory, a lock tracker) with no meaning to the player. Hidden ones
+   * are skipped by the event log and by the on-card status badges -- they carry no
+   * mechanical difference, only presentation.
+   */
+  hidden?: boolean;
 }
 
 // ---------------------------------------------------------------------------

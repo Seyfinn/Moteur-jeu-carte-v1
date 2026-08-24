@@ -6,7 +6,7 @@ export const potionDeSoin: ObjectCardDef = {
   type: 'object',
   id: 'potion-de-soin',
   name: 'Potion de soin',
-  description: `Soigne un personnage de ${HEAL_AMOUNT} HP.`,
+  description: `Soigne un de vos personnages (actif ou banc) de ${HEAL_AMOUNT} HP.`,
   async execute(ctx) {
     const options = ctx.getAllOnBoard(ctx.ownerId);
     if (options.length === 0) return;

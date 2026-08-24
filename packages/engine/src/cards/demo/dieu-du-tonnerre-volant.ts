@@ -6,7 +6,7 @@ export const dieuDuTonnerreVolant: ObjectCardDef = {
   id: 'dieu-du-tonnerre-volant',
   name: 'Dieu du Tonnerre Volant',
   description:
-    "Switch gratuitement le personnage actif avec un personnage du banc allié de votre choix, sans mettre fin au tour. Ignore Stun et Chaînes (téléportation), mais reste bloqué si une carte en jeu interdit explicitement tout switch.",
+    "Téléportation : échange votre actif avec un personnage de votre banc, gratuitement et sans finir votre tour. Ignore Stun et Chaînes, mais reste bloqué par une carte qui interdit explicitement tout switch (Bouclier Ultime).",
   async execute(ctx) {
     const active = ctx.getActive(ctx.ownerId);
     const bench = ctx.getBench(ctx.ownerId);

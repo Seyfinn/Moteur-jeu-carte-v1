@@ -170,7 +170,12 @@ Garde-fous appliqués automatiquement, inutile de les re-coder par carte :
 - **1 terrain par tour maximum** (`getMaxTerrainsPerTurn`). Sans ça, on pouvait
   enchaîner les poses pour re-déclencher les effets `onTerrainPlayed` en boucle.
 - Poser un terrain par-dessus un autre envoie l'ancien au cimetière **et** émet
-  `onTerrainRemoved` avec `reason: 'replaced'`.
+  `onTerrainRemoved` avec `reason: 'replaced'`. La durée du nouveau terrain est déjà
+  posée quand cet event part, et si une réaction le détruit dans la foulée, `onTerrainPlayed`
+  n'est pas émis.
+- `abilityUsesThisTurn` est remis à zéro pour **les deux camps** au début de chaque tour.
+  Un passive qui réagit à une action adverse (`afterDamage`, `onCharacterKO`...) dispose
+  donc bien de son quota à chaque tour de jeu, et pas seulement un tour sur deux.
 
 ## Patterns récurrents
 
@@ -215,6 +220,46 @@ Garde-fous appliqués automatiquement, inutile de les re-coder par carte :
     0 dégât + désarmé. Ex : l'objet Concentration.
   - `stun` `disarmed` `chained` `silence-active` `silence-passive` `silence-ultimate`
     `evasive` `critical` `burn` `poison`.
+
+  Deux champs transverses utilisables sur **n'importe quel** statut :
+  `ticksOnBench: true` (la durée continue de descendre au banc) et `hidden: true`
+  (bookkeeping interne : ni badge sur la carte, ni ligne de journal).
+- ⚠️ **Un trigger `onTerrainPlayed` DOIT filtrer sur son propre terrain.** L'event est
+  émis pour *n'importe quel* terrain posé, y compris celui de l'adversaire, et tous les
+  terrains déjà en jeu le reçoivent. Sans garde, l'effet « à la pose » se rejoue à chaque
+  fois que quelqu'un pose un terrain (bug corrigé sur Autel Démoniaque, Protection Divine,
+  Coeur Acier, Destruction et Absorption Vitale) :
+  ```ts
+  trigger: 'onTerrainPlayed',
+  condition(ctx) { return ctx.event?.data['terrainInstanceId'] === ctx.sourceInstanceId; },
+  ```
+  Même logique pour `onTerrainRemoved` (déjà appliquée sur Coeur Acier).
+- **Un terrain qui pose un statut sans durée propre doit prévoir sa levée sur
+  `onTerrainRemoved`.** Le terrain peut partir autrement que par son propre décompte
+  (détruit, remplacé par un autre terrain), et son tick ne tournera alors plus jamais :
+  le statut resterait sur le personnage pour toute la partie (bug corrigé sur Absorption
+  Vitale).
+- **Coût en HP que le camp s'inflige à lui-même** (Adrénaline Ultime, Soin Sacrificiel de
+  Soraka) : passer `{ ignoreShield: true, ignoreDamageReduction: true }` à `dealDamage`.
+  Sans ça, le bouclier du personnage (ou n'importe quelle réduction de dégâts) absorbe le
+  coût et la carte devient gratuite.
+- **Buff limité au tour en cours posé sur un personnage qui peut partir au banc** :
+  ajouter `ticksOnBench: true` au statut. Par défaut, les durées sont **suspendues** sur
+  le banc (section 6) — un buff « pendant ce tour » posé puis mis au banc était donc figé
+  et revenait intact bien plus tard (bug corrigé sur Potion force, Détermination,
+  Adrénaline Ultime et Couteau dans le dos). `ticksOnBench` ne fait que décompter :
+  seuls burn/poison/bleed infligent leurs dégâts au banc.
+- **Statut de bookkeeping interne** (compteur, mémoire de la dernière attaque adverse,
+  suivi de verrou) : ajouter `hidden: true`. Le journal ne l'annonce pas et la carte
+  n'affiche pas de badge pour lui — aucun changement mécanique, seulement de la
+  présentation en moins (cf. Guts, Kakashi, Zoé, Ornn). À réserver aux statuts qui
+  n'apprennent rien au joueur : la réserve de Mana Barrier de Blitzcrank, elle, doit
+  rester visible.
+- **Effet qui déplace/échange « tous les statuts »** (Inversion de la Réalité d'Aizen,
+  Poupée Voodoo) : ne déplacer que des statuts que le moteur reconnaît, via
+  `BUILTIN_STATUS_IDS` (`statuses.ts`). Un `statusId` inventé par une carte n'a de sens
+  que pour elle : posé sur une carte qui ne le lit pas, il est purement et simplement
+  détruit — ce qui annulait en silence des tours d'accumulation (Guts, Hulk, Blitzcrank).
 - **Redirection de dégâts** (ex: Hypnose Absolue d'Aizen) : modifier
   `getDamageRedirectPercent` renvoyant un pourcentage pour son propre `sourceInstanceId`.
   Le moteur tire le dé et demande au camp visé quel personnage du banc encaisse.
@@ -246,6 +291,11 @@ Garde-fous appliqués automatiquement, inutile de les re-coder par carte :
   ou l'ordre tel que présenté. Une carte ne doit donc jamais supposer qu'un prompt sera
   forcément répondu « intelligemment » — s'il existe un choix catastrophique, ne pas le
   mettre en première position.
+- Les réponses aux prompts sont **validées à l'entrée** (`Match.answerChoice`) : une
+  sélection doit faire partie des `options` proposées, respecter `min`/`max` et ne pas
+  contenir de doublon ; un `order` doit être une permutation exacte des items. Une carte
+  peut donc supposer que ce que lui rend `ctx.choose*` fait bien partie de ce qu'elle a
+  proposé (mais pas que ce soit le choix le plus malin — cf. le timeout ci-dessus).
 - `ctx.dealDamage` renseigne `attackerOwnerId` (le camp dont l'effet vient) en plus de
   `attackerInstanceId`. Une carte défensive peut donc distinguer un coup adverse d'un coût
   que son propre camp paie — c'est ce qui empêche Bouclier Ultime de rendre gratuits les
@@ -270,3 +320,28 @@ avant qu'il ne puisse agir. Donc :
   une réponse malformée ne peut plus faire jouer deux fois le même passive ni en sauter un.
 - L'éligibilité de chaque passive est **revérifiée juste avant son exécution** : une carte
   tuée/réduite au silence par une réaction précédente du même event ne se déclenche plus.
+- `ticksOnBench` était déclaré dans `StatusInstance` mais **jamais lu** : seuls
+  burn/poison/bleed échappaient à la suspension des durées au banc. Il est désormais
+  honoré (décompte uniquement, pas de dégâts).
+- Les triggers `onTerrainPlayed` se déclenchaient pour le terrain de n'importe qui.
+- Un KO tuant via valeur lock (Mahito, poison Sang Maudit) ne nommait pas son tueur :
+  les passives « sur kill » le rataient.
+- Les objets équipés sur un personnage d'un **autre** camp partaient dans le mauvais
+  cimetière à la mort du porteur (id présent dans une zone dont le `objects` ne le
+  contient pas → crash des cartes qui parcourent le cimetière).
+- `dealDamage` / `heal` / `applyStatus` / `addShield` / `raiseMaxHP` ignorent désormais
+  toutes une cible partie au cimetière (`removeStatus` reste autorisé, pour permettre le
+  nettoyage d'une marque sur un personnage qui vient de mourir).
+
+## Journal d'événements
+
+`api.log(message, data)` écrit dans `state.log`, lu par le client. Le message est en
+**français** et nomme les cartes/joueurs par leur nom d'affichage (`names.ts` :
+`cardName(cardId)` / `playerName(state, playerId)`), jamais par un id.
+
+Le client ne lit **pas** le texte : il classe chaque entrée sur `data.kind`
+(`'attack' | 'use-ability' | 'play-object' | 'play-terrain' | 'damage' | 'heal' | 'ko' |
+'critical' | 'evasion' | 'status' | 'switch' | ...`) pour choisir l'icône, la couleur et
+les animations de plateau. Une nouvelle entrée de journal digne d'être mise en avant doit
+donc porter un `kind` ; sinon elle s'affiche en ligne neutre, ce qui est très bien pour
+du détail.

@@ -36,8 +36,7 @@ export const mahito: CharacterCardDef = {
       id: 'marque',
       name: 'Marque',
       kind: 'passive',
-      description:
-        "La cible ne peut plus jamais soigner ces PV. Purement descriptif : conséquence directe d'Altération de l'Âme -- une réduction de HP max n'est par nature jamais soignable dans le moteur (heal() ne peut restaurer que des PV perdus sous le plafond actuel), donc rien à coder séparément.",
+      description: "Les PV retirés par Mahito ne peuvent plus jamais être récupérés, par aucun soin.",
       async execute() {},
     },
   ],

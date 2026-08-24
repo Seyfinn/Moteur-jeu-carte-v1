@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { DECK_LIMITS, listDeckPool, validateRoster, type DeckPoolEntry } from 'engine';
+import { listDeckPool, validateRoster, type DeckPoolEntry } from 'engine';
 import { CardFrame } from './CardFrame';
 import { CardPreviewProvider, DeckContentsPanel, SECTIONS, useCardPreview, type CardKind, type DeckSectionKey } from './DeckContentsPanel';
 import { createEmptyDeck, decodeDeckCode, deckToRoster, encodeDeckCode, loadDecks, saveDecks, type Deck } from '../decks';
@@ -141,9 +141,9 @@ function DeckEditor({
     setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
-  function add(key: DeckSectionKey, max: number, id: string) {
+  function add(key: DeckSectionKey, max: number, id: string, maxCopies: number) {
     const ids = deck[key];
-    if (ids.length >= max || countOf(ids, id) >= DECK_LIMITS.maxCopiesPerCard) return;
+    if (ids.length >= max || countOf(ids, id) >= maxCopies) return;
     onChange({ ...deck, [key]: [...ids, id] });
   }
 
@@ -207,8 +207,10 @@ function DeckEditor({
                         key={entry.id}
                         entry={entry}
                         count={countOf(ids, entry.id)}
-                        disabledAdd={ids.length >= section.max || countOf(ids, entry.id) >= DECK_LIMITS.maxCopiesPerCard}
-                        onAdd={() => add(section.key, section.max, entry.id)}
+                        // Per-card cap, not the global one: a "1x" card (Chopper, Chaînes...) used to be
+                        // addable twice, then blocked the whole deck at save time with a cryptic error.
+                        disabledAdd={ids.length >= section.max || countOf(ids, entry.id) >= entry.maxCopies}
+                        onAdd={() => add(section.key, section.max, entry.id, entry.maxCopies)}
                         onRemove={() => remove(section.key, entry.id)}
                       />
                     ))}

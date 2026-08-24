@@ -40,6 +40,7 @@ export const guts: CharacterCardDef = {
           statusId: BERSERK_COUNTER_STATUS_ID,
           label: 'Berserk (record de dégâts subis)',
           sourceCardInstanceId: ctx.sourceInstanceId,
+          hidden: true, // compteur interne : le palier atteint est déjà annoncé dans le journal
           data: { highestDamage },
         });
 

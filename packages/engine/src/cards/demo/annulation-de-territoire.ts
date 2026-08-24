@@ -6,7 +6,7 @@ export const annulationDeTerritoire: ObjectCardDef = {
   type: 'object',
   id: 'annulation-de-territoire',
   name: 'Annulation de territoire',
-  description: `Envoie votre terrain actif au cimetière, ce qui retire ${TURNS_REMOVED} tours au terrain ennemi (aucun effet sur le terrain ennemi s'il n'y en a pas). Sans effet si vous n'avez pas de terrain actif.`,
+  description: `Sacrifiez votre terrain actif pour retirer ${TURNS_REMOVED} tours au terrain adverse. Sans effet si vous n'avez pas de terrain en jeu.`,
   async execute(ctx) {
     const ownTerrainId = ctx.state.players[ctx.ownerId].activeTerrainInstanceId;
     if (!ownTerrainId) return;

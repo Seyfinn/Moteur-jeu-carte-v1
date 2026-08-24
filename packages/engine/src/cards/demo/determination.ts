@@ -6,7 +6,7 @@ export const determination: ObjectCardDef = {
   type: 'object',
   id: 'determination',
   name: 'Détermination',
-  description: `Exemplaire unique. Empêche le personnage actif de mourir de dégâts classiques pendant ${WARD_DURATION_TURNS} tour : tant que l'effet dure, aucun coup ne peut le faire descendre en dessous de 1HP (Valeur Lock n'est pas concerné).`,
+  description: `Exemplaire unique. Jusqu'à la fin de ce tour, aucun coup ne peut faire descendre votre personnage actif en dessous de 1 HP. Ne protège pas contre la perte de HP max (Valeur Lock) ni contre une mise à mort directe.`,
   maxCopies: 1,
   async execute(ctx) {
     const active = ctx.getActive(ctx.ownerId);
@@ -17,6 +17,8 @@ export const determination: ObjectCardDef = {
       sourcePlayerId: ctx.ownerId,
       sourceCardInstanceId: ctx.sourceInstanceId,
       remainingTurns: WARD_DURATION_TURNS,
+      // Turn-scoped: benching the bearer must not freeze the ward indefinitely.
+      ticksOnBench: true,
     });
   },
 };

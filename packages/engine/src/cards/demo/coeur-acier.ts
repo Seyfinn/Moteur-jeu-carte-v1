@@ -1,4 +1,5 @@
 import type { EffectContext, TerrainCardDef } from '../types.js';
+import { cardName } from '../../names.js';
 
 const DURATION_TURNS = 6;
 const BONUS_MAX_HP = 150;
@@ -32,7 +33,7 @@ function updateMark(ctx: EffectContext): void {
       },
       { skipEvasionRoll: true }
     );
-    ctx.log(`Coeur Acier : la marque sur ${opponentActive.cardId} est chargée`, {
+    ctx.log(`Coeur Acier : la marque sur ${cardName(opponentActive.cardId)} est chargée`, {
       terrainInstanceId: terrain.instanceId,
       markedInstanceId: opponentActive.instanceId,
     });
@@ -41,7 +42,7 @@ function updateMark(ctx: EffectContext): void {
 
   terrain.data = { markedInstanceId: opponentActive?.instanceId, charged: false };
   if (opponentActive) {
-    ctx.log(`Coeur Acier marque ${opponentActive.cardId}`, {
+    ctx.log(`Coeur Acier marque ${cardName(opponentActive.cardId)}`, {
       terrainInstanceId: terrain.instanceId,
       markedInstanceId: opponentActive.instanceId,
     });
@@ -53,11 +54,9 @@ export const coeurAcier: TerrainCardDef = {
   id: 'coeur-acier',
   name: 'Coeur acier',
   description:
-    "Pose une marque sur le personnage actif adverse ; elle prend 1 tour à être chargée. Si le personnage " +
-    'actif adverse est toujours le même au tour suivant du poseur, la première attaque qui le touche ' +
-    `réellement pendant que la marque est chargée octroie ${BONUS_MAX_HP}HP max (sans soin) au personnage qui ` +
-    "l'a attaqué, puis la marque se réinitialise. Sinon (l'adversaire a switché), la marque est réinitialisée " +
-    'sur le nouvel actif adverse.',
+    "Marque l'actif adverse. Si c'est toujours le même à votre tour suivant, la marque se charge : la première " +
+    `attaque qui le touche alors rapporte ${BONUS_MAX_HP} HP max à son attaquant (pas de soin), puis la marque se ` +
+    "réinitialise. Si l'adversaire a switché entre-temps, la marque passe simplement sur le nouvel actif.",
   durationTurns: DURATION_TURNS,
   abilities: [
     {
@@ -66,6 +65,12 @@ export const coeurAcier: TerrainCardDef = {
       kind: 'passive',
       description: "Marque immédiatement le personnage actif adverse à la pose (1ère des activations).",
       trigger: 'onTerrainPlayed',
+      // Only for THIS terrain's own arrival. Without the guard, the event emitted when
+      // *any* terrain hits the table (including the opponent's) re-fired this on-play
+      // effect for every terrain already in play.
+      condition(ctx) {
+        return ctx.event?.data['terrainInstanceId'] === ctx.sourceInstanceId;
+      },
       async execute(ctx) {
         updateMark(ctx);
       },

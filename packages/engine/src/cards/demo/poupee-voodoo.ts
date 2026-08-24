@@ -1,4 +1,5 @@
 import type { ObjectCardDef } from '../types.js';
+import { cardName } from '../../names.js';
 
 /**
  * Statuts génériques considérés comme des "altérations négatives" transférables.
@@ -16,6 +17,7 @@ const NEGATIVE_STATUS_IDS = [
   'atk-reduction',
   'burn',
   'poison',
+  'bleed',
   'chained',
 ];
 
@@ -24,7 +26,7 @@ export const poupeeVoodoo: ObjectCardDef = {
   id: 'poupee-voodoo',
   name: 'Poupée Voodoo',
   description:
-    "Transfère toutes les altérations négatives (stun, désarmement, silence, réduction d'ATK, brûlure, poison, enchaînement) d'un personnage de votre choix (allié ou ennemi, actif ou banc) vers un personnage allié de votre choix (actif ou banc), ou vers l'actif ennemi.",
+    "Prend toutes les altérations négatives d'un personnage au choix sur le plateau (stun, désarmé, silence, ATK réduite, brûlure, poison, saignement, chaînes) et les déplace sur un de vos personnages ou sur l'actif ennemi.",
   async execute(ctx) {
     const sourcePool = [...ctx.getAllOnBoard(ctx.ownerId), ...ctx.getAllOnBoard(ctx.opponentId)];
     if (sourcePool.length === 0) return;
@@ -70,7 +72,7 @@ export const poupeeVoodoo: ObjectCardDef = {
       ctx.applyStatus(destinationId, { ...status });
     }
 
-    ctx.log(`Poupée Voodoo : transfère ${toTransfer.length} altération(s) de ${source.cardId} vers la cible choisie`, {
+    ctx.log(`Poupée Voodoo : transfère ${toTransfer.length} altération(s) de ${cardName(source.cardId)} vers la cible choisie`, {
       sourceInstanceId: sourceId,
       destinationInstanceId: destinationId,
       statusIds: toTransfer.map((s) => s.statusId),

@@ -21,7 +21,10 @@ export const adrenalineUltime: ObjectCardDef = {
 
     const currentHP = active.currentMaxHP - active.damage;
     const toLose = currentHP - HP_AFTER_USE;
-    if (toLose > 0) await ctx.dealDamage(active.instanceId, toLose);
+    // A self-inflicted *cost*, not an attack: it has to land in full. Routed through the
+    // normal pipeline it was absorbed by the character's own shield (or reduced by a
+    // damage-reduction modifier), which handed out the x2 for free.
+    if (toLose > 0) await ctx.dealDamage(active.instanceId, toLose, { ignoreShield: true, ignoreDamageReduction: true });
 
     ctx.applyStatus(active.instanceId, {
       statusId: 'atk-multiplier',
@@ -29,6 +32,9 @@ export const adrenalineUltime: ObjectCardDef = {
       sourcePlayerId: ctx.ownerId,
       sourceCardInstanceId: ctx.sourceInstanceId,
       remainingTurns: BUFF_DURATION_TURNS,
+      // Scoped to this turn: without this the buff freezes the moment its bearer is
+      // benched (durations are suspended there) and comes back intact turns later.
+      ticksOnBench: true,
       data: { multiplier: ATK_MULTIPLIER },
     });
   },

@@ -7,7 +7,7 @@ export const dechetterie: ObjectCardDef = {
   id: 'dechetterie',
   name: 'Déchetterie',
   description:
-    "Exemplaire unique. Propose une sélection aléatoire de 2 cartes objets du cimetière adverse (ou moins s'il y en a moins). La carte choisie quitte définitivement le cimetière ennemi et rejoint votre réserve de cartes objets, jouable normalement plus tard.",
+    "Exemplaire unique. Tire 2 cartes objet au hasard dans le cimetière adverse et vous en fait choisir une : elle rejoint votre réserve, jouable normalement plus tard.",
   maxCopies: 1,
   async execute(ctx) {
     const enemy = ctx.state.players[ctx.opponentId];

@@ -9,6 +9,12 @@ const DISARM_EFFECTIVE_TURNS = 1;
 const DISARM_REMAINING_TURNS = DISARM_EFFECTIVE_TURNS + 1;
 
 const GODSPEED_READY_STATUS_ID = 'killua-godspeed-ready';
+// +1, comme partout ailleurs (cf. CLAUDE.md) : le statut est posé au moment où Killua
+// entre en poste actif, ce qui arrive soit en fin de tour (le switch est une action
+// finale), soit pendant le tour adverse (remplacement après KO). Dans les deux cas le
+// prochain tick est le début du tour où Killua veut attaquer -- avec remainingTurns: 1
+// le "prêt" était donc retiré juste avant, et Godspeed ne se déclenchait jamais.
+const GODSPEED_READY_REMAINING_TURNS = 2;
 
 export const killua: CharacterCardDef = {
   type: 'character',
@@ -20,7 +26,7 @@ export const killua: CharacterCardDef = {
       id: 'narukami',
       name: 'Narukami',
       baseATK: NARUKAMI_ATK,
-      description: `Inflige ${NARUKAMI_ATK} dégâts à l'actif adverse. Si les dégâts passent réellement (pas d'esquive), ${DISARM_CHANCE_PERCENT}% de chance d'appliquer Désarmé pendant ${DISARM_EFFECTIVE_TURNS} tour. Grâce à Godspeed, la première utilisation après un switch est un critique garanti.`,
+      description: `Inflige ${NARUKAMI_ATK} dégâts à l'actif adverse ; si le coup touche, ${DISARM_CHANCE_PERCENT}% de chance de le désarmer pendant ${DISARM_EFFECTIVE_TURNS} tour. Avec Godspeed armé, la première Narukami après un switch est un critique garanti.`,
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -80,7 +86,7 @@ export const killua: CharacterCardDef = {
           statusId: GODSPEED_READY_STATUS_ID,
           label: 'Godspeed (prêt)',
           sourceCardInstanceId: ctx.sourceInstanceId,
-          remainingTurns: 1,
+          remainingTurns: GODSPEED_READY_REMAINING_TURNS,
         });
       },
     },

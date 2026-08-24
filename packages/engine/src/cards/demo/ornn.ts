@@ -79,6 +79,7 @@ export const ornn: CharacterCardDef = {
           statusId: LOCK_TRACKER_STATUS_ID,
           label: 'Living Forge (en cours)',
           remainingTurns: LOCK_REMAINING_TURNS,
+          hidden: true, // doublon des badges "Living Forge (immobilisé)" déjà visibles
         });
       },
     },
@@ -152,6 +153,7 @@ export const ornn: CharacterCardDef = {
           delete fromPlayer.terrains[chosen.instanceId];
           terrain.ownerId = ctx.ownerId;
           terrain.remainingTurns = undefined; // redéfini normalement à la prochaine pose
+          terrain.data = undefined; // et sans l'état accumulé par sa vie précédente (marques, cibles suivies...)
           toPlayer.terrains[chosen.instanceId] = terrain;
           toPlayer.unplayedTerrainInstanceIds.push(chosen.instanceId);
         }

@@ -14,7 +14,7 @@ export const metamorphe: CharacterCardDef = {
       name: 'Métamorphose',
       kind: 'active',
       description:
-        "Se transforme définitivement en une copie de la carte du personnage actif ennemi (mêmes attaques/capacités pour le reste de la partie). Les dégâts déjà subis et les statuts en cours sont conservés ; seul le plafond de HP change pour correspondre à la carte copiée (Valeur Lock s'il est plus bas, relevé s'il est plus haut). Utilisable une seule fois.",
+        "Devient définitivement une copie de l'actif adverse : ses attaques et ses capacités pour le reste de la partie. Les dégâts subis et les altérations en cours sont conservés, et le plafond de HP s'aligne sur celui de la carte copiée. Utilisable une seule fois.",
       usesPerGame: 1,
       async execute(ctx) {
         const enemyActive = ctx.getActive(ctx.opponentId);

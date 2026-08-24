@@ -23,7 +23,8 @@ packages/
 - `hp.ts` / `statuses.ts` / `zones.ts` — primitives HP/valeur lock, états (suspension sur banc, exception Poison/Brûlure), déplacements de zone (KO, remplacement obligatoire, cimetière, clonage)
 - `turn.ts` / `match.ts` — machine à tours et orchestration d'une partie (`Match`), avec un pipeline d'actions asynchrone qui se met en pause sur `ctx.choose(...)` et reprend via `answerChoice`
 - `cards/demo/` — le pool de cartes jouables (≈25 personnages, ≈17 objets, ≈11 terrains). `registerDemoCards()` les enregistre toutes ; `DEMO_ROSTER` est le pool complet exposé au deck-builder et `DEMO_STARTER_DECK` un deck légal prêt à jouer (6/6/2)
-- `test/` — suite Vitest (règles de tour, HP/valeur lock, états, KO/victoire/égalité, garde-fous du moteur, cartes à mécanique inédite)
+- `names.ts` — noms d'affichage (carte, joueur) utilisés par le journal d'événements, qui est écrit en français et étiqueté par `data.kind` pour que le client puisse le classer sans lire le texte
+- `test/` — suite Vitest (règles de tour, HP/valeur lock, états, KO/victoire/égalité, garde-fous du moteur, non-régressions, cartes à mécanique inédite)
 
 ### `server`
 
@@ -68,3 +69,4 @@ Une carte est un fichier dans `packages/engine/src/cards/demo/` (ou un nouveau d
 - **Salons éphémères** : un salon dont les deux joueurs sont partis est recyclé après 10 minutes. Les codes font 2 caractères (~1000 combinaisons), ce qui suffit pour un usage entre amis mais pas pour du volume.
 - **Pas d'IA / de mode solo** : il faut deux navigateurs (ou deux personnes).
 - **`onStatusApplied` / `onCoinFlip`** sont déclarés dans `EventName` mais jamais émis (voir CLAUDE.md).
+- **Pas de fin de partie par temps ou par épuisement** : deux joueurs qui passent indéfiniment ne terminent jamais la partie. La seule condition de fin est le KO de tout un camp (section 5).

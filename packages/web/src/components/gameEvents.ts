@@ -14,7 +14,9 @@ export type CharacterBadge =
   | { kind: 'attack'; id: number; label: string }
   | { kind: 'ability'; id: number; label: string }
   | { kind: 'critical'; id: number; percent: number }
-  | { kind: 'evasion'; id: number; percent: number };
+  | { kind: 'evasion'; id: number; percent: number }
+  | { kind: 'heal'; id: number; amount: number }
+  | { kind: 'ko'; id: number; label: string };
 
 export type TableEvent =
   | { kind: 'turn-transition'; id: number; endingPlayerId: PlayerId; endingName: string; startingPlayerId: PlayerId; startingName: string; turnNumber: number }
@@ -47,98 +49,118 @@ function playerName(state: GameState, playerId: PlayerId | undefined): string {
   return playerId ? state.players[playerId].displayName : '';
 }
 
-/**
- * The engine fills LogEntry.playerId for every player-attributed entry. The old
- * "p1 "/"p2 " message-prefix parsing is kept purely as a fallback for log entries
- * produced before that field existed (a client can be handed an older state).
- */
+/** The engine fills LogEntry.playerId for every player-attributed entry. */
 function entryPlayerId(entry: LogEntry): PlayerId | undefined {
-  if (entry.playerId) return entry.playerId;
-  if (entry.message.startsWith('p1 ')) return 'p1';
-  if (entry.message.startsWith('p2 ')) return 'p2';
-  return undefined;
+  return entry.playerId;
+}
+
+/**
+ * The engine tags every log entry it considers "interesting" with a stable
+ * `data.kind`. Classifying on that rather than on the message text means the wording
+ * (and its language) can change freely without silently killing the board animations.
+ */
+function entryKind(entry: LogEntry): string | undefined {
+  const kind = entry.data?.['kind'];
+  return typeof kind === 'string' ? kind : undefined;
 }
 
 function classifyLogEntry(entry: LogEntry, state: GameState): Classified | null {
   const d = entry.data ?? {};
-  const msg = entry.message;
 
-  if (msg.includes('attacks with')) {
-    const characterInstanceId = d['characterInstanceId'] as string | undefined;
-    const attackId = d['attackId'] as string | undefined;
-    const char = findCharacter(state, characterInstanceId);
-    if (!char || !characterInstanceId) return null;
-    const attack = getCharacterCard(char.cardId).attacks.find((a) => a.id === attackId);
-    return { anchor: 'character', characterInstanceId, badge: { kind: 'attack', label: attack?.name ?? 'Attaque' } };
-  }
-
-  if (msg.includes('uses ability')) {
-    const characterInstanceId = d['characterInstanceId'] as string | undefined;
-    const abilityId = d['abilityId'] as string | undefined;
-    const char = findCharacter(state, characterInstanceId);
-    if (!char || !characterInstanceId) return null;
-    const ability = getCharacterCard(char.cardId).abilities.find((a) => a.id === abilityId);
-    return { anchor: 'character', characterInstanceId, badge: { kind: 'ability', label: ability?.name ?? 'Capacité' } };
-  }
-
-  if (msg.includes('plays object')) {
-    const cardId = d['cardId'] as string | undefined;
-    let label = 'Objet';
-    try {
-      if (cardId) label = getObjectCard(cardId).name;
-    } catch {
-      /* unknown card id -- keep fallback label */
+  switch (entryKind(entry)) {
+    case 'attack': {
+      const characterInstanceId = d['characterInstanceId'] as string | undefined;
+      const attackId = d['attackId'] as string | undefined;
+      const char = findCharacter(state, characterInstanceId);
+      if (!char || !characterInstanceId) return null;
+      const attack = getCharacterCard(char.cardId).attacks.find((a) => a.id === attackId);
+      return { anchor: 'character', characterInstanceId, badge: { kind: 'attack', label: attack?.name ?? 'Attaque' } };
     }
-    return { anchor: 'table', event: { kind: 'object', playerName: playerName(state, entryPlayerId(entry)), label } };
-  }
 
-  if (msg.includes('plays terrain')) {
-    const terrainInstanceId = d['terrainInstanceId'] as string | undefined;
-    const terrain = findTerrain(state, terrainInstanceId);
-    let label = 'Terrain';
-    try {
-      if (terrain) label = getTerrainCard(terrain.cardId).name;
-    } catch {
-      /* unknown card id -- keep fallback label */
+    case 'use-ability': {
+      const characterInstanceId = d['characterInstanceId'] as string | undefined;
+      const abilityId = d['abilityId'] as string | undefined;
+      const char = findCharacter(state, characterInstanceId);
+      if (!char || !characterInstanceId) return null;
+      const ability = getCharacterCard(char.cardId).abilities.find((a) => a.id === abilityId);
+      return { anchor: 'character', characterInstanceId, badge: { kind: 'ability', label: ability?.name ?? 'Capacité' } };
     }
-    return { anchor: 'table', event: { kind: 'terrain', playerName: playerName(state, entryPlayerId(entry)), label } };
-  }
 
-  if (msg.startsWith('Coin flip for initiative')) {
-    const startingPlayerId = d['startingPlayerId'] as PlayerId | undefined;
-    return { anchor: 'table', event: { kind: 'coin-flip', label: `${playerName(state, startingPlayerId)} commence` } };
-  }
+    case 'play-object': {
+      const cardId = d['cardId'] as string | undefined;
+      let label = 'Objet';
+      try {
+        if (cardId) label = getObjectCard(cardId).name;
+      } catch {
+        /* unknown card id -- keep fallback label */
+      }
+      return { anchor: 'table', event: { kind: 'object', playerName: playerName(state, entryPlayerId(entry)), label } };
+    }
 
-  if (msg.startsWith('Coin flip:')) {
-    const result = d['result'] as string | undefined;
-    return { anchor: 'table', event: { kind: 'coin-flip', label: result === 'heads' ? 'Pile' : 'Face' } };
-  }
+    case 'play-terrain': {
+      const terrainInstanceId = d['terrainInstanceId'] as string | undefined;
+      const terrain = findTerrain(state, terrainInstanceId);
+      let label = 'Terrain';
+      try {
+        if (terrain) label = getTerrainCard(terrain.cardId).name;
+      } catch {
+        /* unknown card id -- keep fallback label */
+      }
+      return { anchor: 'table', event: { kind: 'terrain', playerName: playerName(state, entryPlayerId(entry)), label } };
+    }
 
-  if (msg.includes('coup critique')) {
-    const sourceInstanceId = d['sourceInstanceId'] as string | undefined;
-    const char = findCharacter(state, sourceInstanceId);
-    if (!sourceInstanceId || !char) return null;
-    // Asks the engine for the real rate (statuses *and* any card modifier in play)
-    // rather than re-deriving it from the 'critical' status alone.
-    return {
-      anchor: 'character',
-      characterInstanceId: sourceInstanceId,
-      badge: { kind: 'critical', percent: Math.round(getCriticalPercent(state, char)) },
-    };
-  }
+    case 'initiative': {
+      const startingPlayerId = d['startingPlayerId'] as PlayerId | undefined;
+      return { anchor: 'table', event: { kind: 'coin-flip', label: `${playerName(state, startingPlayerId)} commence` } };
+    }
 
-  if (msg.includes('esquive')) {
-    const targetInstanceId = d['targetInstanceId'] as string | undefined;
-    const char = findCharacter(state, targetInstanceId);
-    if (!targetInstanceId || !char) return null;
-    return {
-      anchor: 'character',
-      characterInstanceId: targetInstanceId,
-      badge: { kind: 'evasion', percent: Math.round(getEvasionPercent(state, char)) },
-    };
-  }
+    case 'coin-flip': {
+      const result = d['result'] as string | undefined;
+      return { anchor: 'table', event: { kind: 'coin-flip', label: result === 'heads' ? 'Pile' : 'Face' } };
+    }
 
-  return null;
+    case 'critical': {
+      const sourceInstanceId = d['sourceInstanceId'] as string | undefined;
+      const char = findCharacter(state, sourceInstanceId);
+      if (!sourceInstanceId || !char) return null;
+      // Asks the engine for the real rate (statuses *and* any card modifier in play)
+      // rather than re-deriving it from the 'critical' status alone.
+      return {
+        anchor: 'character',
+        characterInstanceId: sourceInstanceId,
+        badge: { kind: 'critical', percent: Math.round(getCriticalPercent(state, char)) },
+      };
+    }
+
+    case 'evasion': {
+      const targetInstanceId = d['targetInstanceId'] as string | undefined;
+      const char = findCharacter(state, targetInstanceId);
+      if (!targetInstanceId || !char) return null;
+      return {
+        anchor: 'character',
+        characterInstanceId: targetInstanceId,
+        badge: { kind: 'evasion', percent: Math.round(getEvasionPercent(state, char)) },
+      };
+    }
+
+    case 'ko': {
+      const characterInstanceId = d['characterInstanceId'] as string | undefined;
+      const char = findCharacter(state, characterInstanceId);
+      if (!characterInstanceId || !char) return null;
+      return { anchor: 'character', characterInstanceId, badge: { kind: 'ko', label: 'KO' } };
+    }
+
+    case 'heal': {
+      const targetInstanceId = d['targetInstanceId'] as string | undefined;
+      const amount = Number(d['amount'] ?? 0);
+      const char = findCharacter(state, targetInstanceId);
+      if (!targetInstanceId || !char || !(amount > 0)) return null;
+      return { anchor: 'character', characterInstanceId: targetInstanceId, badge: { kind: 'heal', amount } };
+    }
+
+    default:
+      return null;
+  }
 }
 
 const CHARACTER_BADGE_DURATION_MS = 1300;

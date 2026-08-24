@@ -1,4 +1,6 @@
 import type { CharacterCardDef } from '../types.js';
+import { BUILTIN_STATUS_IDS } from '../../statuses.js';
+import { cardName } from '../../names.js';
 
 const BASE_HP = 300;
 const HADO_BASE_ATK = 70;
@@ -15,9 +17,8 @@ export const aizen: CharacterCardDef = {
       name: 'Hado #90',
       baseATK: HADO_BASE_ATK,
       description:
-        `Inflige ${HADO_BASE_ATK} dégâts à l'actif adverse. Ignore le shield (natif et tout statut de type ` +
-        "bouclier) ainsi que tout modificateur de réduction de dégâts adverse ; un death ward adverse peut " +
-        'toujours empêcher le KO direct.',
+        `Inflige ${HADO_BASE_ATK} dégâts à l'actif adverse en traversant tous les boucliers et toutes les ` +
+        "réductions de dégâts. Seule une protection contre la mort (Détermination) peut encore empêcher le KO.",
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -45,16 +46,26 @@ export const aizen: CharacterCardDef = {
       name: 'Inversion de la Réalité',
       kind: 'active',
       description:
-        "Échange tous les statuts (buffs/debuffs) d'Aizen avec ceux du personnage actif adverse. Le shield, " +
-        "les HP et l'ATK de base ne sont pas concernés.",
+        "Échange les altérations d'Aizen (buffs comme malus) avec celles du personnage actif adverse. " +
+        "Le bouclier, les HP et l'ATK de base ne bougent pas, et les compteurs internes de chaque carte " +
+        "restent chez leur propriétaire.",
       async execute(ctx) {
         const opponentActive = ctx.getActive(ctx.opponentId);
         if (!opponentActive) return;
         const self = ctx.getCharacter(ctx.sourceInstanceId);
-        const selfStatuses = self.statuses;
-        self.statuses = opponentActive.statuses;
-        opponentActive.statuses = selfStatuses;
-        ctx.log(`${self.cardId} inverse ses statuts avec ${opponentActive.cardId}`, {
+
+        // Seuls les statuts génériques du moteur (buffs/debuffs que n'importe quelle carte
+        // subit de la même façon) changent de camp. Le bookkeeping propre à une carte --
+        // le record de dégâts de Guts, la réserve de Mana Barrier de Blitzcrank, la mémoire
+        // de Kakashi -- reste chez son propriétaire : déplacé sur une carte incapable de le
+        // lire, il était purement et simplement supprimé, annulant en silence plusieurs
+        // tours d'accumulation.
+        const keep = (statuses: typeof self.statuses) => statuses.filter((s) => !BUILTIN_STATUS_IDS.has(s.statusId));
+        const swap = (statuses: typeof self.statuses) => statuses.filter((s) => BUILTIN_STATUS_IDS.has(s.statusId));
+        const selfSwapped = swap(self.statuses);
+        self.statuses = [...keep(self.statuses), ...swap(opponentActive.statuses)];
+        opponentActive.statuses = [...keep(opponentActive.statuses), ...selfSwapped];
+        ctx.log(`${cardName(self.cardId)} inverse ses statuts avec ${cardName(opponentActive.cardId)}`, {
           sourceInstanceId: self.instanceId,
           targetInstanceId: opponentActive.instanceId,
         });

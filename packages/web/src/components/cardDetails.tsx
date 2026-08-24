@@ -17,9 +17,9 @@ export function characterDetailBody(cardId: string, instance?: CharacterInstance
           <>{def.baseMaxHP} HP</>
         )}
       </div>
-      {instance && instance.statuses.length > 0 && (
+      {instance && instance.statuses.some((s) => !s.hidden) && (
         <div className="statuses">
-          {instance.statuses.map((s, i) => (
+          {instance.statuses.filter((s) => !s.hidden).map((s, i) => (
             <span key={i} className="status-badge" title={`${s.label} (${s.statusId})`}>
               {statusBadgeText(s)}
             </span>
@@ -49,7 +49,7 @@ export function characterDetailBody(cardId: string, instance?: CharacterInstance
             <div key={a.id} className="hover-card-entry">
               <div className="hover-card-entry-head">
                 <strong>{a.name}</strong>
-                <span className="hover-card-tag">{a.kind}</span>
+                <span className="hover-card-tag">{a.kind === 'active' ? 'Active' : 'Passive'}</span>
               </div>
               <p>{a.description}</p>
             </div>
