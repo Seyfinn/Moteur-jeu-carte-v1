@@ -27,7 +27,12 @@ function OptionButton({ option }: { option: ActionOption }) {
       className={`cmd-option${blocked ? ' blocked' : ''}`}
       disabled={blocked}
       title={option.disabledReason ?? undefined}
-      onClick={option.run}
+      onClick={() => {
+        // Le bouton disparaît en même temps que la rubrique : sans ça son `onMouseLeave`
+        // ne partirait jamais et l'encart de description resterait figé à l'écran.
+        hover.hide();
+        option.run();
+      }}
       onMouseEnter={(e) => option.hover && hover.show(option.hover, e.currentTarget)}
       onMouseLeave={hover.hide}
     >

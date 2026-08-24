@@ -74,10 +74,16 @@ function ForfeitButton({ onForfeit }: { onForfeit: () => void }) {
 }
 
 function ActionErrorBanner({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  // `onDismiss` est une lambda recréée à chaque rendu du plateau, et le plateau se redessine
+  // à chaque état reçu du serveur : la garder en dépendance relançait le compte à rebours au
+  // lieu de le laisser courir, et la bannière ne partait plus jamais d'elle-même.
+  const dismissRef = useRef(onDismiss);
+  dismissRef.current = onDismiss;
+
   useEffect(() => {
-    const timer = setTimeout(onDismiss, 4000);
+    const timer = setTimeout(() => dismissRef.current(), 4000);
     return () => clearTimeout(timer);
-  }, [message, onDismiss]);
+  }, [message]);
 
   return (
     <p className="error action-error">
@@ -166,7 +172,19 @@ function ActiveSlot({
   }
   return (
     <div className={`active-slot ${side}`}>
-      <CharacterCard char={char} isActive isKOable size="large" orientation="landscape" badges={badges} />
+      {/* La clé est indispensable ici : le slot garde sa place dans l'arbre quand l'actif
+          change, donc sans elle React réutilise le même CharacterCard et son compteur de
+          dégâts compare les PV de deux personnages différents -- le nouvel arrivant
+          récoltait un « -N » et un flash de dégâts qu'il n'a jamais subis. */}
+      <CharacterCard
+        key={char.instanceId}
+        char={char}
+        isActive
+        isKOable
+        size="large"
+        orientation="landscape"
+        badges={badges}
+      />
     </div>
   );
 }
@@ -199,6 +217,9 @@ function BenchMenu({
           disabled={Boolean(option.disabledReason)}
           title={option.disabledReason ?? undefined}
           onClick={() => {
+            // Le mini-menu se referme sur l'action : son `onMouseLeave` ne partira pas, donc
+            // l'encart de description doit être fermé à la main.
+            hover.hide();
             option.run();
             onClose();
           }}
