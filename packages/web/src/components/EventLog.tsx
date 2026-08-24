@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import type { LogEntry, PlayerId } from 'engine';
 
 /** Small icon per engine log `data.kind`, so the journal can be skimmed at a glance. */
@@ -102,9 +110,19 @@ export function EventLog({ log, you }: { log: LogEntry[]; you?: PlayerId }) {
     return () => window.removeEventListener('resize', clampNow);
   }, [clampNow]);
 
+  // Même garde-fou quand c'est la boîte qui change de taille : une pastille de 46px collée
+  // au coin bas-droit redevient une fenêtre de 300px, qui déborderait de l'écran.
+  useLayoutEffect(clampNow, [minimized, clampNow]);
+
   const onPointerDown = (e: ReactPointerEvent<HTMLElement>) => {
     const box = boxRef.current;
     if (!box) return;
+    // Un appui né sur un bouton *contenu* dans la poignée (le « – » qui réduit) ne doit pas
+    // armer le glisser : capturer le pointeur détourne le `pointerup` vers la poignée et le
+    // clic du bouton se perd en route. La pastille réduite, elle, EST le bouton -- elle
+    // reste donc déplaçable.
+    const pressed = (e.target as HTMLElement).closest('button');
+    if (pressed && pressed !== e.currentTarget) return;
     const rect = box.getBoundingClientRect();
     dragRef.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top, startX: e.clientX, startY: e.clientY };
     movedRef.current = false;

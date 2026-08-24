@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DEFAULT_MAX_OBJECTS_PER_TURN,
   DEFAULT_MAX_TERRAINS_PER_TURN,
@@ -17,6 +17,8 @@ import { CommandPanel } from './CommandPanel';
 import { EffectsGlossaryButton } from './EffectsGlossary';
 import { EventLog } from './EventLog';
 import { GraveyardPile } from './GraveyardPile';
+import { InitiativeWheel } from './InitiativeWheel';
+import { ProcWheels } from './ProcWheel';
 import { OpponentHand, PlayerHand } from './HandFan';
 import { useCardInspect, useHoverCard } from './HoverCard';
 import { characterDetailBody, terrainDetailBody } from './cardDetails';
@@ -74,10 +76,16 @@ function ForfeitButton({ onForfeit }: { onForfeit: () => void }) {
 }
 
 function ActionErrorBanner({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  // `onDismiss` est une lambda recréée à chaque rendu du plateau, et le plateau se redessine
+  // à chaque état reçu du serveur : la garder en dépendance relançait le compte à rebours au
+  // lieu de le laisser courir, et la bannière ne partait plus jamais d'elle-même.
+  const dismissRef = useRef(onDismiss);
+  dismissRef.current = onDismiss;
+
   useEffect(() => {
-    const timer = setTimeout(onDismiss, 4000);
+    const timer = setTimeout(() => dismissRef.current(), 4000);
     return () => clearTimeout(timer);
-  }, [message, onDismiss]);
+  }, [message]);
 
   return (
     <p className="error action-error">
@@ -166,7 +174,19 @@ function ActiveSlot({
   }
   return (
     <div className={`active-slot ${side}`}>
-      <CharacterCard char={char} isActive isKOable size="large" orientation="landscape" badges={badges} />
+      {/* La clé est indispensable ici : le slot garde sa place dans l'arbre quand l'actif
+          change, donc sans elle React réutilise le même CharacterCard et son compteur de
+          dégâts compare les PV de deux personnages différents -- le nouvel arrivant
+          récoltait un « -N » et un flash de dégâts qu'il n'a jamais subis. */}
+      <CharacterCard
+        key={char.instanceId}
+        char={char}
+        isActive
+        isKOable
+        size="large"
+        orientation="landscape"
+        badges={badges}
+      />
     </div>
   );
 }
@@ -199,6 +219,9 @@ function BenchMenu({
           disabled={Boolean(option.disabledReason)}
           title={option.disabledReason ?? undefined}
           onClick={() => {
+            // Le mini-menu se referme sur l'action : son `onMouseLeave` ne partira pas, donc
+            // l'encart de description doit être fermé à la main.
+            hover.hide();
             option.run();
             onClose();
           }}
@@ -287,6 +310,7 @@ function SelfBenchCard({
         isActive={false}
         isKOable
         size="small"
+        orientation="landscape"
         badges={badges}
         selected={isOpen}
         onSelect={onToggle}
@@ -325,8 +349,8 @@ function BenchRow({
   }, [openId, player.benchCharacterInstanceIds]);
 
   return (
-    <div className={`bench-row${isSelf ? ' self' : ' opponent'}`}>
-      {bench.length === 0 && <span className="bench-row-empty">Banc vide</span>}
+    <div className={`bench-column${isSelf ? ' self' : ' opponent'}`}>
+      {bench.length === 0 && <span className="bench-column-empty">Banc vide</span>}
       {bench.map((char) =>
         isSelf ? (
           <SelfBenchCard
@@ -348,6 +372,7 @@ function BenchRow({
               isActive={false}
               isKOable
               size="small"
+              orientation="landscape"
               badges={badgesByCharacter.get(char.instanceId)}
             />
           </div>
@@ -361,7 +386,13 @@ export function Board({ conn }: { conn: GameConnection }) {
   const state = conn.state!;
   const you = conn.you!;
   const opponentId = otherPlayer(you);
-  const { badgesByCharacter, tableEvents } = useGameEvents(state);
+  const { badgesByCharacter, tableEvents, procRolls } = useGameEvents(state);
+  // La roue d'initiative ne se joue qu'une fois, à l'ouverture : `phase` quitte 'setup'
+  // dès la mise en place terminée, donc une reconnexion en cours de partie ne la rejoue
+  // pas. `useCallback` parce que le plateau se redessine à chaque état reçu du serveur et
+  // que la roue arme ses minuteurs sur l'identité de ce rappel.
+  const [wheelDone, setWheelDone] = useState(false);
+  const finishWheel = useCallback(() => setWheelDone(true), []);
   // Un refus que le client a vu venir (jouer une carte hors de son tour, deuxième terrain
   // du tour...) : il n'atteint jamais le serveur, donc il n'apparaît pas dans conn.error.
   const [localError, setLocalError] = useState<string | null>(null);
@@ -419,6 +450,7 @@ export function Board({ conn }: { conn: GameConnection }) {
     player.benchCharacterInstanceIds.length + (player.activeCharacterInstanceId ? 1 : 0);
 
   const errorMessage = conn.error ?? localError;
+  const showInitiativeWheel = !wheelDone && state.phase === 'setup';
 
   return (
     <div className="board">
@@ -454,14 +486,26 @@ export function Board({ conn }: { conn: GameConnection }) {
       )}
 
       <TableEventBanners events={tableEvents} />
+      <ProcWheels rolls={procRolls} />
 
       <div className="arena">
         <OpponentHand player={opponent} />
 
         <div className="battlefield">
           <div className="rail rail-self">
-            <GraveyardPile player={me} title="Votre cimetière" />
-            <TerrainSlot player={me} />
+            <GraveyardPile player={me} title="Votre cimetière" orientation="landscape" />
+            <div className="rail-row">
+              <BenchRow
+                player={me}
+                isSelf
+                badgesByCharacter={badgesByCharacter}
+                state={state}
+                you={you}
+                conn={conn}
+                turnGate={turnGate}
+              />
+              <TerrainSlot player={me} />
+            </div>
           </div>
 
           <div className="zone zone-plate-self">
@@ -487,27 +531,6 @@ export function Board({ conn }: { conn: GameConnection }) {
 
           <div className="zone zone-lower-self">
             <CommandPanel state={state} you={you} conn={conn} />
-            <BenchRow
-              player={me}
-              isSelf
-              badgesByCharacter={badgesByCharacter}
-              state={state}
-              you={you}
-              conn={conn}
-              turnGate={turnGate}
-            />
-          </div>
-
-          <div className="zone zone-bench-opp">
-            <BenchRow
-              player={opponent}
-              isSelf={false}
-              badgesByCharacter={badgesByCharacter}
-              state={state}
-              you={you}
-              conn={conn}
-              turnGate={turnGate}
-            />
           </div>
 
           <div className="zone zone-active-opp">
@@ -529,8 +552,19 @@ export function Board({ conn }: { conn: GameConnection }) {
           </div>
 
           <div className="rail rail-opp">
-            <GraveyardPile player={opponent} title="Cimetière adverse" />
-            <TerrainSlot player={opponent} />
+            <GraveyardPile player={opponent} title="Cimetière adverse" orientation="landscape" />
+            <div className="rail-row">
+              <BenchRow
+                player={opponent}
+                isSelf={false}
+                badgesByCharacter={badgesByCharacter}
+                state={state}
+                you={you}
+                conn={conn}
+                turnGate={turnGate}
+              />
+              <TerrainSlot player={opponent} />
+            </div>
           </div>
         </div>
       </div>
@@ -546,7 +580,17 @@ export function Board({ conn }: { conn: GameConnection }) {
 
       <EventLog log={state.log} you={you} />
 
-      {pendingChoice && pendingChoice.playerId === you && (
+      {showInitiativeWheel && (
+        <InitiativeWheel
+          starterId={state.startingPlayerId}
+          names={{ p1: state.players.p1.displayName, p2: state.players.p2.displayName }}
+          onDone={finishWheel}
+        />
+      )}
+
+      {/* Le choix du personnage de départ attend que la roue ait rendu son verdict :
+          les deux modales se superposeraient sinon dès la première seconde. */}
+      {!showInitiativeWheel && pendingChoice && pendingChoice.playerId === you && (
         <ChoiceModal
           state={state}
           choice={pendingChoice}

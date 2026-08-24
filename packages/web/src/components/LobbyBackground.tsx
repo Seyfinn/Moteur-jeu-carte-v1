@@ -1,8 +1,9 @@
-import { useMemo, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { listDeckPool } from 'engine';
 
 /**
- * Décor animé du salon : des cartes du jeu qui flottent lentement dans le vide.
+ * Décor animé du salon : des cartes du jeu, tirées au hasard dans tout le pool, qui
+ * flottent lentement dans le vide.
  *
  * Elles sont posées sur une grille (COLONNES × RANGÉES) avec du bruit, plutôt qu'à des
  * positions purement aléatoires : le hasard pur laisse des trous et des paquets, alors
@@ -16,6 +17,18 @@ import { listDeckPool } from 'engine';
 const COLUMNS = 6;
 const ROWS = 3;
 const DRIFT_VARIANTS = 5;
+
+/** Opacité des cartes selon leur profondeur : assez présentes pour qu'on les reconnaisse,
+    assez discrètes pour ne jamais concurrencer l'interface posée par-dessus. */
+const OPACITY_NEAR = 0.2;
+const OPACITY_FAR = 0.15;
+
+/**
+ * Une graine par *chargement de page*, pas par montage du composant : aller au
+ * gestionnaire de decks et revenir ne redistribue pas le décor sous les yeux du joueur,
+ * alors qu'un rechargement, lui, rebat les cartes.
+ */
+const SESSION_SEED = Math.floor(Math.random() * 0xffffffff) || 1;
 
 interface FloatingCard {
   key: string;
@@ -31,7 +44,7 @@ interface FloatingCard {
   tilt: number;
 }
 
-/** PRNG déterministe (mulberry32) : le décor est identique à chaque montage du salon. */
+/** PRNG déterministe (mulberry32), alimenté par la graine de session. */
 function makeRandom(seed: number): () => number {
   let t = seed;
   return () => {
@@ -42,17 +55,26 @@ function makeRandom(seed: number): () => number {
   };
 }
 
-function buildLayout(cardIds: string[]): FloatingCard[] {
+/** Fisher-Yates : un tirage sans doublon dans la totalité du pool. */
+function shuffle<T>(items: readonly T[], rand: () => number): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j]!, out[i]!];
+  }
+  return out;
+}
+
+function buildLayout(cardIds: string[], rand: () => number): FloatingCard[] {
   if (cardIds.length === 0) return [];
-  const rand = makeRandom(0x5eed1);
   const cards: FloatingCard[] = [];
 
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLUMNS; col++) {
       const index = row * COLUMNS + col;
-      // Pas de doublon visible tant que le pool est plus grand que la grille, et un
-      // décalage par rangée pour ne pas aligner les mêmes cartes en colonnes.
-      const cardId = cardIds[(index * 7 + row * 3) % cardIds.length]!;
+      // Le pool est déjà mélangé : prendre les cartes dans l'ordre suffit, et tant qu'il
+      // est plus grand que la grille aucune carte n'apparaît deux fois.
+      const cardId = cardIds[index % cardIds.length]!;
       // « depth » : 0 = carte proche (grande, nette), 1 = carte lointaine (petite, floue).
       const depth = rand();
       const size = 15 - depth * 6;
@@ -68,7 +90,7 @@ function buildLayout(cardIds: string[]): FloatingCard[] {
         // chargement et respireraient à l'unisson, ce qui se voit immédiatement.
         delay: -rand() * 40,
         blur: 3 + depth * 5,
-        opacity: 0.3 - depth * 0.12,
+        opacity: OPACITY_NEAR - depth * (OPACITY_NEAR - OPACITY_FAR),
         tilt: (rand() - 0.5) * 24,
       });
     }
@@ -76,14 +98,59 @@ function buildLayout(cardIds: string[]): FloatingCard[] {
   return cards;
 }
 
+const EASTER_EGG_TEXT = 'ray le goat';
+/** Le clin d'œil doit rester une trouvaille : jamais dans la première minute, puis une
+    apparition toutes les deux à cinq minutes. */
+const FIRST_APPEARANCE_MS: readonly [number, number] = [60_000, 150_000];
+const NEXT_APPEARANCE_MS: readonly [number, number] = [120_000, 300_000];
+/** Durée de la traversée. À garder alignée sur `lobby-bg-easter-drift` dans styles.css. */
+const TRAVEL_MS = 19_000;
+
+interface EasterEggRun {
+  id: number;
+  /** Hauteur de la traversée, en %, pour ne pas toujours passer au même endroit. */
+  top: number;
+}
+
+/**
+ * Programme les passages du clin d'œil. Il n'est monté que pendant sa traversée : c'est
+ * ce démontage qui garantit que l'animation CSS repart bien du début au passage suivant.
+ */
+function useEasterEgg(): EasterEggRun | null {
+  const [run, setRun] = useState<EasterEggRun | null>(null);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    let seq = 0;
+
+    const schedule = ([min, max]: readonly [number, number]) => {
+      timer = setTimeout(
+        () => {
+          setRun({ id: ++seq, top: 25 + Math.random() * 50 });
+          timer = setTimeout(() => {
+            setRun(null);
+            schedule(NEXT_APPEARANCE_MS);
+          }, TRAVEL_MS);
+        },
+        min + Math.random() * (max - min)
+      );
+    };
+
+    schedule(FIRST_APPEARANCE_MS);
+    // Un seul minuteur est armé à la fois, et `timer` porte toujours le dernier en date.
+    return () => clearTimeout(timer);
+  }, []);
+
+  return run;
+}
+
 export function LobbyBackground() {
   const cards = useMemo(() => {
-    const pool = listDeckPool();
-    // Les personnages ont les illustrations les plus lisibles une fois floutées et
-    // réduites ; les objets/terrains complètent pour varier les silhouettes.
-    const ordered = [...pool.filter((e) => e.type === 'character'), ...pool.filter((e) => e.type !== 'character')];
-    return buildLayout(ordered.map((e) => e.id));
+    const rand = makeRandom(SESSION_SEED);
+    // Tirage dans la totalité du pool -- personnages, objets et terrains confondus.
+    return buildLayout(shuffle(listDeckPool().map((entry) => entry.id), rand), rand);
   }, []);
+  const easterEgg = useEasterEgg();
 
   return (
     <div className="lobby-bg" aria-hidden="true">
@@ -116,6 +183,19 @@ export function LobbyBackground() {
           </div>
         ))}
       </div>
+
+      {/* Posé entre les cartes et les voiles : le texte passe au milieu du champ, et le
+          halo comme le voile de lisibilité continuent de l'estomper. */}
+      {easterEgg && (
+        <div
+          key={easterEgg.id}
+          className="lobby-bg-easter"
+          style={{ top: `${easterEgg.top.toFixed(1)}%`, animationDuration: `${TRAVEL_MS}ms` }}
+        >
+          {EASTER_EGG_TEXT}
+        </div>
+      )}
+
       <div className="lobby-bg-glow" />
       <div className="lobby-bg-veil" />
     </div>

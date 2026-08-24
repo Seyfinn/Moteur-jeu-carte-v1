@@ -1,7 +1,17 @@
 import type { EffectContext } from './cards/types.js';
 import type { EngineApi } from './engine-api.js';
 import { isKO } from './hp.js';
-import { evaluateTransform, findCharacter, getCriticalMultiplier, getEffectiveATK, rollCritical, rollEvasion } from './queries.js';
+import {
+  evaluateTransform,
+  findCharacter,
+  getCriticalMultiplier,
+  getCriticalPercent,
+  getEffectiveATK,
+  getEvasionPercent,
+  rollCritical,
+  rollEvasion,
+} from './queries.js';
+import { BASE_CRITICAL_CHANCE_PERCENT, BASE_EVASION_CHANCE_PERCENT } from './statuses.js';
 import { getStatus } from './statuses.js';
 import { chancePercent } from './rng.js';
 import { findCharacterOwner } from './zones.js';
@@ -20,6 +30,47 @@ export function buildEffectContext(
   const isAttackOrAbility = damageSource !== 'other';
 
   /** "Concentration" ratée : consomme le statut, inflige 0 et empêche d'attaquer au tour suivant. */
+  /**
+   * Un jet à pourcentage n'est « annoncé » que si son taux ne vient pas du personnage
+   * lui-même mais d'une carte : statut `evasive`/`critical`, ou modifier déclaré par une
+   * capacité ou un objet. Au taux de base (5 % d'esquive, 2 % de critique), rien n'est
+   * annoncé -- le client en fait une mini-roue à l'écran, et elle tournerait sinon à
+   * chaque coup de la partie.
+   *
+   * La réussite enrichit l'entrée de journal qui existe déjà ; seul l'échec en ajoute
+   * une, pour que le joueur ne se retrouve pas avec deux lignes pour un seul jet.
+   */
+  function rollEvasionAnnounced(targetInstanceId: string): { evaded: boolean; percent: number; fromCard: boolean } {
+    const target = findCharacter(state, targetInstanceId);
+    const percent = getEvasionPercent(state, target);
+    const fromCard = percent !== BASE_EVASION_CHANCE_PERCENT;
+    const evaded = rollEvasion(state, target);
+    if (!evaded && fromCard) {
+      api.log(`${cardName(target.cardId)} rate son esquive (${Math.round(percent)} %)`, {
+        kind: 'proc-miss',
+        roll: 'evasion',
+        characterInstanceId: targetInstanceId,
+        percent,
+      });
+    }
+    return { evaded, percent, fromCard };
+  }
+
+  function rollCriticalAnnounced(source: ReturnType<typeof findCharacter>): { crit: boolean; percent: number; fromCard: boolean } {
+    const percent = getCriticalPercent(state, source);
+    const fromCard = percent !== BASE_CRITICAL_CHANCE_PERCENT;
+    const crit = rollCritical(state, source);
+    if (!crit && fromCard) {
+      api.log(`${cardName(source.cardId)} rate son critique (${Math.round(percent)} %)`, {
+        kind: 'proc-miss',
+        roll: 'critical',
+        characterInstanceId: source.instanceId,
+        percent,
+      });
+    }
+    return { crit, percent, fromCard };
+  }
+
   function consumeMissedConcentration(char: ReturnType<typeof findCharacter>): void {
     api.removeStatus(char.instanceId, 'concentration');
     api.applyStatus(char.instanceId, { statusId: 'disarmed', label: 'Concentration ratée', remainingTurns: 2 });
@@ -144,8 +195,9 @@ export function buildEffectContext(
       // api.dealDamage directly, bypassing this context entirely).
       if (!options?.skipEvasionRoll && canRollAgainst(targetInstanceId)) {
         const target = findCharacter(state, targetInstanceId);
-        if (rollEvasion(state, target)) {
-          api.log(`${cardName(target.cardId)} esquive l'attaque`, { kind: 'evasion', targetInstanceId, sourceInstanceId });
+        const { evaded, percent, fromCard } = rollEvasionAnnounced(targetInstanceId);
+        if (evaded) {
+          api.log(`${cardName(target.cardId)} esquive l'attaque`, { kind: 'evasion', targetInstanceId, sourceInstanceId, percent, fromCard });
           if (concentration) consumeMissedConcentration(source!);
           return;
         }
@@ -194,15 +246,19 @@ export function buildEffectContext(
           api.removeStatus(source!.instanceId, 'concentration');
           const multiplier = getCriticalMultiplier(state, sourceInstanceId);
           finalAmount = amount * multiplier;
-          api.log(`${cardName(source!.cardId)} se concentre et fait un critique (x${multiplier}) !`, { kind: 'critical', sourceInstanceId, targetInstanceId: resolvedTargetId, baseAmount: amount, amount: finalAmount });
+          // La Concentration est un objet : son taux vient toujours d'une carte.
+          api.log(`${cardName(source!.cardId)} se concentre et fait un critique (x${multiplier}) !`, { kind: 'critical', sourceInstanceId, targetInstanceId: resolvedTargetId, baseAmount: amount, amount: finalAmount, percent, fromCard: true });
         } else {
           consumeMissedConcentration(source!);
           finalAmount = 0;
         }
-      } else if (source && rollCritical(state, source)) {
-        const multiplier = getCriticalMultiplier(state, sourceInstanceId);
-        finalAmount = amount * multiplier;
-        api.log(`${cardName(source.cardId)} inflige un coup critique (x${multiplier}) !`, { kind: 'critical', sourceInstanceId, targetInstanceId: resolvedTargetId, baseAmount: amount, amount: finalAmount });
+      } else if (source) {
+        const { crit, percent, fromCard } = rollCriticalAnnounced(source);
+        if (crit) {
+          const multiplier = getCriticalMultiplier(state, sourceInstanceId);
+          finalAmount = amount * multiplier;
+          api.log(`${cardName(source.cardId)} inflige un coup critique (x${multiplier}) !`, { kind: 'critical', sourceInstanceId, targetInstanceId: resolvedTargetId, baseAmount: amount, amount: finalAmount, percent, fromCard });
+        }
       }
 
       // 'bench-damage-bonus' (e.g. "Couteau dans le dos"): the bearer's damage against
@@ -295,8 +351,9 @@ export function buildEffectContext(
       // Same esquive scoping as dealDamage: hostile attacks/abilities only.
       if (!options?.skipEvasionRoll && canRollAgainst(targetInstanceId)) {
         const target = findCharacter(state, targetInstanceId);
-        if (rollEvasion(state, target)) {
-          api.log(`${cardName(target.cardId)} esquive l'altération « ${status.label || status.statusId} »`, { kind: 'evasion', targetInstanceId, statusId: status.statusId, sourceInstanceId });
+        const { evaded, percent, fromCard } = rollEvasionAnnounced(targetInstanceId);
+        if (evaded) {
+          api.log(`${cardName(target.cardId)} esquive l'altération « ${status.label || status.statusId} »`, { kind: 'evasion', targetInstanceId, statusId: status.statusId, sourceInstanceId, percent, fromCard });
           return;
         }
       }
@@ -305,9 +362,9 @@ export function buildEffectContext(
     rollEvasion(targetInstanceId) {
       if (!canRollAgainst(targetInstanceId)) return false;
       const target = findCharacter(state, targetInstanceId);
-      const evaded = rollEvasion(state, target);
+      const { evaded, percent, fromCard } = rollEvasionAnnounced(targetInstanceId);
       if (evaded) {
-        api.log(`${cardName(target.cardId)} esquive`, { kind: 'evasion', targetInstanceId, sourceInstanceId });
+        api.log(`${cardName(target.cardId)} esquive`, { kind: 'evasion', targetInstanceId, sourceInstanceId, percent, fromCard });
       }
       return evaded;
     },

@@ -18,6 +18,19 @@ export type CharacterBadge =
   | { kind: 'heal'; id: number; amount: number }
   | { kind: 'ko'; id: number; label: string };
 
+/**
+ * Jet à pourcentage porté par une carte (statut `evasive`/`critical`, modifier d'une
+ * capacité ou d'un objet). Le moteur ne les annonce que dans ce cas : le taux de base
+ * d'un personnage (5 % d'esquive, 2 % de critique) ne déclenche jamais de mini-roue.
+ */
+export type ProcRoll = {
+  kind: 'evasion' | 'critical';
+  id: number;
+  hit: boolean;
+  percent: number;
+  characterName: string;
+};
+
 export type TableEvent =
   | { kind: 'turn-transition'; id: number; endingPlayerId: PlayerId; endingName: string; startingPlayerId: PlayerId; startingName: string; turnNumber: number }
   | { kind: 'object'; id: number; playerName: string; label: string }
@@ -33,7 +46,18 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K>
 
 type Classified =
   | { anchor: 'character'; characterInstanceId: string; badge: DistributiveOmit<CharacterBadge, 'id'> }
-  | { anchor: 'table'; event: DistributiveOmit<TableEvent, 'id'> };
+  | { anchor: 'table'; event: DistributiveOmit<TableEvent, 'id'> }
+  | { anchor: 'proc'; proc: DistributiveOmit<ProcRoll, 'id'> };
+
+function characterName(state: GameState, instanceId: string | undefined): string {
+  const char = findCharacter(state, instanceId);
+  if (!char) return '';
+  try {
+    return getCharacterCard(char.cardId).name;
+  } catch {
+    return '';
+  }
+}
 
 function findCharacter(state: GameState, instanceId: string | undefined) {
   if (!instanceId) return undefined;
@@ -109,20 +133,43 @@ function classifyLogEntry(entry: LogEntry, state: GameState): Classified | null 
       return { anchor: 'table', event: { kind: 'terrain', playerName: playerName(state, entryPlayerId(entry)), label } };
     }
 
-    case 'initiative': {
-      const startingPlayerId = d['startingPlayerId'] as PlayerId | undefined;
-      return { anchor: 'table', event: { kind: 'coin-flip', label: `${playerName(state, startingPlayerId)} commence` } };
-    }
-
     case 'coin-flip': {
       const result = d['result'] as string | undefined;
       return { anchor: 'table', event: { kind: 'coin-flip', label: result === 'heads' ? 'Pile' : 'Face' } };
+    }
+
+    // Un jet raté n'a pas d'autre trace que cette entrée : c'est elle qui fait tourner la
+    // mini-roue sur un échec.
+    case 'proc-miss': {
+      const characterInstanceId = d['characterInstanceId'] as string | undefined;
+      const roll = d['roll'] as 'evasion' | 'critical' | undefined;
+      if (!characterInstanceId || !roll) return null;
+      return {
+        anchor: 'proc',
+        proc: { kind: roll, hit: false, percent: Math.round(Number(d['percent'] ?? 0)), characterName: characterName(state, characterInstanceId) },
+      };
+    }
+
+    // La Concentration est un objet : son échec est toujours un jet porté par une carte.
+    case 'concentration-missed': {
+      const characterInstanceId = d['characterInstanceId'] as string | undefined;
+      if (!characterInstanceId) return null;
+      return {
+        anchor: 'proc',
+        proc: { kind: 'critical', hit: false, percent: 0, characterName: characterName(state, characterInstanceId) },
+      };
     }
 
     case 'critical': {
       const sourceInstanceId = d['sourceInstanceId'] as string | undefined;
       const char = findCharacter(state, sourceInstanceId);
       if (!sourceInstanceId || !char) return null;
+      if (d['fromCard'] === true) {
+        return {
+          anchor: 'proc',
+          proc: { kind: 'critical', hit: true, percent: Math.round(Number(d['percent'] ?? 0)), characterName: characterName(state, sourceInstanceId) },
+        };
+      }
       // Asks the engine for the real rate (statuses *and* any card modifier in play)
       // rather than re-deriving it from the 'critical' status alone.
       return {
@@ -136,6 +183,12 @@ function classifyLogEntry(entry: LogEntry, state: GameState): Classified | null 
       const targetInstanceId = d['targetInstanceId'] as string | undefined;
       const char = findCharacter(state, targetInstanceId);
       if (!targetInstanceId || !char) return null;
+      if (d['fromCard'] === true) {
+        return {
+          anchor: 'proc',
+          proc: { kind: 'evasion', hit: true, percent: Math.round(Number(d['percent'] ?? 0)), characterName: characterName(state, targetInstanceId) },
+        };
+      }
       return {
         anchor: 'character',
         characterInstanceId: targetInstanceId,
@@ -165,14 +218,21 @@ function classifyLogEntry(entry: LogEntry, state: GameState): Classified | null 
 
 const CHARACTER_BADGE_DURATION_MS = 1300;
 const TABLE_EVENT_DURATION_MS = 2000;
+/** « Très rapide » : la mini-roue doit trancher avant que le joueur ne lise le journal. */
+const PROC_ROLL_DURATION_MS = 900;
 
 /** Watches state.log growth and turn/active-player changes, turning them into short-lived
  * animated badges. Character-anchored ones (attack/ability/crit/evasion) render on the
  * relevant CharacterCard; table-level ones (turn change, object/terrain played, coin flip)
  * render as a banner stack over the board. */
-export function useGameEvents(state: GameState): { badgesByCharacter: Map<string, CharacterBadge[]>; tableEvents: TableEvent[] } {
+export function useGameEvents(state: GameState): {
+  badgesByCharacter: Map<string, CharacterBadge[]>;
+  tableEvents: TableEvent[];
+  procRolls: ProcRoll[];
+} {
   const [characterBadges, setCharacterBadges] = useState<Array<CharacterBadge & { characterInstanceId: string }>>([]);
   const [tableEvents, setTableEvents] = useState<TableEvent[]>([]);
+  const [procRolls, setProcRolls] = useState<ProcRoll[]>([]);
   const seqRef = useRef(0);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   // Match.create() logs the initiative coin flip before the very first broadcast either player
@@ -185,6 +245,7 @@ export function useGameEvents(state: GameState): { badgesByCharacter: Map<string
   useEffect(() => {
     const newCharacterBadges: Array<CharacterBadge & { characterInstanceId: string }> = [];
     const newTableEvents: TableEvent[] = [];
+    const newProcRolls: ProcRoll[] = [];
 
     if (state.turnNumber !== prevTurnRef.current.turnNumber) {
       const { activePlayerId: endingPlayerId } = prevTurnRef.current;
@@ -206,6 +267,8 @@ export function useGameEvents(state: GameState): { badgesByCharacter: Map<string
         if (!classified) continue;
         if (classified.anchor === 'character') {
           newCharacterBadges.push({ ...classified.badge, id: ++seqRef.current, characterInstanceId: classified.characterInstanceId });
+        } else if (classified.anchor === 'proc') {
+          newProcRolls.push({ ...classified.proc, id: ++seqRef.current });
         } else {
           newTableEvents.push({ ...classified.event, id: ++seqRef.current } as TableEvent);
         }
@@ -229,6 +292,14 @@ export function useGameEvents(state: GameState): { badgesByCharacter: Map<string
         );
       }
     }
+    if (newProcRolls.length > 0) {
+      setProcRolls((list) => [...list, ...newProcRolls]);
+      for (const p of newProcRolls) {
+        timersRef.current.push(
+          setTimeout(() => setProcRolls((list) => list.filter((x) => x.id !== p.id)), PROC_ROLL_DURATION_MS)
+        );
+      }
+    }
   }, [state, state.log.length, state.turnNumber, state.activePlayerId]);
 
   // Every badge schedules its own removal; leaving those timers behind on unmount would
@@ -241,5 +312,5 @@ export function useGameEvents(state: GameState): { badgesByCharacter: Map<string
     list.push(b);
     badgesByCharacter.set(b.characterInstanceId, list);
   }
-  return { badgesByCharacter, tableEvents };
+  return { badgesByCharacter, tableEvents, procRolls };
 }
