@@ -65,6 +65,13 @@ const STATUS_VISUALS: Record<string, StatusVisual> = {
   // même symbole, en or et en mouvement -- le porteur doit voir que la prime est prête.
   'hit-bounty': { className: 'fx-bounty', particles: 'bounty', tone: 'debuff' },
   vulnerable: { className: 'fx-vulnerable', particles: 'target', tone: 'debuff' },
+  // « Jacob et Essau » : deux destins attachés l'un à l'autre. Le visuel de la chaîne
+  // (comme `chained`) est le seul du jeu qui dise « attaché », mais en teinte neutre :
+  // le lien donne autant qu'il coûte, ce n'est ni un bonus ni un malus.
+  linked: { className: 'fx-chained', particles: 'chain', tone: 'neutral' },
+  // « Attaque cloné » : une frappe de plus ce tour-ci. Un bonus offensif, donc le visuel
+  // de l'ATK en hausse -- sa contrepartie (le silence) arrive plus tard, avec son propre badge.
+  'extra-attack': { className: 'fx-atk-boost', particles: 'arrow-up', tone: 'buff' },
   // Card-specific statuses whose semantics (shield / ability lock) match an existing
   // built-in visual closely enough to reuse it, rather than falling back to the generic one.
   'blitzcrank-mana-barrier-shield': { className: 'fx-shield', particles: 'shield', tone: 'buff' },

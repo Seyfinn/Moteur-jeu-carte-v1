@@ -117,6 +117,13 @@ export interface EffectContext {
 
   choose(spec: { kind: 'select-characters'; prompt: string; options: string[]; min: number; max: number }): Promise<string[]>;
   chooseOption(prompt: string, options: ChoiceOption[]): Promise<string>;
+  /**
+   * `chooseOption` addressed to a specific player instead of this effect's owner -- for a
+   * card that makes the OPPONENT decide something ("Offrande du Dieu de la Mort"). Like
+   * every other prompt it must be awaited on its own: the engine allows one open question
+   * at a time, whoever it is addressed to.
+   */
+  chooseOptionFor(playerId: PlayerId, prompt: string, options: ChoiceOption[]): Promise<string>;
   chooseYesNo(prompt: string): Promise<boolean>;
   chooseOrder(prompt: string, items: ChoiceOption[]): Promise<string[]>;
 
@@ -139,6 +146,19 @@ export interface EffectContext {
   koCharacter(characterInstanceId: string): Promise<void>;
   /** Pulls a character back out of its own graveyard at `hp` (clamped to its current ceiling), statuses/shield cleared, placed active or bench. */
   reviveCharacter(characterInstanceId: string, hp: number, placement: 'active' | 'bench'): Promise<void>;
+  /**
+   * Schedules a revive for a character that is ALREADY in the graveyard ("Pheonix"):
+   * after `turns` more turns of its owner, it comes back at the active post (bench if
+   * that slot is taken) at full HP, permanently richer by `bonusMaxHP` max HP and
+   * `bonusATK` ATK. No-op if the character isn't in a graveyard, or already has a revive
+   * pending.
+   *
+   * Held on the owner (`PlayerState.pendingRevives`) rather than as a status on the
+   * character, because nothing ticks in the graveyard -- see PendingRevive in types.ts.
+   * The countdown needs no `+1` correction: it fires exactly when it reaches zero rather
+   * than being filtered out first, unlike a blocking status.
+   */
+  scheduleRevive(characterInstanceId: string, options: { turns: number; bonusMaxHP?: number; bonusATK?: number }): void;
 
   /**
    * Ordinary damage: consumes shield first, then reduces current HP (healable).
@@ -199,8 +219,22 @@ export interface EffectContext {
   /** Creates a fresh character instance copying `sourceInstanceId`'s card at the given HP, placed active or on the bench. Returns the new instance id. */
   cloneCharacter(sourceInstanceId: string, hp: number, placement: 'active' | 'bench'): string;
 
-  /** Creates a brand-new object instance of `cardId` for the effect's own owner, added straight to their unplayed pool. Returns the new instance id. */
-  createObject(cardId: string): string;
+  /** Creates a brand-new object instance of `cardId`, added straight to that player's unplayed pool. `forPlayerId` defaults to the effect's own owner -- pass the opponent for a card that hands THEM something. Returns the new instance id. */
+  createObject(cardId: string, forPlayerId?: PlayerId): string;
+
+  /**
+   * Builds a fresh context sourced from a DIFFERENT character than this effect's own
+   * `sourceInstanceId` -- same owner, but `getEffectiveATK`/crit/esquive and any status
+   * labels the executed effect applies to itself now resolve against `sourceInstanceId`
+   * instead. For an object/terrain effect that makes an ally character genuinely act
+   * (e.g. a benched character making a real attack), NOT for "borrow and relabel as me"
+   * cards (Zoé's Spell Thief, Kakashi's Copie de Technique already just reuse their own
+   * `ctx` for that -- see cards/demo/zoe.ts, kakashi.ts). `damageSource` controls esquive/
+   * critique the same way match.ts's own action handlers do: `'attack'`/`'ability'` roll
+   * them, `'other'` doesn't. Defaults to `'ability'` if omitted -- pass `'attack'`
+   * explicitly for a genuine attack (e.g. one of the character's own `AttackDef`s).
+   */
+  buildEffectContext(sourceInstanceId: string, damageSource?: 'attack' | 'ability' | 'other'): EffectContext;
 }
 
 // ---------------------------------------------------------------------------

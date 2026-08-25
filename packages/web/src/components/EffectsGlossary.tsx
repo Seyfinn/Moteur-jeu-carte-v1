@@ -119,6 +119,24 @@ const ENTRIES: GlossaryEntry[] = [
     tone: 'buff',
     text: `${EVASIVE_STATUS_CHANCE_PERCENT}% de chance d'esquiver.`,
   },
+  {
+    id: 'extra-attack',
+    name: 'Attaque supplémentaire',
+    icon: '⇈',
+    tone: 'buff',
+    text:
+      "Le personnage peut attaquer une fois de plus ce tour au lieu de le terminer. " +
+      'La frappe supplémentaire inflige un pourcentage réduit des dégâts.',
+  },
+  {
+    id: 'linked',
+    name: 'Lié',
+    icon: '⛓',
+    tone: 'neutral',
+    text:
+      "Les deux personnages liés attaquent ensemble, subissent chaque instance de dégâts ensemble, " +
+      'et meurent ensemble. Seul celui des deux qui tient le poste actif peut utiliser ses abilities.',
+  },
 ];
 
 const BASE_RULES = [

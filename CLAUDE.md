@@ -92,6 +92,10 @@ interface ObjectCardDef {
   // l'action avec ce message, la main grise la carte avec la même raison.
   unplayableReason?(state: GameState, ownerId: PlayerId): string | null;
   execute(ctx: EffectContext): Promise<void>; modifiers?: ModifierDef[];
+  // ⚠️ PAS de champ `abilities` : un objet ne peut donc réagir à AUCUN événement (pas de
+  // `trigger`). Un objet qui doit riposter, tuer ou ranimer plus tard passe forcément par
+  // un statut générique que le moteur applique lui-même (cf. `damage-reflect` pour Miroir
+  // de Renvoi, `linked` pour Jacob et Essau) — ou par un nouveau, à ajouter au moteur.
 }
 interface TerrainCardDef {
   type: 'terrain'; id: string; name: string; description: string;
@@ -198,6 +202,11 @@ ctx.extendTerrain(id, turns); ctx.shortenTerrain(id, turns); ctx.destroyTerrain(
 ctx.forceSwitch(playerId, newActiveInstanceId): Promise<void>
 ctx.cloneCharacter(sourceInstanceId, hp, 'active'|'bench'): string // renvoie le nouvel instanceId
 ctx.createObject(cardId): string
+
+ctx.buildEffectContext(sourceInstanceId, 'attack'|'ability'|'other'): EffectContext
+ctx.scheduleRevive(characterInstanceId, {turns, bonusMaxHP?, bonusATK?})
+ctx.chooseOptionFor(playerId, prompt, options)  // poser la question à l'ADVERSAIRE
+ctx.createObject(cardId, forPlayerId?)          // 2e param : donner la carte à l'adversaire
 ```
 
 Garde-fous appliqués automatiquement, inutile de les re-coder par carte :
@@ -329,12 +338,28 @@ Garde-fous appliqués automatiquement, inutile de les re-coder par carte :
   - `chained` : bloque **tout** départ du poste actif — l'action de switch standard comme
     n'importe quel `forceSwitch` de carte (le garde est dans `zones.switchActive`, seul
     point de passage commun). Le remplacement après un KO n'est pas concerné.
+  - `linked` (`data.partnerInstanceId`, à poser sur les **deux**, chacun vers l'autre) :
+    les deux attaquent ensemble, partagent chaque instance de dégâts, meurent ensemble, et
+    seul celui qui tient le poste actif peut utiliser ses abilities (même déclarées
+    `usableFromBench`). Ex : Jacob et Essau. Les quatre règles vivent dans le moteur
+    (`handleAttack`, `dealDamage`, `koCharacter`, `canUseAbility`).
+  - `extra-attack` (`data: { remaining, damagePercent }`) : le porteur peut attaquer
+    `remaining` fois de plus ce tour au lieu de le terminer, la frappe supplémentaire
+    n'infligeant que `damagePercent` % des dégâts. Ex : Attaque cloné. C'est le **seul**
+    moyen de prolonger un tour après une attaque : `doesActionEndTurn` existe dans
+    `QueryName` mais n'est évaluée nulle part, et un modifier — fonction pure — ne pourrait
+    de toute façon pas consommer la charge qu'il lit.
   - `stun` `disarmed` `silence-active` `silence-passive` `silence-ultimate`
     `evasive` `critical` `burn` `poison`.
 
-  Deux champs transverses utilisables sur **n'importe quel** statut :
-  `ticksOnBench: true` (la durée continue de descendre au banc) et `hidden: true`
-  (bookkeeping interne : ni badge sur la carte, ni ligne de journal).
+  Trois champs transverses utilisables sur **n'importe quel** statut :
+  `ticksOnBench: true` (la durée continue de descendre au banc), `hidden: true`
+  (bookkeeping interne : ni badge sur la carte, ni ligne de journal), et
+  `onExpire: {…}` (statut passé au porteur quand celui-ci expire — un effet **différé**).
+  `onExpire` est appliqué après la passe de décompte du tour, donc le statut posé n'est pas
+  décompté à son arrivée : sa durée part du tour SUIVANT et ne demande **aucun `+1`**. C'est
+  ce qui permet à Attaque cloné de ne silencer qu'à partir du tour d'après, en laissant
+  libre le tour où la carte est jouée.
 
   ⚠️ Ajouter un statut à cette liste (nouvelle mécanique générique du moteur) veut dire
   trois choses en plus du code : l'ajouter à `BuiltinStatusId` **et** à

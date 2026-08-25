@@ -1,6 +1,6 @@
 import type { EngineApi } from './engine-api.js';
 import { tickStatusesAtTurnStart } from './statuses.js';
-import { checkWinCondition, tickTerrainAtTurnStart } from './zones.js';
+import { checkWinCondition, tickPendingRevives, tickTerrainAtTurnStart } from './zones.js';
 import { otherPlayer, type GameState, type PlayerId } from './types.js';
 import { cardName } from './names.js';
 
@@ -49,6 +49,9 @@ export async function startTurn(state: GameState, api: EngineApi): Promise<void>
   if (state.result) return;
   await tickStatusesAtTurnStart(state, state.activePlayerId, api);
   await tickTerrainAtTurnStart(state, state.activePlayerId, api);
+  // After the status ticks so a character coming back this turn ("Pheonix") lands before
+  // its owner acts, and isn't immediately hit by the ticks of a body it no longer has.
+  await tickPendingRevives(state, state.activePlayerId, api);
   checkWinCondition(state);
 }
 

@@ -168,6 +168,11 @@ export function buildEffectContext(
       if (answer.kind !== 'select-option') throw new Error('Unexpected choice answer kind');
       return answer.key;
     },
+    async chooseOptionFor(playerId, prompt, options) {
+      const answer = await api.chooseFor(playerId, { kind: 'select-option', prompt, options });
+      if (answer.kind !== 'select-option') throw new Error('Unexpected choice answer kind');
+      return answer.key;
+    },
     async chooseYesNo(prompt) {
       const answer = await api.chooseFor(ownerId, { kind: 'yes-no', prompt });
       if (answer.kind !== 'yes-no') throw new Error('Unexpected choice answer kind');
@@ -215,6 +220,30 @@ export function buildEffectContext(
     },
     async reviveCharacter(characterInstanceId, hp, placement) {
       await api.reviveCharacter(characterInstanceId, hp, placement);
+    },
+
+    scheduleRevive(characterInstanceId, options) {
+      const targetOwnerId = findCharacterOwner(state, characterInstanceId);
+      const targetPlayer = state.players[targetOwnerId];
+      // Only a corpse can have a revive pending, and only one at a time: a second
+      // Pheonix on the same character would otherwise stack two returns for one death.
+      if (!targetPlayer.graveyardCharacterInstanceIds.includes(characterInstanceId)) return;
+      if (targetPlayer.pendingRevives.some((p) => p.characterInstanceId === characterInstanceId)) return;
+
+      const source = state.players[ownerId];
+      const sourceCardId =
+        source.objects[sourceInstanceId]?.cardId ??
+        source.characters[sourceInstanceId]?.cardId ??
+        source.terrains[sourceInstanceId]?.cardId ??
+        '';
+
+      targetPlayer.pendingRevives.push({
+        characterInstanceId,
+        turnsRemaining: Math.max(1, Math.round(options.turns)),
+        bonusMaxHP: Math.max(0, Math.round(options.bonusMaxHP ?? 0)),
+        bonusATK: Math.max(0, Math.round(options.bonusATK ?? 0)),
+        sourceCardId,
+      });
     },
 
     async dealDamage(targetInstanceId, amount, options) {
@@ -447,8 +476,12 @@ export function buildEffectContext(
       const cloneOwner = findCharacter(state, sourceCharInstanceId).ownerId;
       return api.cloneCharacter(cloneOwner, sourceCharInstanceId, hp, placement);
     },
-    createObject(cardId) {
-      return api.createObject(ownerId, cardId);
+    createObject(cardId, forPlayerId) {
+      return api.createObject(forPlayerId ?? ownerId, cardId);
+    },
+
+    buildEffectContext(newSourceInstanceId, damageSource) {
+      return buildEffectContext(state, newSourceInstanceId, ownerId, api, undefined, damageSource);
     },
   };
 }

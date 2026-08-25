@@ -9,6 +9,7 @@ import {
   getAtkBoostTotal,
   getAtkMultiplierTotal,
   getAtkReductionTotal,
+  getExtraAttackDamageMultiplier,
   hasStatus,
   isDisarmed,
   isEvasive,
@@ -212,6 +213,10 @@ export function canUseAbility(state: GameState, characterInstanceId: string, abi
 
   const isActiveChar = player.activeCharacterInstanceId === characterInstanceId;
   if (!isActiveChar && !ability.usableFromBench) extra.push({ allow: false, source: 'default:active-only' });
+  // 'linked' (Jacob et Essau): "seul le personnage du poste actif peut utiliser son
+  // actif/passif". Stronger than the default rule above -- it denies even an ability
+  // that declares usableFromBench, which is the whole point of the clause.
+  if (!isActiveChar && hasStatus(char, 'linked')) extra.push({ allow: false, source: 'status:linked' });
 
   const perTurnLimit = getAbilityUsesPerTurn(state, characterInstanceId, ability.id, ability.usesPerTurn ?? 1);
   const usedThisTurn = char.abilityUsesThisTurn[ability.id] ?? 0;
@@ -300,7 +305,9 @@ export function getEffectiveATK(state: GameState, characterInstanceId: string, b
   const char = findCharacter(state, characterInstanceId);
   const transformed = evaluateTransform(state, 'getEffectiveATK', { characterInstanceId }, baseATK);
   const withBoosts = Math.max(0, transformed + getAtkBoostTotal(char) - getAtkReductionTotal(char));
-  return Math.round(withBoosts * getAtkMultiplierTotal(char));
+  // getExtraAttackDamageMultiplier is the "Attaque cloné" discount on the granted
+  // follow-up swing; it is 1 for everyone else, and 1 for the first attack too.
+  return Math.round(withBoosts * getAtkMultiplierTotal(char) * getExtraAttackDamageMultiplier(char));
 }
 
 /** Damage multiplier of a critical hit, before any card transforms it (Point Faible's x3). */

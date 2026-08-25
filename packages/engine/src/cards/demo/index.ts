@@ -52,6 +52,16 @@ import { kirigiri } from './kirigiri.js';
 import { sukuna } from './sukuna.js';
 import { bakugo } from './bakugo.js';
 import { roiDesEsprits } from './roi-des-esprits.js';
+import { locke } from './locke.js';
+import { coupDeMain } from './coup-de-main.js';
+import { chainsawMan } from './chainsaw-man.js';
+import { pocheDeSang } from './poche-de-sang.js';
+import { jacobEtEssau } from './jacob-et-essau.js';
+import { pheonix } from './pheonix.js';
+import { izukuDeLAcademie } from './izuku-de-l-academie.js';
+import { blackPanther } from './black-panther.js';
+import { attaqueClone } from './attaque-clone.js';
+import { offrandeDuDieuDeLaMort } from './offrande-du-dieu-de-la-mort.js';
 
 export {
   aizen,
@@ -106,6 +116,16 @@ export {
   sukuna,
   bakugo,
   roiDesEsprits,
+  locke,
+  coupDeMain,
+  chainsawMan,
+  pocheDeSang,
+  jacobEtEssau,
+  pheonix,
+  izukuDeLAcademie,
+  blackPanther,
+  attaqueClone,
+  offrandeDuDieuDeLaMort,
 };
 
 let registered = false;
@@ -166,6 +186,16 @@ export function registerDemoCards(): void {
   registerCard(sukuna);
   registerCard(bakugo);
   registerCard(roiDesEsprits);
+  registerCard(locke);
+  registerCard(coupDeMain);
+  registerCard(chainsawMan);
+  registerCard(pocheDeSang);
+  registerCard(jacobEtEssau);
+  registerCard(pheonix);
+  registerCard(izukuDeLAcademie);
+  registerCard(blackPanther);
+  registerCard(attaqueClone);
+  registerCard(offrandeDuDieuDeLaMort);
 }
 
 /**
@@ -224,6 +254,10 @@ export const DEMO_ROSTER: RosterConfig = {
     sukuna.id,
     bakugo.id,
     roiDesEsprits.id,
+    locke.id,
+    chainsawMan.id,
+    izukuDeLAcademie.id,
+    blackPanther.id,
   ],
   objectCardIds: [
     potionForce.id,
@@ -243,6 +277,12 @@ export const DEMO_ROSTER: RosterConfig = {
     cameleon.id,
     miroirDeRenvoi.id,
     adrenalineUltime.id,
+    coupDeMain.id,
+    pocheDeSang.id,
+    jacobEtEssau.id,
+    pheonix.id,
+    attaqueClone.id,
+    offrandeDuDieuDeLaMort.id,
   ],
   terrainCardIds: [
     hopital.id,

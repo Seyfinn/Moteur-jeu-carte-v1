@@ -117,6 +117,7 @@ function createPlayerState(id: PlayerId, displayName: string, roster: RosterConf
     objectsPlayedThisTurn: 0,
     terrainsPlayedThisTurn: 0,
     hasHadFirstTurn: false,
+    pendingRevives: [],
     revealsOpponentUnplayedCards: false,
   };
 }
@@ -494,6 +495,7 @@ export class Match {
         break;
       case 'attack':
         endsTurn = await this.handleAttack(playerId, action.characterInstanceId, action.attackId);
+        endsTurn = this.consumeExtraAttack(playerId, action.characterInstanceId, endsTurn);
         break;
       case 'switch':
         await zones.switchActive(state, playerId, action.newActiveInstanceId, this.api);
@@ -573,6 +575,40 @@ export class Match {
     await this.api.emitEvent({ name: 'onAbilityUsed', playerId, data: { characterInstanceId, abilityId } });
   }
 
+  /**
+   * 'extra-attack' ("Attaque cloné"): the attacker was granted extra swings this turn, so
+   * an attack that would normally close the turn instead spends one of them and arms the
+   * discount that makes the follow-up land softer (see getExtraAttackDamageMultiplier).
+   *
+   * The only place a card can currently keep a turn alive past an attack: `doesActionEndTurn`
+   * exists in QueryName but is inert, and a modifier is a pure function anyway -- it could
+   * never spend the grant it is reading.
+   */
+  private consumeExtraAttack(playerId: PlayerId, attackerInstanceId: string, endsTurn: boolean): boolean {
+    const attacker = this.state.players[playerId].characters[attackerInstanceId];
+    if (!attacker) return endsTurn;
+    const grant = statusesMod.getStatus(attacker, 'extra-attack');
+    if (!grant) return endsTurn;
+
+    const remaining = Number(grant.data?.['remaining'] ?? 0);
+    if (remaining > 0) {
+      grant.data = { ...grant.data, remaining: remaining - 1, armed: true };
+      const percent = Number(grant.data['damagePercent'] ?? 100);
+      this.api.log(
+        `${cardName(attacker.cardId)} enchaîne une attaque supplémentaire (${percent} % des dégâts)`,
+        { kind: 'info', characterInstanceId: attackerInstanceId },
+        playerId
+      );
+      return false;
+    }
+
+    // That was the discounted follow-up: the grant is spent. Removed here rather than left
+    // to expire so a later attack this turn (another card granting yet another swing)
+    // can't inherit the discount.
+    statusesMod.removeStatus(attacker, 'extra-attack');
+    return endsTurn;
+  }
+
   private async handleAttack(playerId: PlayerId, characterInstanceId: string, attackId: string): Promise<boolean> {
     const state = this.state;
     const char = state.players[playerId].characters[characterInstanceId]!;
@@ -587,8 +623,64 @@ export class Match {
     await attack.execute(ctx);
 
     if (state.result) return true;
+    await this.resolveLinkedPartnerAttack(playerId, characterInstanceId);
+    if (state.result) return true;
+
+    // The turn-ending decision stays the attacker's own: the partner's extra swing is a
+    // rider on this attack, not a second action, so it never gets a say here.
     if (typeof attack.endsTurn === 'function') return attack.endsTurn(ctx);
     return attack.endsTurn ?? true;
+  }
+
+  /**
+   * 'linked' (Jacob et Essau): "ces deux personnages attaquent désormais ensemble,
+   * appliquant leurs deux attaques". Right after the attacker resolves, its partner adds
+   * one of its own attacks, chosen by the player each time.
+   *
+   * Runs the partner's `AttackDef` against a context sourced on the PARTNER, so its own
+   * ATK, crit and esquive apply rather than the attacker's. No recursion risk: the
+   * partner's attack is executed directly here, never back through handleAttack.
+   */
+  private async resolveLinkedPartnerAttack(playerId: PlayerId, attackerInstanceId: string): Promise<void> {
+    const state = this.state;
+    const attacker = state.players[playerId].characters[attackerInstanceId];
+    if (!attacker) return;
+    const partnerInstanceId = statusesMod.getLinkedPartnerId(attacker);
+    if (!partnerInstanceId || !this.api.isOnBoard(partnerInstanceId)) return;
+
+    const partner = findCharacter(state, partnerInstanceId);
+    // Same gate a normal attack goes through: a stunned or disarmed partner swings at
+    // nothing. canAttack also lets any card veto via its own modifier.
+    if (!canAttack(state, partnerInstanceId).allow) return;
+
+    const partnerAttacks = getCharacterCard(partner.cardId).attacks;
+    const ctx = this.api.buildEffectContext(partnerInstanceId, playerId, undefined, 'attack');
+    const available = partnerAttacks.filter((a) => !a.condition || a.condition(ctx));
+    if (available.length === 0) return;
+
+    let chosen = available[0]!;
+    if (available.length > 1) {
+      const answer = await this.api.chooseFor(playerId, {
+        kind: 'select-option',
+        prompt: `${cardName(partner.cardId)} attaque avec ${cardName(attacker.cardId)} : choisissez son attaque`,
+        options: available.map((a) => ({ key: a.id, label: `${a.name} (${a.baseATK} ATK)` })),
+      });
+      const key = answer.kind === 'select-option' ? answer.key : undefined;
+      chosen = available.find((a) => a.id === key) ?? chosen;
+    }
+
+    this.api.log(`${cardName(partner.cardId)} attaque avec ${chosen.name} (lié à ${cardName(attacker.cardId)})`, {
+      kind: 'attack',
+      characterInstanceId: partnerInstanceId,
+      attackId: chosen.id,
+    }, playerId);
+    await this.api.emitEvent({
+      name: 'onAttackDeclared',
+      playerId,
+      data: { characterInstanceId: partnerInstanceId, attackId: chosen.id },
+    });
+    if (state.result) return;
+    await chosen.execute(ctx);
   }
 
   private buildApi(): EngineApi {
@@ -656,6 +748,26 @@ export class Match {
           data: { targetInstanceId, amount: finalAmount, shieldAbsorbed, ...attribution },
         });
         if (hp.isKO(target)) await api.koCharacter(targetInstanceId, options?.attackerInstanceId);
+
+        // 'linked' (Jacob et Essau): the pair shares every damage instance, whatever its
+        // source -- attack, ability, status tick, or a cost the owner pays itself. The
+        // mirrored copy carries the original's options (so an ignoreShield hit stays an
+        // ignoreShield hit, and the same attacker keeps the kill credit) plus
+        // skipLinkMirror, without which the two would bounce the hit back and forth.
+        // Deliberately after the KO check above: if this hit killed the target, its
+        // koCharacter has already taken the partner down with it, and isOnBoard then
+        // makes this a no-op instead of hitting a corpse.
+        if (!options?.skipLinkMirror && finalAmount > 0) {
+          const partnerInstanceId = statusesMod.getLinkedPartnerId(target);
+          if (partnerInstanceId && api.isOnBoard(partnerInstanceId)) {
+            api.log(`${cardName(target.cardId)} est lié : ${cardName(findCharacter(state, partnerInstanceId).cardId)} subit les mêmes dégâts`, {
+              kind: 'info',
+              targetInstanceId: partnerInstanceId,
+              amount: finalAmount,
+            });
+            await api.dealDamage(partnerInstanceId, finalAmount, { ...options, skipLinkMirror: true });
+          }
+        }
       },
 
       async applyValeurLock(targetInstanceId, amount, options) {

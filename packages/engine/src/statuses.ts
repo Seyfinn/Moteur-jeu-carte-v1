@@ -40,6 +40,8 @@ export const BUILTIN_STATUS_IDS: ReadonlySet<string> = new Set<BuiltinStatusId>(
   'bench-damage-bonus',
   'hit-bounty',
   'vulnerable',
+  'linked',
+  'extra-attack',
 ]);
 
 /** Human labels for the three damage-over-time statuses, used in the event log. */
@@ -106,6 +108,30 @@ export function getVulnerableDamageMultiplier(char: CharacterInstance): number {
  */
 export function hasDeathWard(char: CharacterInstance): boolean {
   return hasStatus(char, 'death-ward');
+}
+
+/**
+ * "Attaque cloné": while the granted follow-up attack is armed, that attack lands at
+ * `data.damagePercent`% of its normal number. Returns 1 (no-op) the rest of the time --
+ * including while the grant is merely pending, so the FIRST attack is at full strength.
+ * A dedicated field rather than an 'atk-multiplier' status, which would collide with the
+ * x2 of Adrénaline Ultime (removing one would remove both).
+ */
+export function getExtraAttackDamageMultiplier(char: CharacterInstance): number {
+  const grant = getStatus(char, 'extra-attack');
+  if (!grant || grant.data?.['armed'] !== true) return 1;
+  return Math.max(0, Number(grant.data?.['damagePercent'] ?? 100)) / 100;
+}
+
+/**
+ * "Jacob et Essau": the other half of a linked pair, or undefined when the bearer isn't
+ * linked. The pairing is symmetric -- both characters carry the status pointing at the
+ * other -- so this is the single lookup every one of the bond's four rules goes through
+ * (joint attack, mirrored damage, shared death, abilities reserved to the active one).
+ */
+export function getLinkedPartnerId(char: CharacterInstance): string | undefined {
+  const partnerId = getStatus(char, 'linked')?.data?.['partnerInstanceId'];
+  return typeof partnerId === 'string' ? partnerId : undefined;
 }
 
 export function isSilencedActive(char: CharacterInstance): boolean {
@@ -272,6 +298,13 @@ export async function tickStatusesAtTurnStart(state: GameState, playerId: Player
     if (bledThisTurn) removeStatus(char, 'bleed');
 
     for (const status of expired) {
+      // Hand-off: a status can arm another one on its way out ("Attaque cloné" silences its
+      // user only once the extra-attack window has closed). Applied here, after the
+      // decrement pass above, so the newcomer isn't ticked on arrival -- its duration
+      // starts at the bearer's next turn, which is why it needs no `+1`.
+      if (status.onExpire && api.isOnBoard(instanceId)) {
+        applyStatus(char, { ...status.onExpire });
+      }
       await api.emitEvent({
         name: 'onStatusExpired',
         playerId,

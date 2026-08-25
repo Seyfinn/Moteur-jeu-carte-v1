@@ -79,6 +79,35 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   - Moteur : modifier `getEffectiveATK`, réévalué à chaque coup. Le bonus tombe dès que la
     brûlure expire.
 
+### Black Panther — 340 HP
+
+- **Griffes** (40 ATK) — *« 33% de chance d'infliger vulnérable pendant 1 tour. »*
+  - Moteur : première carte du pool à poser `vulnerable`. `remainingTurns = 1 + 1` : posé sur
+    l'ennemi pendant le tour de Black Panther, il serait sinon retiré au tout début du tour
+    adverse, donc avant que Black Panther ait pu frapper une cible réellement vulnérable
+    (même `+1` que le Silence de Zoé ou le Désarmement de Sion).
+  - Moteur : le jet de 33 % n'a lieu que si le coup a réellement entamé la cible (même
+    convention que Sion/Killua/Chopper) — une esquive annule donc aussi le vulnérable.
+- **Energie Cinétique** (active, 1×/partie) — *« Black Panther stock 50% des dégâts qu'il
+  reçoit. Peut relacher cette énergie stocké à l'ennemi actif. Utilisable une fois. »*
+  - Moteur : « Utilisable une fois » porte sur la **libération seule** (`usesPerGame: 1`).
+    Le stockage, lui, tourne en permanence dès le début de partie et ne s'arrête jamais.
+  - Moteur : découpé en **deux** `AbilityDef`. « Energie Cinétique » doit rester activable
+    manuellement (`kind: 'active'` sans `trigger`), alors que l'accumulation réagit à
+    `afterDamage` — les deux ne peuvent pas cohabiter dans la même ability. Le second bloc
+    (« Energie Cinétique (réserve) ») apparaît donc dans le détail de carte, comme les
+    « mémoires » de Zoé et Kakashi ou le « Dévoreur » de Chainsaw Man.
+  - Moteur : la réserve est stockée dans `data.stored` d'un statut **visible** (le montant
+    est écrit dans le label) — le joueur doit voir ce qu'il a en banque. Pas de
+    `remainingTurns` : elle n'expire pas, elle attend sa libération.
+  - Moteur : ce qui est capitalisé est le **brut du coup tel qu'il l'a atteint**, soit
+    `amount + shieldAbsorbed` — la réserve monte donc même quand un bouclier absorbe tout.
+    Une réduction de dégâts en amont (Bouclier Ultime), elle, diminue bien ce brut : ce
+    coup-là ne l'a jamais atteint. Compte aussi les tics de poison/brûlure/saignement et les
+    coups encaissés au banc (`usableFromBench: true`).
+  - Moteur : la `condition()` interdit de lancer la libération avec une réserve vide, pour
+    ne pas gâcher l'unique utilisation de la partie.
+
 ### Blitzcrank — 250 HP
 
 - **Poing d'acier** (50 ATK) — *« Inflige 50 dégâts à l'actif adverse. »*
@@ -106,6 +135,29 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   - Moteur : les 33 % de base viennent d'un modifier `getCriticalPercent` (permanent, survit
     à une résurrection) ; le passage à 50 % est mémorisé par un statut caché posé sur
     `onCharacterKO` quand `killerInstanceId` est Caitlyn.
+
+### Chainsaw Man — 280 HP
+
+- **Chainsaw** (50 ATK) — *« Applique 2 bleed. »*
+  - Moteur : pas de "%" sur la carte, donc pas de chance séparée -- un seul jet
+    d'esquive partagé pour les dégâts et le bleed (`ctx.rollEvasion` puis
+    `skipEvasionRoll` sur les deux, même pattern que Lacération de Sukuna).
+- **Mangeur de démons** (active) — *« Supprime une carte objet aléatoire de l'ennemi.
+  Utilisable 1 fois et 1 fois de plus par personnage tué par Chainsaw Man. »*
+  - Moteur : cible la **réserve non jouée** de l'adversaire (pas les objets équipés en
+    jeu), un exemplaire au hasard (`randomInt(ctx.state.rng, ...)`, jamais `Math.random`)
+    envoyé directement à son cimetière -- récupérable plus tard par un effet comme
+    Déchetterie.
+  - Moteur : `usesPerGame` déclaré à 1, augmenté en permanence de +1 par kill attribué à
+    Chainsaw Man via un modifier `getAbilityUsesPerGame`, alimenté par un compteur caché
+    (`Dévoreur (compteur)`, second passive sur `onCharacterKO`) -- même schéma que Berserk
+    de Guts / Execution de Caitlyn, mais séparé en deux `AbilityDef` puisque Mangeur de
+    démons doit rester activable manuellement (`kind: 'active'` sans `trigger`) alors que
+    le comptage réagit à un event.
+  - ⚠️ Angle mort assumé : seuls les kills où Chainsaw Man est le tueur **direct**
+    comptent (attribution portée par `ctx.dealDamage`). Un ennemi achevé par le tic du
+    bleed posé par Chainsaw ne compte pas : les tics de statuts (poison/burn/bleed)
+    n'attribuent pas de tueur (voir `tickStatusesAtTurnStart`, `statuses.ts`).
 
 ### Chopper — 250 HP — incompatible avec Soraka
 
@@ -155,6 +207,24 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     *instances* de dégâts, pas les points : un tic de brûlure vaut autant qu'une grosse
     attaque.
 
+### Izuku de l'Académie — 280 HP
+
+- **Texas Smash** (60 ATK) — *« Inflige 60 dégâts à l'actif adverse. »*
+  - La carte d'origine n'imprime aucun texte sous cette attaque : c'est la phrase standard
+    des attaques simples du pool (Kirigiri, Guts, Mundo, Kakashi…), pas un ajout d'effet.
+- **Nouvel Alter** (active) — *« Izuku utilise son alter pour infliger 60 dégâts en plus ce
+  round, mais il se blesse aussi de 80hp. »*
+  - Moteur : `atk-boost` de +60 avec `remainingTurns: 1` et `ticksOnBench: true`. Posé sur
+    soi pendant son propre tour, le premier tick n'a lieu qu'au tour suivant d'Izuku — la
+    valeur `1` couvre donc exactement « ce round », comme Potion force. `ticksOnBench` évite
+    qu'un passage au banc juste après ne gèle le buff et le ramène intact bien plus tard.
+  - Moteur : les 80 HP passent par `dealDamage` avec `ignoreShield` + `ignoreDamageReduction`
+    — sinon un bouclier sur Izuku absorberait la blessure et l'alter deviendrait gratuit.
+  - Moteur : **aucune limite de partie** (la carte n'en écrit pas) : le défaut du moteur
+    d'une utilisation par tour s'applique, et le vrai frein reste le coût en HP.
+  - Moteur : **pas** de garde-fou anti-suicide, contrairement au Soin Sacrificiel de Soraka :
+    Izuku a le droit de se tuer avec son propre alter (choix assumé).
+
 ### Kakashi — 250 HP
 
 - **Raikiri** (60 ATK) — *« Inflige 60 dégâts à l'actif adverse. »*
@@ -194,6 +264,37 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   unique. »*
   - Moteur : bascule un drapeau de révélation lu par `view.ts` ; la révélation vaut aussi
     pour les cartes que l'adversaire piochera ensuite.
+
+### Locke — 250 HP
+
+- **Purgatoire** (passive, `afterDamage`) — *« Si l'ennemi au poste actif est à 10% de ses
+  hp max ou moins, l'execute immédiatement. »*
+  - Moteur : aura active uniquement quand **Locke est lui-même l'actif**
+    (`usableFromBench` non déclaré, donc `canUseAbility` l'exige). Se déclenche après
+    n'importe quelle instance de dégâts touchant l'actif adverse (attaque, ability, tic de
+    poison/brûlure/saignement), pas seulement les coups de Locke. Respecte `death-ward`
+    (Détermination). Un seul trigger (`afterDamage`) : un second trigger `onBecomeActive`
+    aurait dû être une deuxième `AbilityDef`, ce qui aurait affiché "Purgatoire" en double
+    dans le détail de carte -- angle mort assumé, voir le commentaire dans `locke.ts`.
+- **Cloué** (passive, descriptive) — *« Lorsqu'un ennemi a 3 clous sur lui, Locke fait
+  exploser les clous infligeant 100 dégâts + 50% hp max. »*
+  - Moteur : logique réellement codée dans Marteau ci-dessous (c'est la pose du 3e clou
+    qui décide de l'explosion). "50% hp max" = 50% des HP max **de la cible**, pas de
+    Locke. Les clous sont consommés par l'explosion (compteur remis à 0, pas de statut à
+    réappliquer) ; il faut donc replanter 3 clous pour refaire exploser la même cible.
+- **Marteau** (0 ATK) — *« Locke enfonce un clou sur n'importe quel ennemi, même sur le
+  banc. Cette attaque inflige a 65% de chance d'infliger silence ultime si Locke attaque
+  l'ennemi actif. »*
+  - Moteur : cible n'importe quel personnage adverse (actif ou banc) via un ciblage sur le
+    plateau. Compteur de clous par cible dans un statut custom (`data.count`, affiché en
+    label `Clou (n/3)`). Un seul jet d'esquive pour toute la résolution (clou + éventuel
+    Silence Ultime), via `ctx.rollEvasion` avant de toucher au compteur -- contrairement à
+    Zoé/Chopper/Sion qui roulent séparément dégâts puis effet sur coup, Marteau ne fait
+    aucun dégât et n'a donc qu'un seul "coup" à esquiver. Le Silence Ultime (1 tour,
+    `remainingTurns: 2`) ne peut se déclencher que si la cible est l'actif adverse au
+    moment du clou, et se roule même sur le tour où la cible explose (les deux effets ne
+    s'excluent pas). L'explosion, elle, passe par `dealDamage` et roule sa propre esquive/
+    critique indépendamment (c'est une vraie deuxième instance de dégâts).
 
 ### Mahito — 270 HP
 
@@ -361,6 +462,35 @@ actuels à 10 HP et multiplie par 2 les dégâts de toutes ses attaques pendant 
   adverse à annuler ». Le serveur rejette l'action avec cette phrase et la main grise la
   carte avec la même.
 
+### Attaque cloné
+
+*« Permet d'attaquer deux fois pendant ce tour, la deuxième attaque inflige 50% des dégâts.
+Incapable d'utiliser son actif aux 2 prochains tours. »*
+
+- Moteur : **pas** d'`equipment: true` malgré le « à lier » de la maquette — tout l'effet est
+  porté par des statuts temporaires, plus rien n'a besoin de rester en jeu, et l'objet
+  occuperait sinon un des 2 emplacements du personnage pour rien.
+- Moteur : statut générique `extra-attack` (`data: { remaining, damagePercent, armed }`) posé
+  sur l'actif. La carte ne fait que le poser ; le moteur s'occupe du reste :
+  - `match.ts::applyAction` : après une attaque, si une charge reste, il la dépense et
+    **ne termine pas le tour** au lieu de le clore, puis arme la décote. C'est aujourd'hui le
+    seul moyen de prolonger un tour après une attaque : `doesActionEndTurn` existe dans
+    `QueryName` mais n'est évaluée nulle part, et un modifier étant une fonction pure, il ne
+    pourrait de toute façon pas dépenser la charge qu'il lit.
+  - `queries.ts::getEffectiveATK` : applique `damagePercent` **uniquement** quand `armed` est
+    vrai, donc la première attaque reste à pleine puissance. Champ dédié plutôt qu'un statut
+    `atk-multiplier`, qui entrerait en collision avec le x2 d'Adrénaline Ultime (retirer l'un
+    retirerait l'autre).
+  - La charge est retirée dès que l'attaque décotée est résolue, pour qu'une attaque
+    ultérieure du même tour n'hérite pas de la décote.
+- Moteur : le silence n'est **pas** posé à la lecture de la carte mais à l'expiration de
+  `extra-attack`, via le champ transverse `onExpire` (nouveau, voir `StatusInstance`). Il
+  arrive donc au début du tour suivant, **après** la passe de décompte de ce tour-là : il
+  n'est jamais décompté à vide, ne demande **aucun `+1`**, et le tour où la carte est jouée
+  reste libre — ce que dit « aux 2 prochains tours ».
+- Moteur : la contrepartie est due même si le joueur n'attaque pas deux fois (ou pas du tout)
+  — `extra-attack` expire de toute façon au tour suivant et arme son silence.
+
 ### Caméléon
 
 *« Défaussez une carte objet de votre réserve et remplacez-la par une autre carte objet de
@@ -390,6 +520,27 @@ suivant. »*
 
 - Moteur : statut générique `concentration` (`data.percent`). Une esquive adverse compte
   comme un échec : le malus s'applique quand même.
+
+### Coup de main
+
+*« Permet à une carte sur le banc d'attaquer sans mettre fin au tour. Néanmoins cette
+attaque inflige maximum 5 de dégâts. »*
+
+- Moteur : le personnage du banc choisi utilise une de ses **vraies** attaques (le joueur
+  choisit laquelle), avec tous ses effets secondaires (poison, désarmement, statuts...) --
+  seuls les dégâts bruts de cette résolution sont plafonnés à 5 **au total** (pas par
+  instance de dégâts, si l'attaque en inflige plusieurs). Un contexte d'effet est
+  reconstruit pour ce personnage (`EffectContext.buildEffectContext`, nouveau sur
+  l'`EffectContext` -- voir `cards/types.ts`) pour que l'ATK, l'esquive et le critique se
+  calculent avec SES stats à lui, pas celles de Coup de main. Un personnage étourdi ou
+  désarmé n'est pas proposé (`unplayableReason` grise la carte si tout le banc est dans ce
+  cas). N'émet pas `onAttackDeclared` : les rares passifs qui y réagissent (la mémoire de
+  Copie de Technique de Kakashi) ne voient pas cette attaque.
+- « Sans mettre fin au tour » : l'attaque est jouée en appelant directement
+  `attack.execute()`, sans passer par le gestionnaire d'action `attack` normal (qui est le
+  seul endroit qui déciderait de terminer le tour) -- le joueur peut donc encore attaquer
+  normalement avec son actif ensuite. Coup de main reste soumis à la règle standard des 2
+  objets par tour (le 2e objet du tour reste une action finale, comme d'habitude).
 
 ### Couteau dans le dos — exemplaire unique
 
@@ -441,6 +592,42 @@ récupérez une carte objet ou terrain au choix dans votre cimetière. »*
 
 - Moteur : no-op si le terrain est de durée indéfinie ou s'il n'y a pas de terrain en jeu.
 
+### Jacob et Essau
+
+*« Lie 2 personnages. Ces deux personnages attaquent désormais ensemble, appliquant leurs
+deux attaques. Seul le personnage du poste actif peut utiliser son actif/passif. Ces deux
+personnages subissent aussi des dégâts ensemble, si un des deux meurt, les deux meurent. »*
+
+- Moteur : objet **à lier** ; il s'accroche au premier des deux (logo 🔗, dessiné à côté de
+  son porteur) mais ne PORTE pas le lien. Celui-ci vit dans le statut générique `linked`
+  posé sur les deux, chacun pointant vers l'autre (`data.partnerInstanceId`) — un objet n'a
+  pas de champ `abilities` et ne peut donc réagir à aucun événement, exactement la raison
+  pour laquelle Miroir de Renvoi passe par `damage-reflect`.
+- Moteur : les quatre règles du lien sont appliquées par le **moteur**, pas par la carte :
+  - attaque jointe → `match.ts::handleAttack` ; le partenaire ajoute une de ses propres
+    attaques, choisie par le joueur à chaque fois (prompt sauté s'il n'en a qu'une).
+    Résolue sur un contexte sourcé sur LUI (`ctx.buildEffectContext`), donc son ATK, son
+    critique et son esquive s'appliquent. Un partenaire étourdi ou désarmé ne frappe pas
+    (`canAttack`). L'attaque jointe n'a pas son mot à dire sur la fin du tour : c'est un
+    supplément à l'attaque en cours, pas une seconde action.
+  - dégâts partagés → `match.ts::dealDamage`, **toute** instance de dégâts quelle qu'en soit
+    la source (attaque, ability, tic de poison/brûlure/saignement, coût que le camp se paie).
+    Le miroir reprend les options du coup d'origine (`ignoreShield`, attribution du kill) et
+    porte `skipLinkMirror` pour ne pas rebondir indéfiniment.
+    ⚠️ Sur une AoE qui touche les deux, chacun prend le coup direct **et** le miroir de
+    l'autre, soit le double — conséquence assumée du « miroir intégral ».
+  - mort commune → `zones.ts::koCharacter`, résolue **avant** le prompt de remplacement pour
+    que le partenaire condamné ne soit pas proposé comme nouvel actif. La récursion mutuelle
+    est coupée par le garde « already processed » en tête de `koCharacter`.
+  - capacités réservées à l'actif → `queries.ts::canUseAbility` ; plus fort que la règle par
+    défaut, ça refuse même une ability déclarée `usableFromBench`.
+- ⚠️ La valeur lock (perte de HP max, Mahito) n'est **pas** mirrorée : ce ne sont pas des
+  dégâts. Si elle tue un des deux, la règle de mort commune emporte quand même l'autre.
+- ⚠️ Détruire l'objet (terrain Destruction...) ne **délie pas** la paire : le lien est dans
+  les statuts, et un objet n'a aucun moyen de défaire quoi que ce soit en quittant le jeu.
+- Deck : un personnage déjà lié n'est pas proposé à la pose, et la carte est grisée s'il
+  reste moins de 2 personnages non liés — le moteur n'a pas de notion de chaîne à trois.
+
 ### Miroir de Renvoi
 
 *« À lier à votre personnage actif. Celui-ci subit 100% des dégâts de la prochaine attaque
@@ -456,6 +643,73 @@ qu'il subit et en renvoie immédiatement 50% à l'attaquant, puis le miroir se d
 
 - Moteur : statut `damage-reflect` (`data: { percent, objectInstanceId }`) ; le moteur
   détruit l'objet porteur en consommant le statut. `attachSelfTo` lie l'objet à l'actif.
+
+### Offrande du Dieu de la Mort
+
+*« Une sélection de 6 cartes objets aléatoire dans le jeu se présente à vous, choisissez en
+une. Une sélection de 2 cartes objets aléatoire dans le jeu se présente à votre adversaire,
+il en choisi une. »*
+
+- Moteur : « dans le jeu » = **tout** le registre de cartes objet (`listCards()`), pas le deck
+  des joueurs. Tirage via le RNG seedé de la partie (`randomInt`), jamais `Math.random`.
+- Moteur : Offrande **n'est pas exclue de son propre tirage** (choix assumé) — elle peut donc
+  se re-piocher et s'enchaîner sur plusieurs tours. Le seul frein est le budget de 2 objets
+  par tour.
+- Moteur : les deux prompts sont **séquentiels**, le moteur n'autorisant qu'une question
+  ouverte à la fois même adressée à deux joueurs différents. Le second passe par
+  `ctx.chooseOptionFor(ctx.opponentId, …)` (nouveau sur l'`EffectContext` : `ctx.choose*`
+  n'interrogeait que son propre propriétaire).
+- Moteur : la carte choisie rejoint la **réserve non jouée** de son destinataire
+  (`ctx.createObject(cardId, playerId)` — le second paramètre est également nouveau, la
+  méthode était câblée sur le propriétaire de l'effet). Elle se joue donc un autre tour, dans
+  la limite habituelle des 2 objets par tour, et ne contourne pas l'économie de tour.
+- Moteur : chaque option porte un `card`, donc la modale affiche les illustrations réelles au
+  lieu d'une liste de noms.
+
+### Pheonix
+
+*« Tue ce personnage, au bout de 20 tours, le réanime avec 100pv max supplémentaire et 50
+d'attaque supplémentaire. Si il ne vous reste plus qu'un personnage en vie. Cette carte ne
+ferra pas effet. »*
+
+- Moteur : **pas** d'`equipment: true` malgré le « à lier » de la maquette — la carte tue sa
+  cible dans la foulée, ce qui enverrait tout objet équipé au cimetière avec elle
+  (`zones.koCharacter`). Poser le logo 🔗 promettrait un lien durable qui n'existe pas.
+- Moteur : le compte à rebours ne peut pas être un statut. `applyStatus` refuse toute cible
+  déjà au cimetière et `tickStatusesAtTurnStart` ne parcourt que l'actif et le banc — un
+  statut sur un cadavre ne tiquerait jamais. Il vit donc sur le joueur
+  (`PlayerState.pendingRevives`, voir `PendingRevive` dans `types.ts`) et est décompté dans
+  `startTurn` via `zones.ts::tickPendingRevives`, juste après les tics de statuts.
+- Moteur : le décompte est en **tours du propriétaire** et ne demande **aucun `+1`** — il se
+  déclenche pile en atteignant zéro, au lieu d'être filtré avant d'avoir servi comme un
+  statut bloquant. Le joueur suit le compte à rebours dans le journal à chaque tour.
+- Moteur : au retour, les HP max montent **avant** la résurrection (`reviveCharacter`
+  plafonne les PV rendus à `currentMaxHP`), donc le personnage revient à fond avec son
+  nouveau maximum. Les +50 ATK sont un `atk-boost` sans `remainingTurns` (donc permanent)
+  appliqué **après** la résurrection, qui vide les statuts.
+- Moteur : `placement: 'active'` retombe sur le banc si le poste actif est déjà occupé
+  (`reviveCharacter`), donc le retour ne dégage jamais l'actif en place de force.
+- Moteur : si un autre effet (Absorption Vitale, Roi des esprits) a déjà ramené le
+  personnage entre-temps, la résurrection programmée est simplement abandonnée.
+- Moteur : `unplayableReason` refuse la carte s'il ne reste qu'un personnage vivant — tuer le
+  dernier, c'est perdre la partie sur-le-champ (`checkWinCondition` compte les personnages
+  sur le plateau).
+
+### Poche de sang
+
+*« Augmente les hp max de 200, sans augmenter les hp actuel. Cet objet ne soigne pas de
+200hp. »*
+
+- Moteur : objet **à lier** (`equipment: true` + `ctx.attachSelfTo`). Le joueur choisit
+  un de ses personnages (actif ou banc) ; seuls ceux qui ont encore un emplacement d'objet
+  libre sont proposés, sinon `api.attachObject` refuserait en silence et la poche partirait
+  au cimetière après avoir quand même donné ses HP max.
+- Moteur : `ctx.raiseMaxHP(id, 200, { keepCurrentHP: true })` — c'est l'option
+  `keepCurrentHP` qui réalise le « sans augmenter les hp actuel » de la carte.
+- ⚠️ Le bonus est un changement d'état **permanent**, pas un modifier : il n'existe aucune
+  query `getMaxHP` (voir `QueryName`, `cards/types.ts`), donc les HP max ne peuvent pas être
+  recalculés en continu à partir des objets en jeu. Détruire la poche (terrain Destruction,
+  mort du porteur...) ne reprend donc **pas** les 200 HP max.
 
 ### Poison Mortel
 
