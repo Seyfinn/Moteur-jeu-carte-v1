@@ -16,13 +16,15 @@ projet (packages, comment lancer le jeu...), voir [README.md](README.md).
    `terrainCardIds` selon le type).
    ⚠️ `DEMO_ROSTER` est le **pool complet** de cartes (pour le deck-builder), pas un deck
    légal. Ne pas y toucher les limites. `DEMO_STARTER_DECK` juste au-dessus est le deck
-   par défaut (6 persos / 6 objets / 2 terrains, ≤2 exemplaires) : il doit rester valide
-   au sens de `validateRoster`, ne l'étendre qu'en remplaçant une carte par une autre.
+   par défaut, volontairement **plein** (6 persos / 8 objets / 3 terrains) : il doit rester
+   valide au sens de `validateRoster` et complet, donc ne l'étendre qu'en remplaçant une
+   carte par une autre.
    Règles de deck utiles à connaître ici (`deck.ts`) : 6 persos / 8 objets / 3 terrains,
-   2 exemplaires par carte — mais **1 seul par terrain**, et `maxCopies: 1` sur la carte
-   pour une « carte unique ». `incompatibleWith: ['autre-id']` (champ commun aux trois
-   types, relation symétrique, à ne déclarer que d'un côté) interdit deux cartes dans le
-   même deck : le deck-builder grise l'autre carte sans rien avoir à savoir de plus.
+   **1 seul exemplaire par personnage et par terrain** (ils sont uniques par nature),
+   2 par objet — sauf `maxCopies: 1` déclaré sur la carte pour un objet « unique ».
+   `incompatibleWith: ['autre-id']` (champ commun aux trois types, relation symétrique, à
+   ne déclarer que d'un côté) interdit deux cartes dans le même deck : le deck-builder
+   grise l'autre carte sans rien avoir à savoir de plus.
 4. Ajouter son entrée dans [docs/cartes.md](docs/cartes.md) : le texte imprimé + ce que le
    moteur fait vraiment derrière (statuts posés, modifiers, `+1` de durée, garde-fous...).
    C'est le pendant obligatoire de la règle « texte exact » ci-dessous : tout ce que la
@@ -223,6 +225,13 @@ Garde-fous appliqués automatiquement, inutile de les re-coder par carte :
 
 ## Économie de tour (`match.ts` / `queries.ts`)
 
+- **Un tour = une manche, pas un tour de joueur.** Un tour de jeu couvre l'action des
+  DEUX joueurs, comme aux échecs : `state.turnNumber` n'avance qu'au retour au joueur qui
+  a ouvert la partie (`turn.ts`). Les durées, elles, se comptent toujours en tours de leur
+  porteur (un statut ne tique qu'au début du tour de son camp) — soit exactement une fois
+  par manche, donc « pendant 3 tours » sur une carte veut bien dire 3 tours au sens du
+  compteur affiché. Tout ce qui est « par tour » ci-dessous reste, lui, par tour de joueur :
+  chaque camp a son propre budget d'objets pendant sa propre action.
 - **2 objets par tour maximum.** Le 2ᵉ est une action finale (fin de tour), sauf pour le
   second joueur lors de son tout premier tour. La limite est une requête
   (`getMaxObjectsPerTurn`) : une carte peut la modifier.

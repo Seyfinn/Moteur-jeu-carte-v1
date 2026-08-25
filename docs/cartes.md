@@ -21,14 +21,19 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   glossaire en partie (`web/components/EffectsGlossary.tsx`).
 - Une cible partie au cimetière est hors-jeu : dégâts, valeur lock et soins qui la visent
   sont des no-ops.
-- 2 objets et 1 terrain par tour maximum ; le 2ᵉ objet termine le tour.
+- Un tour de jeu couvre l'action des **deux** joueurs (comme aux échecs) : le compteur de
+  tours n'avance qu'une fois les deux passés. Une durée de carte se compte en tours de son
+  porteur, soit une fois par manche — « pendant 3 tours » = 3 tours au sens du compteur.
+- 2 objets et 1 terrain par tour maximum ; le 2ᵉ objet termine le tour. Ces budgets-là sont
+  bien par tour de joueur : chacun a le sien pendant sa propre action.
 - Une recharge d'ability (« rechargement : N tours ») descend **aussi au banc** : le statut
   de cooldown porte `ticksOnBench: true`. « N tours » veut dire N tours, pas N tours passés
   au poste actif.
-- Construction de deck (`deck.ts`) : 6 personnages / 8 objets / 3 terrains au maximum,
-  2 exemplaires par carte — sauf les **terrains, toujours uniques**, et les cartes qui
-  déclarent leur propre `maxCopies`. Une carte peut aussi en exclure une autre du même deck
-  (`incompatibleWith`, relation symétrique) : c'est le cas de Chopper et Soraka.
+- Construction de deck (`deck.ts`) : 6 personnages / 8 objets / 3 terrains au maximum.
+  **Personnages et terrains sont uniques** (un seul exemplaire chacun) ; seuls les objets se
+  prennent en double, sauf ceux qui déclarent leur propre `maxCopies`. Une carte peut aussi
+  en exclure une autre du même deck (`incompatibleWith`, relation symétrique) : c'est le cas
+  de Chopper et Soraka.
 
 ---
 
@@ -102,11 +107,12 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     à une résurrection) ; le passage à 50 % est mémorisé par un statut caché posé sur
     `onCharacterKO` quand `killerInstanceId` est Caitlyn.
 
-### Chopper — 250 HP — carte unique, incompatible avec Soraka
+### Chopper — 250 HP — incompatible avec Soraka
 
-- Deck : `maxCopies: 1`. L'incompatibilité avec [Soraka](#soraka--160-hp--carte-unique-incompatible-avec-chopper)
-  est déclarée sur la carte de celle-ci et symétrisée par le moteur — ne pas la re-déclarer ici,
-  sous peine d'avoir deux sources de vérité pour la même règle.
+- Deck : l'incompatibilité avec [Soraka](#soraka--160-hp--incompatible-avec-chopper) est
+  déclarée sur la carte de celle-ci et symétrisée par le moteur — ne pas la re-déclarer ici,
+  sous peine d'avoir deux sources de vérité pour la même règle. (L'exemplaire unique, lui,
+  n'est plus propre à la carte : tous les personnages le sont.)
 - **Heavy Point** (60 ATK) — *« Inflige 60 dégâts à l'actif adverse. Si les dégâts passent,
   33% de chance d'appliquer Poison pendant 1 tour. »*
   - Moteur : le jet de poison n'a lieu que si le coup n'a pas été esquivé.
@@ -281,12 +287,12 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   - Moteur : la carte réagit à sa **propre** disparition ; `usableFromBench: true` est
     obligatoire (elle n'est plus l'actif au moment de l'event).
 
-### Soraka — 160 HP — carte unique, incompatible avec Chopper
+### Soraka — 160 HP — incompatible avec Chopper
 
-- Deck : `maxCopies: 1` et `incompatibleWith: ['chopper']` — les deux soigneurs du pool ne
-  peuvent pas être empilés dans le même deck. La relation est symétrique : elle n'est
-  déclarée que sur Soraka, mais `listDeckPool()` la renvoie des deux côtés et le
-  deck-builder grise donc aussi Soraka quand Chopper est déjà pris.
+- Deck : `incompatibleWith: ['chopper']` — les deux soigneurs du pool ne peuvent pas être
+  empilés dans le même deck. La relation est symétrique : elle n'est déclarée que sur
+  Soraka, mais `listDeckPool()` la renvoie des deux côtés et le deck-builder grise donc
+  aussi Soraka quand Chopper est déjà pris.
 - **Don forcé** (50 ATK) — *« Inflige 50 dégâts à l'actif adverse, puis Soraka se soigne
   de 50. »*
 - **Soin Sacrificiel** (active, banc) — *« Sacrifie 100HP pour rendre 150HP au personnage de

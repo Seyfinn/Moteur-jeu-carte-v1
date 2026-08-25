@@ -169,16 +169,31 @@ export function registerDemoCards(): void {
 }
 
 /**
- * A ready-to-play deck that actually satisfies DECK_LIMITS (6 characters / 6 objects /
- * 2 terrains, max 2 copies each). DEMO_ROSTER below is the full *pool* of demo cards --
- * it is deliberately far bigger than a legal deck, so it must never be handed to a
- * player as their roster (validateRoster rejects it, and the board only has 6 bench
- * slots). Used as the server-side fallback and as the web client's seeded deck.
+ * A ready-to-play deck that fills every slot DECK_LIMITS allows : 6 personnages,
+ * 8 objets, 3 terrains -- un exemplaire par personnage et par terrain (ils sont uniques),
+ * jusqu'à deux par objet. Volontairement complet : c'est le deck que découvre un joueur
+ * qui n'en a jamais composé, et un deck à moitié vide lui donne une partie à moitié
+ * jouée. Le mélange couvre les grandes familles du moteur (soin, buff, contrôle, poison,
+ * un objet à lier) pour que la démo montre de quoi le jeu est capable.
+ *
+ * DEMO_ROSTER below is the full *pool* of demo cards -- it is deliberately far bigger
+ * than a legal deck, so it must never be handed to a player as their roster
+ * (validateRoster rejects it, and the board only has 6 bench slots). Used as the
+ * server-side fallback and as the web client's seeded deck.
  */
 export const DEMO_STARTER_DECK: RosterConfig = {
   characterCardIds: [gojoSatoru.id, sukuna.id, guts.id, caitlyn.id, soraka.id, blitzcrank.id],
-  objectCardIds: [potionDeSoin.id, potionDeSoin.id, potionForce.id, potionForce.id, determination.id, poisonMortel.id],
-  terrainCardIds: [hopital.id, protectionDivine.id],
+  objectCardIds: [
+    potionDeSoin.id,
+    potionDeSoin.id,
+    potionForce.id,
+    potionForce.id,
+    determination.id,
+    poisonMortel.id,
+    chaines.id,
+    miroirDeRenvoi.id,
+  ],
+  terrainCardIds: [hopital.id, protectionDivine.id, autelDemoniaque.id],
 };
 
 /** Every demo card, grouped by type -- a card *pool* to build decks from, not a legal deck. */

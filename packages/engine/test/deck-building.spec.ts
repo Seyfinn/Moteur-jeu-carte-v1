@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { DEMO_STARTER_DECK, listDeckPool, registerDemoCards, validateRoster } from '../src/index.js';
+import { DECK_LIMITS, DEMO_STARTER_DECK, listDeckPool, registerDemoCards, validateRoster } from '../src/index.js';
 import type { RosterConfig } from '../src/index.js';
 
 beforeAll(() => {
@@ -27,9 +27,19 @@ describe('deck-building rules', () => {
     expect(terrains.every((entry) => entry.maxCopies === 1)).toBe(true);
   });
 
-  it('fait de Soraka une carte unique', () => {
+  it('refuse deux exemplaires du même personnage, quel qu’il soit', () => {
+    expect(validateRoster(roster({ characterCardIds: ['gojo-satoru', 'gojo-satoru'] })).ok).toBe(false);
     expect(validateRoster(roster({ characterCardIds: ['soraka', 'soraka'] })).ok).toBe(false);
-    expect(listDeckPool().find((entry) => entry.id === 'soraka')?.maxCopies).toBe(1);
+    expect(validateRoster(roster({ characterCardIds: ['gojo-satoru', 'sukuna'] })).ok).toBe(true);
+    const characters = listDeckPool().filter((entry) => entry.type === 'character');
+    expect(characters.length).toBeGreaterThan(0);
+    expect(characters.every((entry) => entry.maxCopies === 1)).toBe(true);
+  });
+
+  it('laisse les objets en double, eux', () => {
+    expect(validateRoster(roster({ objectCardIds: ['potion-de-soin', 'potion-de-soin'] })).ok).toBe(true);
+    // Sauf ceux qui déclarent leur propre limite.
+    expect(validateRoster(roster({ objectCardIds: ['determination', 'determination'] })).ok).toBe(false);
   });
 
   it('interdit Chopper et Soraka dans le même deck, quel que soit leur ordre', () => {
@@ -57,7 +67,12 @@ describe('deck-building rules', () => {
     expect(validateRoster(roster({ terrainCardIds: ['brise-bouclier'] })).ok).toBe(false);
   });
 
-  it('garde le deck de démo légal', () => {
+  // Le deck servi au joueur qui n'en a jamais composé : il doit remplir toutes ses places,
+  // sinon la première partie se joue avec un deck à moitié vide.
+  it('livre un deck de démo complet et légal', () => {
     expect(validateRoster(DEMO_STARTER_DECK)).toEqual({ ok: true });
+    expect(DEMO_STARTER_DECK.characterCardIds).toHaveLength(DECK_LIMITS.character);
+    expect(DEMO_STARTER_DECK.objectCardIds).toHaveLength(DECK_LIMITS.object);
+    expect(DEMO_STARTER_DECK.terrainCardIds).toHaveLength(DECK_LIMITS.terrain);
   });
 });
