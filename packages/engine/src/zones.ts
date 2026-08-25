@@ -2,7 +2,7 @@ import { randomUUID } from './uuid.js';
 import { otherPlayer, type CharacterInstance, type GameState, type PlayerId, type PlayerState, type TerrainInstance } from './types.js';
 import type { EngineApi } from './engine-api.js';
 import { getCharacterCard, getTerrainCard } from './cards/registry.js';
-import { hasStatus } from './statuses.js';
+import { getLinkedPartnerId, hasStatus } from './statuses.js';
 import { cardName, playerName } from './names.js';
 
 export function findCharacterOwner(state: GameState, instanceId: string): PlayerId {
@@ -100,6 +100,29 @@ export async function koCharacter(
     },
   });
 
+  // 'linked' (Jacob et Essau): a death takes both halves of the pair. Resolved BEFORE the
+  // replacement prompt below, otherwise the doomed partner would be offered as the new
+  // active and die the instant it took the post. Mutual recursion is cut by the
+  // "already processed" guard at the top of this function: the partner's own call finds
+  // this character already in the graveyard and returns immediately.
+  const linkedPartnerId = getLinkedPartnerId(char);
+  if (linkedPartnerId) {
+    const partnerOwnerId = safeFindCharacterOwner(state, linkedPartnerId);
+    const partnerPlayer = partnerOwnerId ? state.players[partnerOwnerId] : undefined;
+    const partnerOnBoard =
+      !!partnerPlayer &&
+      (partnerPlayer.activeCharacterInstanceId === linkedPartnerId ||
+        partnerPlayer.benchCharacterInstanceIds.includes(linkedPartnerId));
+    if (partnerPlayer && partnerOnBoard) {
+      api.log(
+        `${cardName(partnerPlayer.characters[linkedPartnerId]!.cardId)} était lié à ${cardName(char.cardId)} : il meurt avec lui`,
+        { kind: 'info', characterInstanceId: linkedPartnerId },
+        partnerOwnerId
+      );
+      await koCharacter(state, linkedPartnerId, api, killerInstanceId);
+    }
+  }
+
   if (wasActive && player.activeCharacterInstanceId === null && player.benchCharacterInstanceIds.length > 0) {
     const answer = await api.chooseFor(ownerId, {
       kind: 'select-characters',
@@ -129,6 +152,64 @@ export async function koCharacter(
   // section 5's "perfect draw" rule requires seeing the *final* board state,
   // not resolving a plain loss the instant the first side hits zero. Callers
   // that own a full action's resolution call checkWinCondition once at the end.
+}
+
+/**
+ * "Pheonix": counts down every delayed revive this player is waiting on, and fires the
+ * ones that come due. Called from startTurn, right after the status ticks, so a revive
+ * lands before its owner acts.
+ *
+ * Deliberately not a status: `applyStatus` refuses graveyard targets and
+ * `tickStatusesAtTurnStart` never walks the graveyard, so a countdown attached to the
+ * dead character could not tick at all (see PendingRevive in types.ts).
+ */
+export async function tickPendingRevives(state: GameState, playerId: PlayerId, api: EngineApi): Promise<void> {
+  const player = state.players[playerId];
+  if (player.pendingRevives.length === 0) return;
+
+  for (const pending of [...player.pendingRevives]) {
+    // Someone else already pulled this character back out (Absorption Vitale, Roi des
+    // esprits...): the scheduled revive has nothing left to do and is dropped.
+    if (!player.graveyardCharacterInstanceIds.includes(pending.characterInstanceId)) {
+      player.pendingRevives = player.pendingRevives.filter((p) => p !== pending);
+      continue;
+    }
+
+    pending.turnsRemaining -= 1;
+    const char = player.characters[pending.characterInstanceId]!;
+    if (pending.turnsRemaining > 0) {
+      api.log(
+        `${cardName(pending.sourceCardId)} : ${cardName(char.cardId)} revient dans ${pending.turnsRemaining} tour(s)`,
+        { characterInstanceId: pending.characterInstanceId, turnsRemaining: pending.turnsRemaining },
+        playerId
+      );
+      continue;
+    }
+
+    player.pendingRevives = player.pendingRevives.filter((p) => p !== pending);
+    // Raise the ceiling BEFORE reviving so the character comes back at its new full HP:
+    // reviveCharacter clamps the revive HP to currentMaxHP, and raiseMaxHP on a corpse is
+    // a plain field bump (no heal to speak of on something at 0).
+    char.currentMaxHP += pending.bonusMaxHP;
+    // 'active' falls back to the bench when the slot is taken (see reviveCharacter), so a
+    // player who kept fighting meanwhile never has their current active bumped out.
+    await api.reviveCharacter(pending.characterInstanceId, char.currentMaxHP, 'active');
+    if (pending.bonusATK > 0) {
+      // After the revive, never before: reviveCharacter wipes statuses. Indefinite (no
+      // remainingTurns) = permanent, which is what "50 d'attaque supplémentaire" means.
+      api.applyStatus(pending.characterInstanceId, {
+        statusId: 'atk-boost',
+        label: `${cardName(pending.sourceCardId)} (+${pending.bonusATK} ATK)`,
+        sourcePlayerId: playerId,
+        data: { amount: pending.bonusATK },
+      });
+    }
+    api.log(
+      `${cardName(pending.sourceCardId)} : ${cardName(char.cardId)} renaît avec +${pending.bonusMaxHP} HP max et +${pending.bonusATK} ATK`,
+      { kind: 'revive', characterInstanceId: pending.characterInstanceId },
+      playerId
+    );
+  }
 }
 
 /** A character can leave the graveyard again -- it is then no longer counted as "dead" anywhere (section 6). */

@@ -43,7 +43,23 @@ export type BuiltinStatusId =
   /** The first attack that really lands on the bearer grants `data.bonusMaxHP` max HP to its attacker, then the status is consumed. */
   | 'hit-bounty'
   /** Bearer takes VULNERABLE_DAMAGE_BONUS_PERCENT% more damage from every incoming damage instance (never consumed). */
-  | 'vulnerable';
+  | 'vulnerable'
+  /**
+   * "Jacob et Essau": the bearer is bound to `data.partnerInstanceId` (the pairing is
+   * symmetric -- each of the two carries the status pointing at the other). The engine
+   * enforces all four halves of the bond: they attack together (match.ts::handleAttack),
+   * every damage instance one takes is mirrored onto the other (match.ts::dealDamage),
+   * a death takes both (zones.ts::koCharacter), and only whichever of the two currently
+   * holds the active post may use abilities (queries.ts::canUseAbility).
+   */
+  | 'linked'
+  /**
+   * "Attaque cloné": `data.remaining` extra attacks this turn. Consumed in
+   * match.ts::applyAction -- instead of ending the turn, an attack decrements the counter
+   * and arms `data.armed`, which makes the follow-up land at `data.damagePercent`% of its
+   * normal number (queries.ts::getEffectiveATK). Spent once the follow-up resolves.
+   */
+  | 'extra-attack';
 
 export interface RaiseMaxHPOptions {
   /**
@@ -87,6 +103,11 @@ export interface DealDamageOptions {
    * Undefined for status ticks (poison/burn/bleed), which have no acting side.
    */
   attackerOwnerId?: PlayerId;
+  /**
+   * Engine-internal: set on the mirrored copy a 'linked' pair sends to its partner, so
+   * that copy doesn't mirror straight back and ping-pong forever. Cards never pass it.
+   */
+  skipLinkMirror?: boolean;
 }
 
 export interface StatusInstance {
@@ -114,6 +135,17 @@ export interface StatusInstance {
    * mechanical difference, only presentation.
    */
   hidden?: boolean;
+  /**
+   * Status handed to the bearer when THIS one runs out -- a delayed effect ("Attaque
+   * cloné" only silences its user once the extra-attack window has closed, so the turn it
+   * was played on stays untouched).
+   *
+   * Applied in `tickStatusesAtTurnStart`, after that turn's decrement pass, so the
+   * newcomer is not itself ticked on arrival: its own `remainingTurns` starts counting at
+   * the bearer's NEXT turn, and therefore needs no `+1` correction. Skipped if the bearer
+   * left the board. Deliberately not recursive -- a hand-off cannot itself hand off.
+   */
+  onExpire?: Omit<StatusInstance, 'onExpire'>;
 }
 
 // ---------------------------------------------------------------------------
@@ -165,6 +197,26 @@ export interface TerrainInstance {
 // Player / game state
 // ---------------------------------------------------------------------------
 
+/**
+ * A revive scheduled for a character that is currently in the graveyard ("Pheonix").
+ *
+ * It deliberately does NOT live as a status on the character: `applyStatus` refuses any
+ * target already in the graveyard, and `tickStatusesAtTurnStart` only walks the active
+ * slot and the bench -- a status on a corpse would never tick. So the countdown is held
+ * by the player instead, and ticked in `startTurn` (see zones.ts::tickPendingRevives).
+ */
+export interface PendingRevive {
+  characterInstanceId: string;
+  /** Turns of the OWNER still to elapse before the revive fires. */
+  turnsRemaining: number;
+  /** Permanent max-HP gain granted on the way back (the character returns at full HP). */
+  bonusMaxHP: number;
+  /** Permanent ATK gain granted on the way back, as an indefinite 'atk-boost' status. */
+  bonusATK: number;
+  /** Card that scheduled it, so the log can name it every turn. */
+  sourceCardId: string;
+}
+
 export interface PlayerState {
   id: PlayerId;
   displayName: string;
@@ -188,6 +240,8 @@ export interface PlayerState {
   objectsPlayedThisTurn: number;
   terrainsPlayedThisTurn: number;
   hasHadFirstTurn: boolean;
+  /** Delayed revives waiting on their countdown ("Pheonix"). Ticked at the owner's turn start. */
+  pendingRevives: PendingRevive[];
   /** Once true, getPlayerView (section 1) stops redacting the OPPONENT's unplayed object/terrain instances for this player -- e.g. Kirigiri's "Ultimate Détective". Never reset once set. */
   revealsOpponentUnplayedCards: boolean;
 }
