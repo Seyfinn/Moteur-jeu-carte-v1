@@ -30,7 +30,6 @@ import { katarina } from './katarina.js';
 import { akali } from './akali.js';
 import { zoe } from './zoe.js';
 import { protectionDivine } from './protection-divine.js';
-import { briseBouclier } from './brise-bouclier.js';
 import { voleurDeBouclier } from './voleur-de-bouclier.js';
 import { sion } from './sion.js';
 import { ornn } from './ornn.js';
@@ -85,7 +84,6 @@ export {
   akali,
   zoe,
   protectionDivine,
-  briseBouclier,
   voleurDeBouclier,
   sion,
   ornn,
@@ -146,7 +144,6 @@ export function registerDemoCards(): void {
   registerCard(akali);
   registerCard(zoe);
   registerCard(protectionDivine);
-  registerCard(briseBouclier);
   registerCard(voleurDeBouclier);
   registerCard(sion);
   registerCard(ornn);
@@ -242,7 +239,6 @@ export const DEMO_ROSTER: RosterConfig = {
     autelDemoniaque.id,
     pointFaible.id,
     protectionDivine.id,
-    briseBouclier.id,
     absorptionVitale.id,
   ],
 };

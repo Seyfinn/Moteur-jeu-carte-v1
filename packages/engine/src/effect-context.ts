@@ -351,7 +351,8 @@ export function buildEffectContext(
           api.removeStatus(target.instanceId, 'hit-bounty');
           const bonus = Number(bounty.data?.['bonusMaxHP'] ?? 0);
           if (bonus > 0) {
-            api.raiseMaxHP(source.instanceId, bonus);
+            // Une prime, pas un soin : le plafond monte, les PV actuels ne bougent pas.
+            api.raiseMaxHP(source.instanceId, bonus, { keepCurrentHP: true });
             api.log(`${cardName(source.cardId)} encaisse la prime : +${bonus} HP max`, {
               kind: 'info',
               sourceInstanceId: source.instanceId,
@@ -377,8 +378,8 @@ export function buildEffectContext(
     heal(targetInstanceId, amount) {
       api.heal(targetInstanceId, amount);
     },
-    raiseMaxHP(targetInstanceId, amount) {
-      api.raiseMaxHP(targetInstanceId, amount);
+    raiseMaxHP(targetInstanceId, amount, options) {
+      api.raiseMaxHP(targetInstanceId, amount, options);
     },
     addShield(targetInstanceId, amount) {
       api.addShield(targetInstanceId, amount);

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { getCharacterCard, type CharacterInstance, type StatusInstance } from 'engine';
+import { getCharacterCard, type CharacterInstance, type GameState, type StatusInstance } from 'engine';
 import { CardFrame } from './CardFrame';
 import { useCardInspect, useHoverCard, type HoverPayload } from './HoverCard';
 import { characterDetailBody } from './cardDetails';
-import { StatusEffectLayers } from './statusEffects';
+import { StatusEffectLayers, toneForStatus } from './statusEffects';
 import { AttachedObjectCards, AttachedObjectChips } from './AttachedObjects';
-import type { AttachedObjectView } from './boardActions';
+import { attackReadouts, type AttachedObjectView } from './boardActions';
 import { CharacterActionBadges } from './gameEventBadges';
 import type { CharacterBadge } from './gameEvents';
 
@@ -34,9 +34,18 @@ export function statusBadgeText(status: StatusInstance): string {
   return name;
 }
 
-interface DamageFloater {
+/**
+ * Texte flottant au-dessus de la carte à chaque modification de PV : rouge vif pour ce qui
+ * est perdu, vert pour ce qui est rendu. Il est calculé sur les PV effectifs et non sur le
+ * journal, ce qui lui fait couvrir *toutes* les sources sans en connaître aucune : coup
+ * porté, tic de poison/brûlure/saignement, soin, verrou de valeur (Mahito) ou gain de HP
+ * max. Ce que le bouclier absorbe ne bouge pas les PV, donc n'affiche rien -- c'est bien
+ * ce qu'il faut lire.
+ */
+interface HpFloater {
   id: number;
   amount: number;
+  kind: 'damage' | 'heal';
 }
 
 export function CharacterCard({
@@ -52,6 +61,7 @@ export function CharacterCard({
   targeted,
   onTarget,
   attachedObjects,
+  state,
 }: {
   char: CharacterInstance;
   isActive: boolean;
@@ -76,6 +86,13 @@ export function CharacterCard({
    * pour les surfaces qui n'ont pas l'état complet sous la main.
    */
   attachedObjects?: AttachedObjectView[];
+  /**
+   * L'état de la partie, quand la surface qui affiche la carte l'a sous la main (le
+   * plateau). Il sert à lire l'ATK *réel* des attaques -- une carte à dégâts évolutifs
+   * (Guts, Hulk, Mundo) affiche sinon la valeur imprimée, qui n'est plus la bonne. Absent
+   * (cimetière, aperçu hors partie) : la carte se dessine sans ce chiffre.
+   */
+  state?: GameState;
 }) {
   const hover = useHoverCard();
   const currentHP = Math.max(0, char.currentMaxHP - char.damage);
@@ -94,11 +111,16 @@ export function CharacterCard({
     char.shield + char.statuses.reduce((sum, st) => sum + Math.max(0, Number(st.data?.['shield'] ?? 0)), 0);
   const shieldPct = char.currentMaxHP > 0 ? Math.max(0, Math.min(100, (shieldTotal / char.currentMaxHP) * 100)) : 0;
 
+  // Attaques dont l'ATK du moment n'est plus celui imprimé sur la carte : c'est le seul
+  // endroit où le joueur peut lire le vrai chiffre sans ouvrir de fiche, et il n'apparaît
+  // donc que quand il y a quelque chose à corriger.
+  const shiftedAttacks = (state ? attackReadouts(state, char) : []).filter((r) => r.effective !== r.base);
+
   const inspectPayload: HoverPayload = {
     id: char.instanceId,
     title: name,
     card: { cardId: char.cardId, kind: 'character', name },
-    body: characterDetailBody(char.cardId, char),
+    body: characterDetailBody(char.cardId, char, state),
   };
   const inspect = useCardInspect(inspectPayload);
 
@@ -115,6 +137,9 @@ export function CharacterCard({
     char.statuses
       .map((s) => `${s.statusId}:${s.remainingTurns ?? ''}:${String(s.data?.['stacks'] ?? '')}:${String(s.data?.['shield'] ?? '')}`)
       .join(','),
+    // Un bonus de dégâts cumulatif (Guts, Hulk) ne se lit ni dans les PV ni dans un statut
+    // visible : sans lui, la fiche épinglée resterait sur l'ATK d'il y a trois tours.
+    shiftedAttacks.map((r) => `${r.id}:${r.effective}`).join(','),
   ].join('|');
   useEffect(() => {
     hover.refreshPinned(inspectPayload);
@@ -126,28 +151,29 @@ export function CharacterCard({
   const asideAttachments = size === 'large' ? (attachedObjects ?? []) : [];
   const chipAttachments = size === 'large' ? [] : (attachedObjects ?? []);
 
-  const prevDamageRef = useRef(char.damage);
+  const prevHpRef = useRef(currentHP);
   const floaterSeqRef = useRef(0);
-  const [flashing, setFlashing] = useState(false);
-  const [floaters, setFloaters] = useState<DamageFloater[]>([]);
+  const [flash, setFlash] = useState<'damage' | 'heal' | null>(null);
+  const [floaters, setFloaters] = useState<HpFloater[]>([]);
 
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => {
-    const delta = char.damage - prevDamageRef.current;
-    prevDamageRef.current = char.damage;
-    if (delta <= 0) return;
+    const delta = currentHP - prevHpRef.current;
+    prevHpRef.current = currentHP;
+    if (delta === 0) return;
 
     const id = ++floaterSeqRef.current;
-    setFloaters((list) => [...list, { id, amount: delta }]);
-    setFlashing(true);
+    const kind = delta < 0 ? 'damage' : 'heal';
+    setFloaters((list) => [...list, { id, amount: Math.abs(delta), kind }]);
+    setFlash(kind);
     // Timers are collected and cleared on unmount only. Clearing them in the effect's
     // own cleanup (i.e. on the *next* hit) cancelled the pending removal, so rapid
     // successive hits left their floaters stuck on the card forever.
     timersRef.current.push(
-      setTimeout(() => setFlashing(false), 400),
-      setTimeout(() => setFloaters((list) => list.filter((f) => f.id !== id)), 1000)
+      setTimeout(() => setFlash(null), 400),
+      setTimeout(() => setFloaters((list) => list.filter((f) => f.id !== id)), 1100)
     );
-  }, [char.damage]);
+  }, [currentHP]);
 
   useEffect(() => () => timersRef.current.forEach(clearTimeout), []);
 
@@ -172,12 +198,19 @@ export function CharacterCard({
           {shieldTotal > 0 && <div className="fx-layer fx-shield" />}
           {chipAttachments.length > 0 && <AttachedObjectChips objects={chipAttachments} />}
           {badges && <CharacterActionBadges badges={badges} />}
-          {flashing && <div className="fx-damage-flash" />}
+          {flash && <div className={`fx-hp-flash fx-hp-flash-${flash}`} />}
           {floaters.length > 0 && (
             <div className="fx-floaters">
-              {floaters.map((f) => (
-                <span key={f.id} className="fx-floater-number">
-                  -{f.amount}
+              {/* Deux modifications coup sur coup (double tic de statut, riposte) se
+                  décalent l'une au-dessus de l'autre au lieu de se superposer. */}
+              {floaters.map((f, i) => (
+                <span
+                  key={f.id}
+                  className={`fx-floater-number fx-floater-${f.kind}`}
+                  style={{ ['--floater-i' as string]: i }}
+                >
+                  {f.kind === 'damage' ? '-' : '+'}
+                  {f.amount}
                 </span>
               ))}
             </div>
@@ -202,11 +235,25 @@ export function CharacterCard({
           <div className="hp-text">
             {currentHP} / {char.currentMaxHP} HP
             {shieldTotal > 0 && <span className="shield-text"> +{shieldTotal} 🛡</span>}
+            {shiftedAttacks.map((r) => (
+              <span
+                key={r.id}
+                className={`atk-text${r.effective > r.base ? ' up' : ' down'}`}
+                title={`${r.name} : ${r.effective} ATK (imprimé ${r.base})`}
+              >
+                {' '}
+                ⚔ {r.effective}
+              </span>
+            ))}
           </div>
           {visibleStatuses.length > 0 && (
             <div className="statuses">
               {visibleStatuses.map((s, i) => (
-                <span key={i} className="status-badge" title={`${s.label} (${s.statusId})`}>
+                <span
+                  key={i}
+                  className={`status-badge status-tone-${toneForStatus(s.statusId)}`}
+                  title={`${s.label} (${s.statusId})`}
+                >
                   {statusBadgeText(s)}
                 </span>
               ))}

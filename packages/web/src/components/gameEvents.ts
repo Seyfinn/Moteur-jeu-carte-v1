@@ -15,7 +15,6 @@ export type CharacterBadge =
   | { kind: 'ability'; id: number; label: string }
   | { kind: 'critical'; id: number; percent: number }
   | { kind: 'evasion'; id: number; percent: number }
-  | { kind: 'heal'; id: number; amount: number }
   | { kind: 'ko'; id: number; label: string };
 
 /**
@@ -287,13 +286,9 @@ function classifyLogEntry(entry: LogEntry, state: GameState): Classified[] {
       return [{ anchor: 'character', characterInstanceId, badge: { kind: 'ko', label: 'KO' } }];
     }
 
-    case 'heal': {
-      const targetInstanceId = d['targetInstanceId'] as string | undefined;
-      const amount = Number(d['amount'] ?? 0);
-      const char = findCharacter(state, targetInstanceId);
-      if (!targetInstanceId || !char || !(amount > 0)) return [];
-      return [{ anchor: 'character', characterInstanceId: targetInstanceId, badge: { kind: 'heal', amount } }];
-    }
+    // Pas de badge pour un soin : le texte flottant vert de la carte (CharacterCard) le
+    // dit déjà, et il le dit mieux -- il est calculé sur les PV réellement rendus, alors
+    // que le journal annonce le montant demandé.
 
     default:
       return [];
@@ -302,8 +297,12 @@ function classifyLogEntry(entry: LogEntry, state: GameState): Classified[] {
 
 const CHARACTER_BADGE_DURATION_MS = 1300;
 const TABLE_EVENT_DURATION_MS = 2000;
-/** « Très rapide » : la mini-roue doit trancher avant que le joueur ne lise le journal. */
-const PROC_ROLL_DURATION_MS = 900;
+/**
+ * Durée de vie d'une mini-roue à l'écran. Elle doit couvrir la rotation de l'aiguille
+ * (`proc-needle-spin`, 0,8 s) ET laisser le temps de lire le verdict qu'elle désigne :
+ * plus courte, la roue disparaissait avant même d'avoir fini de tourner.
+ */
+const PROC_ROLL_DURATION_MS = 1800;
 /** Assez long pour lire la carte en grand, assez court pour ne pas freiner la partie. */
 const SPOTLIGHT_DURATION_MS = 1700;
 

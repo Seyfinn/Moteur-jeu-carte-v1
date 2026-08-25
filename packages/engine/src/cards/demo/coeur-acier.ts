@@ -1,8 +1,44 @@
+import type { CharacterInstance } from '../../types.js';
 import type { EffectContext, TerrainCardDef } from '../types.js';
 import { cardName } from '../../names.js';
 
 const DURATION_TURNS = 6;
 const BONUS_MAX_HP = 150;
+
+/**
+ * Statut « marque posée, pas encore chargée ». Il n'a aucune mécanique propre : il existe
+ * pour que la cible VOIE la marque arriver sur elle, un tour avant qu'elle ne devienne
+ * dangereuse. La charge, elle, est le statut générique `hit-bounty` (que le pipeline de
+ * dégâts du moteur encaisse et consomme tout seul).
+ */
+const MARK_STATUS_ID = 'coeur-acier-mark';
+
+/** Efface toute trace de la marque sur un personnage, chargée ou non. */
+function clearMark(ctx: EffectContext, characterInstanceId: string): void {
+  ctx.removeStatus(characterInstanceId, MARK_STATUS_ID);
+  ctx.removeStatus(characterInstanceId, 'hit-bounty');
+}
+
+function hasBounty(ctx: EffectContext, characterInstanceId: string): boolean {
+  return ctx.getCharacter(characterInstanceId).statuses.some((status) => status.statusId === 'hit-bounty');
+}
+
+/** Repart d'une marque neuve sur `target` : visible, mais pas encore chargée. */
+function markFresh(ctx: EffectContext, target: CharacterInstance, message: string): void {
+  const terrain = ctx.getTerrain(ctx.sourceInstanceId);
+  terrain.data = { markedInstanceId: target.instanceId, charged: false };
+  ctx.applyStatus(
+    target.instanceId,
+    {
+      statusId: MARK_STATUS_ID,
+      label: 'Coeur Acier (marque)',
+      sourcePlayerId: ctx.ownerId,
+      sourceCardInstanceId: ctx.sourceInstanceId,
+    },
+    { skipEvasionRoll: true }
+  );
+  ctx.log(message, { terrainInstanceId: terrain.instanceId, markedInstanceId: target.instanceId });
+}
 
 /**
  * Marque/charge l'actif adverse du moment. Appelé à la pose et à chaque tour suivant du
@@ -11,42 +47,54 @@ const BONUS_MAX_HP = 150;
 function updateMark(ctx: EffectContext): void {
   const terrain = ctx.getTerrain(ctx.sourceInstanceId);
   const opponentActive = ctx.getActive(ctx.opponentId);
-  const previouslyMarked = terrain.data?.['markedInstanceId'] as string | undefined;
+  const marked = terrain.data?.['markedInstanceId'] as string | undefined;
+  const charged = terrain.data?.['charged'] === true;
 
-  // La charge est matérialisée par le statut générique 'hit-bounty' posé sur la cible :
-  // c'est le pipeline de dégâts du moteur qui l'encaisse et le consomme (voir types.ts).
-  // Tant qu'elle n'est pas chargée, la marque n'est qu'une donnée du terrain.
-  if (previouslyMarked && previouslyMarked !== opponentActive?.instanceId) {
-    ctx.removeStatus(previouslyMarked, 'hit-bounty');
-  }
+  // L'adversaire a switché (ou son actif est mort) : la marque posée sur l'ancien n'a
+  // plus lieu d'être, elle repart de zéro sur le nouveau.
+  if (marked && marked !== opponentActive?.instanceId) clearMark(ctx, marked);
 
-  if (previouslyMarked && opponentActive && previouslyMarked === opponentActive.instanceId) {
-    terrain.data = { ...terrain.data, charged: true };
-    ctx.applyStatus(
-      opponentActive.instanceId,
-      {
-        statusId: 'hit-bounty',
-        label: 'Coeur Acier (marque chargée)',
-        sourcePlayerId: ctx.ownerId,
-        sourceCardInstanceId: ctx.sourceInstanceId,
-        data: { bonusMaxHP: BONUS_MAX_HP, forOwnerId: ctx.ownerId },
-      },
-      { skipEvasionRoll: true }
-    );
-    ctx.log(`Coeur Acier : la marque sur ${cardName(opponentActive.cardId)} est chargée`, {
-      terrainInstanceId: terrain.instanceId,
-      markedInstanceId: opponentActive.instanceId,
-    });
+  if (!opponentActive) {
+    terrain.data = { markedInstanceId: undefined, charged: false };
     return;
   }
 
-  terrain.data = { markedInstanceId: opponentActive?.instanceId, charged: false };
-  if (opponentActive) {
-    ctx.log(`Coeur Acier marque ${cardName(opponentActive.cardId)}`, {
-      terrainInstanceId: terrain.instanceId,
-      markedInstanceId: opponentActive.instanceId,
-    });
+  const name = cardName(opponentActive.cardId);
+
+  if (marked === opponentActive.instanceId) {
+    if (!charged) {
+      terrain.data = { ...terrain.data, charged: true };
+      ctx.removeStatus(opponentActive.instanceId, MARK_STATUS_ID);
+      ctx.applyStatus(
+        opponentActive.instanceId,
+        {
+          statusId: 'hit-bounty',
+          label: 'Coeur Acier (marque chargée)',
+          sourcePlayerId: ctx.ownerId,
+          sourceCardInstanceId: ctx.sourceInstanceId,
+          data: { bonusMaxHP: BONUS_MAX_HP, forOwnerId: ctx.ownerId },
+        },
+        { skipEvasionRoll: true }
+      );
+      ctx.log(`Coeur Acier : la marque sur ${name} est chargée`, {
+        terrainInstanceId: terrain.instanceId,
+        markedInstanceId: opponentActive.instanceId,
+      });
+      return;
+    }
+
+    // Marque chargée dont le `hit-bounty` a disparu = la prime a été encaissée. La carte
+    // dit « puis la marque se réinitialise » : on repose une marque neuve, qui devra
+    // attendre un tour de plus pour se recharger. Sans ce retour à zéro, le terrain
+    // rechargeait la même cible à chaque tour et repayait la prime autant de fois.
+    if (!hasBounty(ctx, opponentActive.instanceId)) {
+      markFresh(ctx, opponentActive, `Coeur Acier : la marque sur ${name} se réinitialise`);
+    }
+    // Chargée et pas encore encaissée : rien à faire, elle attend son attaque.
+    return;
   }
+
+  markFresh(ctx, opponentActive, `Coeur Acier marque ${name}`);
 }
 
 export const coeurAcier: TerrainCardDef = {
@@ -105,7 +153,7 @@ export const coeurAcier: TerrainCardDef = {
       },
       async execute(ctx) {
         const marked = ctx.getTerrain(ctx.sourceInstanceId).data?.['markedInstanceId'] as string | undefined;
-        if (marked) ctx.removeStatus(marked, 'hit-bounty');
+        if (marked) clearMark(ctx, marked);
       },
     },
   ],

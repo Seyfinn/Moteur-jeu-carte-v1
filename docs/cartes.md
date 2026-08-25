@@ -22,6 +22,13 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
 - Une cible partie au cimetière est hors-jeu : dégâts, valeur lock et soins qui la visent
   sont des no-ops.
 - 2 objets et 1 terrain par tour maximum ; le 2ᵉ objet termine le tour.
+- Une recharge d'ability (« rechargement : N tours ») descend **aussi au banc** : le statut
+  de cooldown porte `ticksOnBench: true`. « N tours » veut dire N tours, pas N tours passés
+  au poste actif.
+- Construction de deck (`deck.ts`) : 6 personnages / 8 objets / 3 terrains au maximum,
+  2 exemplaires par carte — sauf les **terrains, toujours uniques**, et les cartes qui
+  déclarent leur propre `maxCopies`. Une carte peut aussi en exclure une autre du même deck
+  (`incompatibleWith`, relation symétrique) : c'est le cas de Chopper et Soraka.
 
 ---
 
@@ -75,12 +82,13 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   pendant 2 tours. Ne se déclenche qu'une seule fois par partie. »*
   - Moteur : la réserve n'est **pas** le champ `shield` natif mais un statut propre
     (`blitzcrank-mana-barrier-shield`, volontairement **visible**) consommé par un modifier
-    `getIncomingDamageAmount`. Conséquence : Brise bouclier et Voleur de bouclier n'ont
-    aucune prise dessus. Le verrou de Hook est le statut `blitzcrank-hook-locked`.
+    `getIncomingDamageAmount`. Conséquence : Voleur de bouclier n'a aucune prise dessus. Le
+    verrou de Hook est le statut `blitzcrank-hook-locked`, avec `ticksOnBench: true` (même
+    règle que les recharges d'ability : Mana Barrier se déclenche justement depuis le banc).
   - La réserve restante vit dans `data.shield`, la convention que le client lit pour
     afficher le chiffre sur le badge, la barre de bouclier sous les PV et le halo : à
     l'écran, elle se lit donc exactement comme un bouclier natif, tout en restant
-    intouchable par Brise bouclier / Voleur de bouclier.
+    intouchable par Voleur de bouclier.
 - **Hook** (active, 1×/partie) — *« Une fois par partie, ramène un personnage ennemi du banc
   sur le poste actif. »* → `forceSwitch` sur le camp adverse.
 
@@ -94,16 +102,20 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     à une résurrection) ; le passage à 50 % est mémorisé par un statut caché posé sur
     `onCharacterKO` quand `killerInstanceId` est Caitlyn.
 
-### Chopper — 250 HP — carte unique
+### Chopper — 250 HP — carte unique, incompatible avec Soraka
 
+- Deck : `maxCopies: 1`. L'incompatibilité avec [Soraka](#soraka--160-hp--carte-unique-incompatible-avec-chopper)
+  est déclarée sur la carte de celle-ci et symétrisée par le moteur — ne pas la re-déclarer ici,
+  sous peine d'avoir deux sources de vérité pour la même règle.
 - **Heavy Point** (60 ATK) — *« Inflige 60 dégâts à l'actif adverse. Si les dégâts passent,
   33% de chance d'appliquer Poison pendant 1 tour. »*
   - Moteur : le jet de poison n'a lieu que si le coup n'a pas été esquivé.
 - **Traque** (active, utilisable du banc) — *« Soigne un personnage allié au choix (actif ou
   banc) de 70 HP. Utilisable même depuis le banc. Rechargement : 3 tours après usage. »*
   - Moteur : le rechargement est un statut de cooldown à `remainingTurns = 3 + 1` (posé sur
-    soi pendant son propre tour), pas un `usesPerGame`. Sans `ticksOnBench`, il est
-    suspendu tant que Chopper reste au banc — la recharge ne reprend qu'une fois actif.
+    soi pendant son propre tour), pas un `usesPerGame`. Il porte `ticksOnBench: true` : la
+    recharge descend même quand Chopper reste au banc — c'est bien là que la Traque se joue,
+    et sans ce champ elle ne revenait jamais.
 
 ### Guts — 250 HP
 
@@ -269,8 +281,12 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   - Moteur : la carte réagit à sa **propre** disparition ; `usableFromBench: true` est
     obligatoire (elle n'est plus l'actif au moment de l'event).
 
-### Soraka — 160 HP
+### Soraka — 160 HP — carte unique, incompatible avec Chopper
 
+- Deck : `maxCopies: 1` et `incompatibleWith: ['chopper']` — les deux soigneurs du pool ne
+  peuvent pas être empilés dans le même deck. La relation est symétrique : elle n'est
+  déclarée que sur Soraka, mais `listDeckPool()` la renvoie des deux côtés et le
+  deck-builder grise donc aussi Soraka quand Chopper est déjà pris.
 - **Don forcé** (50 ATK) — *« Inflige 50 dégâts à l'actif adverse, puis Soraka se soigne
   de 50. »*
 - **Soin Sacrificiel** (active, banc) — *« Sacrifie 100HP pour rendre 150HP au personnage de
@@ -298,8 +314,9 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   critique. »* → modifier `getCriticalPercent`.
 - **Boogie Woogie** (active, banc, 1×/partie) — *« Switch gratuitement le personnage actif
   avec un personnage du banc allié de votre choix, même si Todo lui-même n'est pas
-  l'actif. »* → `forceSwitch`, donc insensible à `chained`/`stun` sur l'actif, mais bloqué
-  par un interdit explicite de switch (Bouclier Ultime).
+  l'actif. »* → `forceSwitch`, qui contourne `canSwitchStandard` (un stun sur l'actif ne
+  l'arrête donc pas). Seul `chained` (Chaînes) bloque encore le départ, dans
+  `zones.switchActive`.
 
 ### Zoé — 140 HP
 
@@ -312,7 +329,8 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
 - **Spell Thief** (active) — *« Rejoue immédiatement la dernière capacité active utilisée par
   l'adversaire, mais lancée par Zoé. Rechargement : 3 tours. »*
   - Moteur : même réserve que Kakashi — une capacité adossée à un compteur propre à son
-    porteur d'origine rend moins. Le rechargement est un statut de cooldown.
+    porteur d'origine rend moins. Le rechargement est un statut de cooldown, avec
+    `ticksOnBench: true` comme toutes les recharges.
 
 ---
 
@@ -494,19 +512,15 @@ adverse et 15 dégâts à chaque personnage sur le banc adverse. »*
 
 ### Bouclier Ultime — 3 tours
 
-*« Pendant 3 tours, vous ne pouvez plus switcher. En échange, votre banc devient intouchable :
-impossible à cibler et immunisé contre tous les dégâts adverses. »*
+*« Pendant 3 tours, votre banc devient intouchable : impossible à cibler et immunisé contre
+tous les dégâts adverses. »*
 
-- Moteur : modifiers `canSwitchStandard`, `canTargetBench`, `getIncomingDamageAmount`,
+- Moteur : modifiers `canTargetBench`, `getIncomingDamageAmount`,
   `getIncomingValeurLockAmount`. L'immunité distingue l'attaquant grâce à `attackerOwnerId` :
   vos propres cartes peuvent toujours prélever un coût en HP sur votre banc.
-
-### Brise bouclier — 6 tours
-
-*« Pendant 6 tours, le bouclier des personnages ennemis n'absorbe plus rien. »*
-
-- Moteur : modifier `canShieldAbsorb`. La valeur de bouclier reste affichée et redevient
-  efficace à l'expiration. Ne touche pas les pseudo-boucliers d'une carte (Mana Barrier).
+- La carte n'a plus de contrepartie : elle portait aussi un modifier `canSwitchStandard`
+  qui interdisait à son possesseur de changer de personnage pendant les 3 tours. Retiré —
+  plus aucune carte du pool ne refuse `canSwitchStandard`.
 
 ### Coeur acier — 6 tours
 
@@ -515,9 +529,20 @@ charge : la première attaque qui le touche alors rapporte 150 HP max à son att
 soin), puis la marque se réinitialise. Si l'adversaire a switché entre-temps, la marque passe
 simplement sur le nouvel actif. »*
 
-- Moteur : statut `hit-bounty` (`data: { bonusMaxHP, forOwnerId }`), consommé au premier coup
-  qui touche vraiment. Les trois passives filtrent sur leur propre terrain, et
-  `onTerrainRemoved` nettoie la marque chargée.
+- Moteur : deux statuts qui se succèdent sur la cible, pour qu'elle voie venir le coup :
+  `coeur-acier-mark` (marque posée, aucune mécanique propre, purement visuelle) puis le
+  statut générique `hit-bounty` (`data: { bonusMaxHP, forOwnerId }`) une fois la marque
+  chargée, consommé au premier coup qui touche vraiment.
+- « Pas de soin » au sens littéral : la prime passe par
+  `raiseMaxHP(..., { keepCurrentHP: true })`, donc le plafond de l'attaquant monte de 150 et
+  ses PV actuels ne bougent pas d'un point.
+- « La marque se réinitialise » : le terrain garde `markedInstanceId`/`charged` dans ses
+  `data`, et repère l'encaissement au fait que `hit-bounty` a disparu d'une cible encore
+  marquée comme chargée. Il repose alors une marque neuve, qui devra attendre un tour de
+  plus pour se recharger. Sans ce retour à zéro, le terrain rechargeait la même cible à
+  chaque tour et repayait la prime autant de fois.
+- Les trois passives filtrent sur leur propre terrain, et `onTerrainRemoved` nettoie les
+  deux statuts.
 
 ### Confiscation — 2 tours
 

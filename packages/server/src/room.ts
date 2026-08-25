@@ -42,6 +42,12 @@ export class Room {
   private playerRosters: Partial<Record<PlayerId, RosterConfig>> = {};
   private match?: Match;
   private unsubscribe?: () => void;
+  /**
+   * Revanches demandées pour la partie en cours. Il en faut une de chaque camp : sans ça,
+   * un joueur relancerait la partie sous le nez de l'autre, qui lit encore son résultat.
+   * Vidé dès qu'une nouvelle partie démarre.
+   */
+  private rematchVotes = new Set<PlayerId>();
 
   /** The prompt currently on the clock, and the timer that will auto-answer it. */
   private choiceTimer?: ReturnType<typeof setTimeout>;
@@ -71,6 +77,9 @@ export class Room {
     this.playerNames[playerId] = playerName || playerId;
     this.playerRosters[playerId] = roster;
     this.lastActivityAt = Date.now();
+    // Le siège change de main : la revanche demandée par son occupant précédent ne vaut
+    // évidemment pas pour le nouveau venu.
+    this.rematchVotes.delete(playerId);
 
     if (this.isFull && !this.match) {
       this.startMatch();
@@ -118,6 +127,12 @@ export class Room {
   }
 
   private startMatch(): void {
+    // Une revanche repasse par ici : la partie précédente laisse derrière elle son
+    // abonnement et, si elle s'est terminée sur un choix en attente, son minuteur.
+    this.unsubscribe?.();
+    this.unsubscribe = undefined;
+    this.clearChoiceTimer();
+    this.rematchVotes.clear();
     this.match = Match.create({
       p1Name: this.playerNames.p1 ?? 'Joueur 1',
       p2Name: this.playerNames.p2 ?? 'Joueur 2',
@@ -188,6 +203,30 @@ export class Room {
     if (!result.ok) {
       const socket = this.sockets[playerId];
       if (socket) send(socket, { type: 'error', message: result.error });
+    }
+  }
+
+  /**
+   * Revanche : une nouvelle partie dans le même salon, avec les mêmes noms et les mêmes
+   * decks. Les deux camps doivent la demander -- la demande du premier est simplement
+   * annoncée à l'autre, qui voit « l'adversaire veut rejouer » sur son écran de fin.
+   */
+  handleRematch(playerId: PlayerId): void {
+    const socket = this.sockets[playerId];
+    if (!this.match?.state.result) {
+      if (socket) send(socket, { type: 'error', message: "La partie n'est pas terminée." });
+      return;
+    }
+    this.rematchVotes.add(playerId);
+    this.lastActivityAt = Date.now();
+    this.broadcast({ type: 'rematch-requested', by: playerId });
+    if (this.rematchVotes.has('p1') && this.rematchVotes.has('p2')) this.startMatch();
+  }
+
+  private broadcast(message: ServerMessage): void {
+    for (const id of ['p1', 'p2'] as PlayerId[]) {
+      const socket = this.sockets[id];
+      if (socket) send(socket, message);
     }
   }
 

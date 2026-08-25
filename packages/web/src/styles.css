@@ -910,18 +910,23 @@ input::placeholder {
 /* Board */
 .board {
   --card-hand-w: clamp(58px, 8.2vh, 92px);
-  --bench-card-w: clamp(116px, 15vh, 152px);
-  --bench-card-h: clamp(42px, 5.6vh, 56px);
-  --gy-card-w: clamp(92px, 12.5vh, 126px);
-  --card-pile-w: clamp(48px, 6.5vh, 66px);
+  /* Le banc occupe toute la largeur du rail latéral : ce sont des cartes qu'on doit
+     pouvoir lire (PV, statuts) sans ouvrir de fiche. */
+  --bench-card-w: clamp(140px, 19vh, 208px);
+  --bench-card-h: clamp(54px, 7.4vh, 84px);
+  --gy-card-w: clamp(96px, 13vh, 132px);
+  --card-pile-w: clamp(54px, 7.5vh, 82px);
   --card-opp-hand-w: clamp(34px, 4.5vh, 56px);
   /* Les deux actifs sont les pièces maîtresses du plateau : ils prennent nettement plus
-     de place que tout le reste, et suivent la hauteur de la fenêtre pour ne jamais pousser
-     la main ou le banc hors de l'écran. */
-  --active-card-w: clamp(300px, 44vh, 430px);
-  --active-card-h: clamp(132px, 20vh, 196px);
+     de place que tout le reste. Largeur bornée par la fenêtre (la colonne de la grille
+     les rétrécit d'elle-même si les rails prennent trop de place), hauteur bornée par la
+     hauteur d'écran pour ne jamais pousser la main ou le banc hors du cadre. */
+  --active-card-w: clamp(320px, 30vw, 540px);
+  --active-card-h: clamp(150px, 26vh, 280px);
   position: relative;
-  max-width: 1400px;
+  /* Un écran large n'a aucune raison de laisser deux bandes noires sur les côtés pendant
+     que les cartes se serrent au milieu. */
+  max-width: 1760px;
   height: 100dvh;
   margin: 0 auto;
   padding: 10px 16px;
@@ -1001,17 +1006,6 @@ input::placeholder {
   font-weight: 600;
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
-}
-.result-banner {
-  text-align: center;
-  margin-top: 12vh;
-  font-size: 2rem;
-  font-weight: 800;
-  background: linear-gradient(90deg, var(--accent), #b98cff);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: fade-slide-in 0.35s var(--ease);
 }
 
 .arena {
@@ -1390,25 +1384,25 @@ input::placeholder {
 /* Typographie remise à l'échelle de la carte : agrandir le cadre sans toucher au texte
    aurait juste donné une grande carte aux statistiques minuscules. */
 .active-slot .tcg-card-landscape .tcg-card-name-banner {
-  font-size: clamp(0.95rem, 1.7vh, 1.25rem);
-  padding: 8px 12px;
+  font-size: clamp(1rem, 2vh, 1.45rem);
+  padding: 9px 14px;
 }
 .active-slot .tcg-card-landscape .tcg-card-body {
-  gap: 5px;
-  padding: 7px 12px 9px;
+  gap: 6px;
+  padding: 8px 14px 10px;
 }
 .active-slot .hp-bar {
-  height: 10px;
+  height: 12px;
 }
 .active-slot .shield-bar {
-  height: 6px;
+  height: 7px;
 }
 .active-slot .hp-text {
-  font-size: clamp(0.72rem, 1.35vh, 0.95rem);
+  font-size: clamp(0.78rem, 1.55vh, 1.1rem);
 }
 .active-slot .status-badge {
-  font-size: clamp(0.58rem, 1.05vh, 0.72rem);
-  padding: 1px 5px;
+  font-size: clamp(0.62rem, 1.2vh, 0.84rem);
+  padding: 2px 7px;
 }
 .active-slot .tcg-card-landscape .tcg-card-art {
   flex: 0 0 42%;
@@ -1541,22 +1535,25 @@ input::placeholder {
   flex: 0 0 32%;
 }
 .bench-column .tcg-card-landscape .tcg-card-name-banner {
-  font-size: 0.64rem;
-  padding: 3px 6px 1px;
+  font-size: clamp(0.66rem, 1.2vh, 0.88rem);
+  padding: 4px 7px 2px;
 }
 .bench-column .tcg-card-landscape .tcg-card-body {
-  gap: 2px;
-  padding: 1px 6px 3px;
+  gap: 3px;
+  padding: 2px 7px 4px;
+}
+.bench-column .hp-bar {
+  height: 6px;
 }
 .bench-column .hp-text {
-  font-size: 0.56rem;
+  font-size: clamp(0.58rem, 1.02vh, 0.76rem);
 }
 .bench-column .statuses {
-  gap: 2px;
+  gap: 3px;
 }
 .bench-column .status-badge {
-  font-size: 0.5rem;
-  padding: 0 3px;
+  font-size: clamp(0.5rem, 0.88vh, 0.64rem);
+  padding: 0 4px;
 }
 /* Mini-menu d'un personnage de réserve, ouvert vers le haut (le banc du joueur est en
    bas de sa colonne). */
@@ -2164,6 +2161,27 @@ input::placeholder {
   animation: fx-tint-pulse 1.4s ease-in-out infinite;
 }
 
+/* Marque de Coeur Acier. Deux états, un seul symbole : posée (bleu acier, calme) puis
+   chargée (or, qui pulse) -- le joueur apprend une icône, pas deux. */
+.fx-mark {
+  background: radial-gradient(ellipse at 50% 0%, rgba(127, 199, 242, 0.22), transparent 62%);
+  box-shadow: inset 0 0 0 1px rgba(127, 199, 242, 0.45);
+  animation: fx-tint-pulse 2.4s ease-in-out infinite;
+}
+.fx-mark-icon {
+  color: #9fd4f0;
+}
+.fx-bounty {
+  background: radial-gradient(ellipse at 50% 0%, rgba(224, 168, 63, 0.32), transparent 62%);
+  box-shadow: inset 0 0 0 2px rgba(255, 216, 115, 0.65);
+  animation: fx-tint-pulse 1s ease-in-out infinite;
+}
+.fx-bounty-icon {
+  color: #ffd873;
+  text-shadow: 0 0 6px rgba(255, 216, 115, 0.8), 0 1px 2px rgba(0, 0, 0, 0.85);
+  animation: fx-pulse-scale 1s ease-in-out infinite;
+}
+
 .fx-vulnerable {
   background: radial-gradient(ellipse at 50% 100%, rgba(224, 85, 95, 0.28), transparent 65%);
   animation: fx-pulse-red 1.6s ease-in-out infinite;
@@ -2176,14 +2194,21 @@ input::placeholder {
   animation: fx-tint-pulse 1.5s ease-in-out infinite;
 }
 
-.fx-damage-flash {
+/* Éclair coloré sur toute la carte à chaque modification de PV : rouge pour ce qui est
+   perdu, vert pour ce qui est rendu. */
+.fx-hp-flash {
   position: absolute;
   inset: 0;
-  background: rgba(224, 85, 95, 0.6);
   pointer-events: none;
-  animation: fx-damage-flash-anim 0.4s ease-out;
+  animation: fx-hp-flash-anim 0.4s ease-out;
 }
-@keyframes fx-damage-flash-anim {
+.fx-hp-flash-damage {
+  background: rgba(224, 85, 95, 0.6);
+}
+.fx-hp-flash-heal {
+  background: rgba(79, 211, 154, 0.42);
+}
+@keyframes fx-hp-flash-anim {
   0% {
     opacity: 0.9;
   }
@@ -2192,32 +2217,56 @@ input::placeholder {
   }
 }
 
+/* Chiffre flottant qui monte et s'estompe au-dessus de la carte touchée. Comme tous les
+   calques d'effet, il est rogné par l'`overflow: hidden` de la carte : sa course est donc
+   exprimée en `em` pour rester à l'intérieur du cadre, quelle que soit sa taille. */
 .fx-floaters {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 4;
   pointer-events: none;
 }
 .fx-floater-number {
   position: absolute;
-  font-weight: 700;
-  font-size: 0.85rem;
-  color: #ff6b6b;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
-  animation: fx-float-up 0.95s ease-out forwards;
+  /* Décalage des chiffres qui se suivent de près : deux tics de statut le même tour ne
+     se superposent pas au même endroit. */
+  margin-top: calc(var(--floater-i, 0) * -1.15em);
+  font-weight: 800;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  animation: fx-float-up 1.05s ease-out forwards;
+}
+.fx-floater-damage {
+  color: #ff4d57;
+  text-shadow: 0 0 10px rgba(255, 77, 87, 0.65), 0 2px 3px rgba(0, 0, 0, 0.95);
+}
+.fx-floater-heal {
+  color: #56f0a8;
+  text-shadow: 0 0 10px rgba(86, 240, 168, 0.6), 0 2px 3px rgba(0, 0, 0, 0.95);
+}
+/* Sur le personnage actif, la carte est grande : le chiffre doit l'être aussi. */
+.active-slot .fx-floater-number {
+  font-size: clamp(1.3rem, 2.6vh, 2rem);
 }
 @keyframes fx-float-up {
   0% {
-    transform: translateY(0);
+    transform: translateY(0.4em) scale(0.75);
     opacity: 0;
   }
-  15% {
+  18% {
+    transform: translateY(0) scale(1.12);
     opacity: 1;
   }
+  32% {
+    transform: translateY(-0.25em) scale(1);
+  }
   100% {
-    transform: translateY(-22px);
+    transform: translateY(-1.7em) scale(1);
     opacity: 0;
   }
 }
@@ -2385,11 +2434,39 @@ input::placeholder {
   color: #7fc7f2;
   font-weight: 600;
 }
+/* ATK du moment d'une attaque à dégâts évolutifs (Guts, Hulk, Mundo) ou simplement
+   buffée/réduite. Affiché seulement quand il diffère de la valeur imprimée : une carte
+   qui frappe pour ce qui est écrit dessus n'a rien à corriger. */
+.atk-text {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.atk-text.up {
+  color: #ffc46b;
+}
+.atk-text.down {
+  color: #ff8189;
+}
+/* Même code couleur dans la fiche, sur l'étiquette d'ATK de chaque attaque. */
+.hover-card-tag.atk-up {
+  color: #ffc46b;
+  font-weight: 700;
+}
+.hover-card-tag.atk-down {
+  color: #ff8189;
+  font-weight: 700;
+}
+.hover-card-tag-base {
+  color: var(--text-dim);
+  font-weight: 500;
+}
 .statuses {
   display: flex;
   flex-wrap: wrap;
   gap: 3px;
 }
+/* Code couleur des badges, par famille d'effet (cf. `toneForStatus`) : la teinte se lit
+   avant le texte, et c'est la même dans le glossaire en partie. */
 .status-badge {
   font-size: 0.64rem;
   background: #3a2436;
@@ -2397,7 +2474,38 @@ input::placeholder {
   border: 1px solid rgba(240, 183, 208, 0.18);
   border-radius: 4px;
   padding: 1px 5px;
-  font-weight: 500;
+  font-weight: 600;
+}
+.status-tone-poison {
+  background: rgba(120, 62, 168, 0.28);
+  color: #d3a9f5;
+  border-color: rgba(176, 126, 222, 0.5);
+}
+.status-tone-burn {
+  background: rgba(168, 78, 24, 0.3);
+  color: #ffb47a;
+  border-color: rgba(255, 138, 61, 0.55);
+}
+.status-tone-bleed {
+  background: rgba(150, 40, 46, 0.3);
+  color: #ff9a9a;
+  border-color: rgba(224, 85, 85, 0.55);
+}
+/* Gel / paralysie : tout ce qui immobilise (stun, chaînes). */
+.status-tone-freeze {
+  background: rgba(28, 108, 134, 0.32);
+  color: #a5ecff;
+  border-color: rgba(95, 208, 240, 0.55);
+}
+.status-tone-buff {
+  background: rgba(32, 122, 86, 0.32);
+  color: #8bf0c4;
+  border-color: rgba(79, 211, 154, 0.55);
+}
+.status-tone-debuff {
+  background: rgba(140, 48, 54, 0.3);
+  color: #ffadad;
+  border-color: rgba(255, 107, 107, 0.5);
 }
 .attached-objects {
   font-size: 0.64rem;
@@ -3141,6 +3249,19 @@ textarea {
   flex-wrap: wrap;
   gap: 12px;
 }
+/* Carte du pool interdite par une autre déjà prise dans le deck (Chopper / Soraka) :
+   la carte est grisée, et la raison est écrite sous elle plutôt que seulement en
+   infobulle -- au doigt, il n'y a pas d'infobulle. */
+.deck-card-blocked {
+  display: block;
+  text-align: center;
+  font-size: 0.56rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--danger);
+}
 .deck-card-stepper {
   display: flex;
   align-items: center;
@@ -3243,12 +3364,12 @@ textarea {
   position: fixed;
   z-index: 60;
   display: flex;
-  gap: 18px;
+  gap: 12px;
   align-items: flex-start;
   background: linear-gradient(165deg, var(--panel-raised), var(--panel) 60%);
   border: 1px solid var(--accent);
   border-radius: var(--radius-lg);
-  padding: 16px;
+  padding: 12px;
   box-shadow: var(--shadow-lg), 0 0 0 1px var(--accent-soft);
   animation: card-preview-in 0.14s var(--ease);
 }
@@ -3263,9 +3384,11 @@ textarea {
   }
 }
 .card-preview .tcg-card-large {
-  /* Bornée par la hauteur de la fenêtre : la carte est en 5/7, donc 52vh de large fait
-     ~73vh de haut -- elle ne peut jamais déborder de l'écran. */
-  width: min(440px, 52vh);
+  /* Volontairement petite : c'est une bulle d'aperçu posée à côté de la carte survolée,
+     pas la vue « lire la carte » -- celle-là s'ouvre au clic (.card-inspect) et occupe
+     tout l'écran. Un aperçu au survol qui masque la moitié du plateau rend le combat
+     illisible au moment précis où la souris le traverse. */
+  width: min(190px, 24vh);
   flex-shrink: 0;
 }
 /* L'illustration EST la carte (texte imprimé compris) : en grand format elle est affichée
@@ -3281,16 +3404,35 @@ textarea {
   object-fit: contain;
 }
 .card-preview .tcg-card-large .tcg-card-art {
-  font-size: 4.2rem;
+  font-size: 2.2rem;
 }
 .card-preview .tcg-card-large .tcg-card-name-banner {
-  font-size: 1.15rem;
-  padding: 9px 12px;
+  font-size: 0.82rem;
+  padding: 5px 8px;
 }
 .card-preview-text {
-  width: 300px;
-  max-height: 68vh;
+  width: 250px;
+  max-height: 330px;
   overflow-y: auto;
+}
+/* Le texte suit le format bulle : même contenu, resserré. */
+.card-preview .hover-card-title {
+  font-size: 0.88rem;
+}
+.card-preview .hover-card-subtitle {
+  font-size: 0.7rem;
+}
+.card-preview .hover-card-content p {
+  font-size: 0.76rem;
+  line-height: 1.3;
+}
+.card-preview .hover-card-section {
+  margin-top: 7px;
+  padding-top: 6px;
+}
+.card-preview .hover-card-hp {
+  font-size: 0.72rem;
+  margin: 4px 0;
 }
 
 /* « Voir la carte » : l'illustration seule, aussi grande que l'écran le permet. Pas de
@@ -3338,6 +3480,10 @@ textarea {
 }
 .card-preview.pinned .tcg-card-large {
   width: min(48vw, 200px);
+}
+.card-preview.pinned .tcg-card-large .tcg-card-name-banner {
+  font-size: 0.95rem;
+  padding: 7px 10px;
 }
 .card-preview.pinned .tcg-card-large .tcg-card-art {
   font-size: 2.6rem;
@@ -3561,16 +3707,17 @@ textarea {
     font-size: 0.8rem;
   }
 
-  /* Plateau compacté : mêmes zones, cartes plus petites. */
+  /* Plateau compacté : mêmes zones, cartes plus petites -- mais dans les mêmes
+     proportions qu'en grand écran, l'actif devant rester la pièce maîtresse. */
   .board {
     --card-hand-w: 60px;
-    --bench-card-w: 132px;
-    --bench-card-h: 46px;
+    --bench-card-w: 152px;
+    --bench-card-h: 58px;
     --gy-card-w: 104px;
-    --card-pile-w: 54px;
+    --card-pile-w: 58px;
     --card-opp-hand-w: 38px;
-    --active-card-w: min(94vw, 300px);
-    --active-card-h: 112px;
+    --active-card-w: min(94vw, 340px);
+    --active-card-h: 136px;
   }
   .tcg-card-landscape .tcg-card-name-banner {
     font-size: 0.82rem;
@@ -3636,12 +3783,6 @@ textarea {
   .event-log.floating ul {
     max-height: 168px;
   }
-}
-
-/* Result screen: the "back to lobby" button sits under the banner. */
-.board > .result-banner + .primary {
-  display: block;
-  margin: 0 auto 24px;
 }
 
 /* Error boundary fallback. */
@@ -3854,7 +3995,7 @@ textarea {
 }
 .initiative-wheel-holder {
   position: relative;
-  width: min(62vw, 250px);
+  width: min(70vw, 290px);
   aspect-ratio: 1;
 }
 /* Aiguille fixe, à midi : c'est elle qui désigne la part gagnante. */
@@ -3880,7 +4021,26 @@ textarea {
      midi -- soit des centres de part à 90° et 270°, ceux qu'attend le composant. */
   background: conic-gradient(#3b6fd4 0deg 180deg, #a34bd0 180deg 360deg);
   box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.35), var(--shadow-lg), inset 0 0 44px rgba(0, 0, 0, 0.5);
+}
+/* La roue reste immobile le temps qu'on lise les deux parts et les deux pseudos ; c'est
+   le composant qui pose cette classe pour la lancer. */
+.initiative-wheel.spinning {
   animation: initiative-spin var(--spin-ms) cubic-bezier(0.16, 0.72, 0.1, 1) forwards;
+}
+/* Le trait de coupe : sans lui, deux aplats de couleur ne disent pas « moitié-moitié ». */
+.initiative-wheel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent calc(50% - 1.5px),
+    rgba(255, 255, 255, 0.55) calc(50% - 1.5px),
+    rgba(255, 255, 255, 0.55) calc(50% + 1.5px),
+    transparent calc(50% + 1.5px)
+  );
 }
 @keyframes initiative-spin {
   from {
@@ -3898,16 +4058,26 @@ textarea {
   transform: rotate(var(--seg));
 }
 .initiative-name {
+  /* `flex-start` est ce qui rend la contre-rotation correcte : étiré sur toute la hauteur
+     de la part (le comportement par défaut d'un enfant de flex), le nom pivotait autour du
+     centre de la ROUE et partait en orbite -- on ne voyait plus qu'un nom tourner en
+     boucle. Boîte à la taille du texte = rotation autour de son propre centre, donc un nom
+     qui reste à sa place et se contente de rester droit. */
+  align-self: flex-start;
   margin-top: 13%;
   max-width: 44%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-weight: 800;
   letter-spacing: 0.03em;
   color: #fff;
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+  /* Au repos : le nom annule le décalage de sa part et se lit à l'horizontale. */
+  transform: rotate(calc(var(--seg) * -1));
+}
+.initiative-wheel.spinning .initiative-name {
   animation: initiative-counter-spin var(--spin-ms) cubic-bezier(0.16, 0.72, 0.1, 1) forwards;
 }
 /* Le nom annule à la fois le décalage de sa part et la rotation en cours : il reste
@@ -3919,6 +4089,34 @@ textarea {
   to {
     transform: rotate(calc((var(--seg) + var(--spin)) * -1));
   }
+}
+/* Rappel des deux camps sous la roue, aux couleurs de leurs parts : le tirage doit être
+   lisible même avant que quoi que ce soit ne bouge. */
+.initiative-versus {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.initiative-versus span {
+  max-width: 38vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.initiative-versus-p1 {
+  color: #7fa9f0;
+}
+.initiative-versus-p2 {
+  color: #cf92ea;
+}
+.initiative-versus-vs {
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
 }
 .initiative-result {
   margin: 0;
@@ -3959,7 +4157,9 @@ textarea {
   background: rgba(16, 19, 28, 0.93);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-md);
-  animation: proc-wheel-in 0.9s var(--ease) forwards;
+  /* Durée de vie alignée sur PROC_ROLL_DURATION_MS (gameEvents.ts) : la roue doit rester
+     à l'écran plus longtemps que sa propre rotation, sinon elle disparaît en tournant. */
+  animation: proc-wheel-in 1.8s var(--ease) forwards;
 }
 .proc-wheel.hit {
   --proc-win: #3fbf7f;
@@ -3976,8 +4176,8 @@ textarea {
     opacity: 0;
     transform: translateY(-8px) scale(0.9);
   }
-  14%,
-  78% {
+  7%,
+  88% {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
@@ -3989,8 +4189,8 @@ textarea {
 .proc-wheel-dial {
   position: relative;
   flex-shrink: 0;
-  width: 34px;
-  height: 34px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.16);
   /* La part gagnante occupe le pourcentage annoncé : l'aiguille s'arrête donc dans une
@@ -4008,7 +4208,8 @@ textarea {
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.75);
   translate: -50% -100%;
   transform-origin: 50% 100%;
-  animation: proc-needle-spin 0.55s cubic-bezier(0.18, 0.74, 0.12, 1) forwards;
+  /* 0,8 s exactement : assez lent pour qu'on voie l'aiguille chercher sa part. */
+  animation: proc-needle-spin 0.8s cubic-bezier(0.18, 0.74, 0.12, 1) forwards;
 }
 @keyframes proc-needle-spin {
   from {
@@ -4049,3 +4250,90 @@ textarea {
   color: var(--text-dim);
 }
 
+/* ==========================================================================
+   Fin de partie : verdict posé PAR-DESSUS le plateau (le dernier état de la table
+   est justement ce qu'on regarde en lisant le résultat), et les deux seules suites
+   possibles -- la revanche dans le même salon, ou le retour à l'accueil.
+   ========================================================================== */
+
+.match-over-backdrop {
+  z-index: 64;
+  background: rgba(6, 8, 12, 0.72);
+}
+.match-over {
+  position: relative;
+  z-index: 65;
+  width: min(460px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 26px 28px 20px;
+  text-align: center;
+  background: linear-gradient(165deg, var(--panel-raised), var(--panel) 65%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  animation: modal-pop-in 0.24s var(--ease);
+}
+/* Le verdict se lit à la couleur avant même le mot. */
+.match-over-win {
+  border-color: var(--target);
+  box-shadow: var(--shadow-lg), 0 0 60px -14px var(--target-glow);
+}
+.match-over-loss {
+  border-color: var(--danger);
+  box-shadow: var(--shadow-lg), 0 0 60px -14px rgba(224, 85, 95, 0.5);
+}
+.match-over-draw {
+  border-color: var(--warn);
+  box-shadow: var(--shadow-lg), 0 0 60px -14px rgba(224, 168, 63, 0.45);
+}
+.match-over-icon {
+  font-size: 2.8rem;
+  line-height: 1;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6));
+}
+.match-over-title {
+  margin: 0;
+  font-size: 2.1rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+.match-over-win .match-over-title {
+  color: #79efb4;
+}
+.match-over-loss .match-over-title {
+  color: #ff8189;
+}
+.match-over-draw .match-over-title {
+  color: var(--warn);
+}
+.match-over-subtitle {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+.match-over-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.match-over-actions button {
+  padding: 10px 18px;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.match-over-note {
+  margin: 0;
+  min-height: 1.2em;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+/* L'adversaire attend une réponse : ça ne doit pas se lire comme une note de bas de page. */
+.match-over-note.urgent {
+  color: var(--accent);
+  font-weight: 700;
+}

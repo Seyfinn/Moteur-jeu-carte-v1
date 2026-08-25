@@ -14,6 +14,8 @@ export type ClientMessage =
   | { type: 'action'; action: PlayerAction }
   /** Abandon : recevable à tout moment, tour de l'adversaire ou choix en attente compris. */
   | { type: 'forfeit' }
+  /** Revanche : rejouer dans le même salon, avec les mêmes decks. Il en faut une de chaque camp. */
+  | { type: 'rematch' }
   | { type: 'answer-choice'; choiceId: string; answer: ChoiceAnswer };
 
 export type ServerMessage =
@@ -27,4 +29,6 @@ export type ServerMessage =
   | { type: 'opponent-reconnected' }
   /** A seat the client tried to resume is gone (room reaped, match over and cleaned up...). */
   | { type: 'session-expired' }
+  /** Un camp a demandé la revanche. Les deux la demandent = une nouvelle partie démarre. */
+  | { type: 'rematch-requested'; by: PlayerId }
   | { type: 'error'; message: string };

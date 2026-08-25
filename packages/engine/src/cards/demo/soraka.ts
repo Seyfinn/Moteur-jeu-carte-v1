@@ -10,6 +10,10 @@ export const soraka: CharacterCardDef = {
   id: 'soraka',
   name: 'Soraka',
   baseMaxHP: 160,
+  maxCopies: 1,
+  // Les deux soigneurs du pool ne peuvent pas être empilés dans le même deck. La relation
+  // est symétrique : déclarée ici, elle grise aussi Soraka quand Chopper est déjà pris.
+  incompatibleWith: ['chopper'],
   attacks: [
     {
       id: 'don-force',

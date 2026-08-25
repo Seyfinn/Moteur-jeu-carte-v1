@@ -45,6 +45,15 @@ export type BuiltinStatusId =
   /** Bearer takes VULNERABLE_DAMAGE_BONUS_PERCENT% more damage from every incoming damage instance (never consumed). */
   | 'vulnerable';
 
+export interface RaiseMaxHPOptions {
+  /**
+   * Monte le plafond sans rendre un seul PV : les PV actuels restent où ils sont, l'écart
+   * au plafond grandit d'autant. C'est la lecture littérale d'une carte qui donne des
+   * « HP max (pas de soin) » -- sans ça, la même carte rendrait aussi les PV déjà perdus.
+   */
+  keepCurrentHP?: boolean;
+}
+
 export interface DealDamageOptions {
   /** Bypasses shield entirely: damage hits `damage` directly, ignoring any current `shield` value. */
   ignoreShield?: boolean;

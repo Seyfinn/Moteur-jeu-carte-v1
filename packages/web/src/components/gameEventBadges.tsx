@@ -5,7 +5,6 @@ const CHARACTER_BADGE_LABEL: Record<CharacterBadge['kind'], string> = {
   ability: '✨',
   critical: '🎯',
   evasion: '💨',
-  heal: '💚',
   ko: '💀',
 };
 
@@ -19,8 +18,6 @@ function characterBadgeText(badge: CharacterBadge): string {
       return `CRIT ${badge.percent}%`;
     case 'evasion':
       return `ESQ. ${badge.percent}%`;
-    case 'heal':
-      return `+${badge.amount}`;
   }
 }
 

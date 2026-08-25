@@ -16,21 +16,12 @@ export const bouclierUltime: TerrainCardDef = {
   id: 'bouclier-ultime',
   name: 'Bouclier Ultime',
   description:
-    `Pendant ${DURATION_TURNS} tours, vous ne pouvez plus switcher. En échange, votre banc devient intouchable : ` +
+    `Pendant ${DURATION_TURNS} tours, votre banc devient intouchable : ` +
     'impossible à cibler et immunisé contre tous les dégâts adverses.',
   durationTurns: DURATION_TURNS,
+  // Le terrain n'a plus de contrepartie : il ne verrouille plus le poste actif de son
+  // possesseur (il portait un modifier `canSwitchStandard` refusant le switch).
   modifiers: [
-    // Bloque uniquement le switch standard du possesseur du terrain (comme Stun) -- un switch
-    // forcé externe (ex: Hook de Blitzcrank) bypasse canSwitchStandard et reste possible.
-    // Seul 'chained' (Chaînes) bloque aussi les switchs forcés, dans zones.switchActive.
-    {
-      query: 'canSwitchStandard',
-      vote(ctx) {
-        const player = ctx.state.players[ctx.sourceOwnerId];
-        if (player.activeCharacterInstanceId !== ctx.query['characterInstanceId']) return undefined;
-        return { allow: false, source: SOURCE };
-      },
-    },
     // Le banc du possesseur ne peut pas être choisi comme cible (ex: Hook, qui a été adapté pour
     // consulter canTargetBench avant de proposer un perso du banc adverse).
     {

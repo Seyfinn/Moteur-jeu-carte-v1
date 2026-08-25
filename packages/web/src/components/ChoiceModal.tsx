@@ -78,7 +78,7 @@ function SelectCharacters({
                     {
                       title: name,
                       card: { cardId: instance.cardId, kind: 'character', name },
-                      body: characterDetailBody(instance.cardId, instance),
+                      body: characterDetailBody(instance.cardId, instance, state),
                     },
                     e.currentTarget
                   ),

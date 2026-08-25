@@ -18,7 +18,11 @@ export default function App() {
   return (
     <HoverCardProvider>
       {conn.state && conn.you ? (
-        <Board conn={conn} />
+        // Clé = l'identifiant de la partie : une revanche est une NOUVELLE partie dans le
+        // même salon, et tout ce que le plateau garde en mémoire d'un tour à l'autre (roue
+        // d'initiative déjà jouée, longueur du journal déjà animée, rubrique de commandes
+        // ouverte) doit repartir de zéro avec elle.
+        <Board key={conn.state.id} conn={conn} />
       ) : screen === 'decks' && !conn.resuming ? (
         <DeckBuilder onBack={() => setScreen('lobby')} initialView={deckBuilderView} />
       ) : (

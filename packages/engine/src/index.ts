@@ -1,6 +1,6 @@
 export * from './types.js';
 export * from './rng.js';
-export { getCurrentHP, isKO, dealDamage, applyValeurLock, heal, raiseMaxHP, addShield, removeShield, absorbWithShield } from './hp.js';
+export { getCurrentHP, isKO, dealDamage, applyValeurLock, heal, raiseMaxHP, raiseMaxHPOnly, addShield, removeShield, absorbWithShield } from './hp.js';
 export {
   BUILTIN_STATUS_IDS,
   BURN_DAMAGE,

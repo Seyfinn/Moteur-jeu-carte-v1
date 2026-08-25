@@ -1,6 +1,14 @@
 import type { CoinResult, RngState } from './rng.js';
 import type { EffectContext } from './cards/types.js';
-import type { ChoiceAnswer, ChoiceSpec, DealDamageOptions, EngineEvent, PlayerId, StatusInstance } from './types.js';
+import type {
+  ChoiceAnswer,
+  ChoiceSpec,
+  DealDamageOptions,
+  EngineEvent,
+  PlayerId,
+  RaiseMaxHPOptions,
+  StatusInstance,
+} from './types.js';
 
 /**
  * Every module that needs to "call back up" into cross-cutting behaviour
@@ -18,7 +26,7 @@ export interface EngineApi {
   /** Lets a card's modifier (query 'poisonTicksAsValeurLock') redirect a poison tick into an unhealable max-HP loss instead of ordinary damage -- checked fresh at every tick. */
   poisonTicksAsValeurLock(targetInstanceId: string): boolean;
   heal(targetInstanceId: string, amount: number): void;
-  raiseMaxHP(targetInstanceId: string, amount: number): void;
+  raiseMaxHP(targetInstanceId: string, amount: number, options?: RaiseMaxHPOptions): void;
   addShield(targetInstanceId: string, amount: number): void;
   removeShield(targetInstanceId: string, amount?: number): void;
   applyStatus(targetInstanceId: string, status: StatusInstance): void;
