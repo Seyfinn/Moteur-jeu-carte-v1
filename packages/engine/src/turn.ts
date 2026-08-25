@@ -59,6 +59,10 @@ export async function endTurn(state: GameState, api: EngineApi): Promise<void> {
   if (state.result) return;
 
   state.activePlayerId = otherPlayer(endingPlayer);
-  state.turnNumber += 1;
+  // Un tour de jeu, c'est un tour pour les DEUX joueurs (comme aux échecs) : le compteur
+  // n'avance qu'en revenant à celui qui ouvre la manche. Les durées, elles, se comptent
+  // toujours en tours de leur porteur -- soit exactement une fois par manche, donc « 3
+  // tours » sur une carte veut bien dire 3 tours au sens du compteur affiché.
+  if (state.activePlayerId === state.startingPlayerId) state.turnNumber += 1;
   await startTurn(state, api);
 }

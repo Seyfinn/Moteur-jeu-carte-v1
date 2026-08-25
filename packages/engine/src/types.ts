@@ -332,6 +332,12 @@ export interface GameState {
   /** Winner of the initiative coin flip (section 1). Needed to identify the "second player" for their first-turn exception. */
   startingPlayerId: PlayerId;
   activePlayerId: PlayerId;
+  /**
+   * Numéro de **manche** : un tour de jeu couvre l'action des deux joueurs (comme aux
+   * échecs), donc ce compteur n'avance qu'au retour à `startingPlayerId`. Une durée de
+   * carte (`remainingTurns`) se compte, elle, en tours de son porteur -- une fois par
+   * manche, ce qui revient au même rythme que ce compteur.
+   */
   turnNumber: number;
   phase: GamePhase;
   rng: RngState;

@@ -12,19 +12,28 @@ export const DECK_LIMITS = {
   character: 6,
   object: 8,
   terrain: 3,
+  /** Seuls les objets se prennent en double. */
   maxCopiesPerCard: 2,
-  /** Les terrains sont uniques : un deck ne peut jamais contenir deux fois le même. */
+  /** Personnages et terrains sont uniques : un deck ne peut jamais contenir deux fois le même. */
+  maxCopiesPerCharacter: 1,
   maxCopiesPerTerrain: 1,
 } as const;
 
 /**
  * Nombre d'exemplaires autorisés pour UNE carte : son `maxCopies` s'il en déclare un,
- * sinon la limite générale de son type. Point de passage unique de `validateRoster` et de
+ * sinon la limite de son type. Point de passage unique de `validateRoster` et de
  * `listDeckPool()`, pour que le deck-builder plafonne exactement là où le serveur refuse.
  */
 function maxCopiesOf(def: CardDef): number {
   if (def.maxCopies !== undefined) return def.maxCopies;
-  return def.type === 'terrain' ? DECK_LIMITS.maxCopiesPerTerrain : DECK_LIMITS.maxCopiesPerCard;
+  switch (def.type) {
+    case 'character':
+      return DECK_LIMITS.maxCopiesPerCharacter;
+    case 'terrain':
+      return DECK_LIMITS.maxCopiesPerTerrain;
+    default:
+      return DECK_LIMITS.maxCopiesPerCard;
+  }
 }
 
 /**

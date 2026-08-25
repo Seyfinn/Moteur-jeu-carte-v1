@@ -12,6 +12,30 @@ function opponentOf(id: PlayerId): PlayerId {
 }
 
 describe('Turn structure (section 2)', () => {
+  // Un tour de jeu couvre l'action des DEUX joueurs, comme aux échecs : le compteur
+  // n'avance qu'au retour à celui qui a ouvert la partie.
+  it('compte un tour par manche, pas un par joueur', async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: FX_ROSTER, p2Roster: FX_ROSTER, seed: 12 },
+      { p1ActiveCardId: 'fx-striker', p2ActiveCardId: 'fx-tank' }
+    );
+    const starter = match.state.startingPlayerId;
+    const other = opponentOf(starter);
+    expect(match.state.turnNumber).toBe(1);
+
+    await drive(match, starter, { kind: 'pass' });
+    expect(match.state.activePlayerId).toBe(other);
+    expect(match.state.turnNumber).toBe(1); // toujours le tour 1 : l'autre n'a pas joué
+
+    await drive(match, other, { kind: 'pass' });
+    expect(match.state.activePlayerId).toBe(starter);
+    expect(match.state.turnNumber).toBe(2); // les deux ont joué -> tour suivant
+
+    await drive(match, starter, { kind: 'pass' });
+    await drive(match, other, { kind: 'pass' });
+    expect(match.state.turnNumber).toBe(3);
+  });
+
   it('playing one object is a free action; a second object ends the turn', async () => {
     const match = await createReadyMatch(
       { p1Name: 'A', p2Name: 'B', p1Roster: FX_ROSTER, p2Roster: FX_ROSTER, seed: 10 },

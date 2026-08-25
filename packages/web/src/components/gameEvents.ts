@@ -335,7 +335,10 @@ export function useGameEvents(state: GameState): {
     const newProcRolls: ProcRoll[] = [];
     const newSpotlights: CardSpotlight[] = [];
 
-    if (state.turnNumber !== prevTurnRef.current.turnNumber) {
+    // La main qui passe d'un camp à l'autre, pas le numéro de manche : un tour de jeu
+    // couvre désormais l'action des deux joueurs, donc `turnNumber` ne bouge qu'une fois
+    // sur deux et la bannière « à qui de jouer » sautait un passage sur deux.
+    if (state.activePlayerId !== prevTurnRef.current.activePlayerId) {
       const { activePlayerId: endingPlayerId } = prevTurnRef.current;
       newTableEvents.push({
         kind: 'turn-transition',
