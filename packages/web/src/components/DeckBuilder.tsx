@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { listDeckPool, validateRoster, type DeckPoolEntry } from 'engine';
 import { CardFrame } from './CardFrame';
-import { CardPreviewProvider, DeckContentsPanel, SECTIONS, useCardPreview, type CardKind, type DeckSectionKey } from './DeckContentsPanel';
+import {
+  CardPreviewProvider,
+  DeckContentsPanel,
+  SECTIONS,
+  splitBySubgroup,
+  useCardPreview,
+  type CardKind,
+  type DeckSectionKey,
+} from './DeckContentsPanel';
 import { createEmptyDeck, decodeDeckCode, deckToRoster, encodeDeckCode, loadDecks, saveDecks, type Deck } from '../decks';
 import { usePointerCoarse } from '../hooks/usePointerCoarse';
 
@@ -268,23 +276,32 @@ function DeckEditor({
                     </label>
                   )}
                 </div>
-                {!collapsed && (
-                  <div className="deck-card-grid">
-                    {entries.map((entry) => (
-                      <PoolCardTile
-                        key={entry.id}
-                        entry={entry}
-                        count={countOf(ids, entry.id)}
-                        // Per-card cap, not the global one: a "1x" card (Chopper, Chaînes...) used to be
-                        // addable twice, then blocked the whole deck at save time with a cryptic error.
-                        disabledAdd={ids.length >= section.max || countOf(ids, entry.id) >= entry.maxCopies}
-                        onAdd={() => add(section.key, section.max, entry.id, entry.maxCopies)}
-                        onRemove={() => remove(section.key, entry.id)}
-                      />
-                    ))}
-                    {entries.length === 0 && <p className="subtitle">Aucune carte disponible pour l'instant.</p>}
-                  </div>
-                )}
+                {!collapsed &&
+                  splitBySubgroup(section.type, entries, (entry) => entry.equipment === true).map((group) => (
+                    <div key={group.key}>
+                      {group.title && (
+                        <h3 className="deck-subgroup-header">
+                          {group.title}
+                          <span className="deck-subgroup-hint">{group.hint}</span>
+                        </h3>
+                      )}
+                      <div className="deck-card-grid">
+                        {group.entries.map((entry) => (
+                          <PoolCardTile
+                            key={entry.id}
+                            entry={entry}
+                            count={countOf(ids, entry.id)}
+                            // Per-card cap, not the global one: a "1x" card (Chopper, Chaînes...) used to be
+                            // addable twice, then blocked the whole deck at save time with a cryptic error.
+                            disabledAdd={ids.length >= section.max || countOf(ids, entry.id) >= entry.maxCopies}
+                            onAdd={() => add(section.key, section.max, entry.id, entry.maxCopies)}
+                            onRemove={() => remove(section.key, entry.id)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                {!collapsed && entries.length === 0 && <p className="subtitle">Aucune carte disponible pour l'instant.</p>}
               </div>
             );
           })}

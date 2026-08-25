@@ -16,6 +16,10 @@
   --danger-soft: rgba(224, 85, 95, 0.14);
   --ok: #4caf7d;
   --warn: #e0a83f;
+  /* Ciblage : vert franc, volontairement distinct du bleu « carte active/survolée » et du
+     vert plus doux des barres de vie. */
+  --target: #45e08a;
+  --target-glow: rgba(69, 224, 138, 0.45);
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
@@ -148,9 +152,13 @@ input::placeholder {
   height: 100dvh;
   overflow-y: auto;
   overflow-x: hidden;
-  /* Presque noir : tout le contraste de l'interface se joue contre ce fond, et le
-     décor animé ne doit jamais rivaliser avec le texte posé dessus. */
-  background: #05060a;
+  /* Nuit violette plutôt que noir uni : le décor de cartes se détache dessus au lieu de
+     s'y noyer, et le dégradé donne du relief à un écran qui serait sinon parfaitement
+     plat. Le contraste du texte est repris plus bas, au niveau des panneaux. */
+  background:
+    radial-gradient(ellipse 110% 78% at 50% -8%, #3a2568 0%, rgba(58, 37, 104, 0) 62%),
+    radial-gradient(ellipse 80% 60% at 88% 100%, #2b1a52 0%, rgba(43, 26, 82, 0) 65%),
+    linear-gradient(168deg, #201542 0%, #180f33 34%, #120c26 68%, #0c0819 100%);
 }
 
 /* -- Décor animé ---------------------------------------------------------- */
@@ -261,8 +269,8 @@ input::placeholder {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse 62% 55% at 16% 6%, rgba(79, 140, 255, 0.22), transparent 70%),
-    radial-gradient(ellipse 58% 52% at 86% 94%, rgba(168, 85, 247, 0.2), transparent 70%);
+    radial-gradient(ellipse 62% 55% at 16% 6%, rgba(120, 110, 255, 0.24), transparent 70%),
+    radial-gradient(ellipse 58% 52% at 86% 94%, rgba(178, 92, 255, 0.26), transparent 70%);
   animation: lobby-glow-pulse 22s ease-in-out infinite alternate;
 }
 @keyframes lobby-glow-pulse {
@@ -270,13 +278,15 @@ input::placeholder {
   to { opacity: 1; }
 }
 
-/* Voile de lisibilité : quoi que fasse le décor, le texte garde son contraste. */
+/* Voile de lisibilité, volontairement léger et **violet** plutôt que noir : il unifie le
+   décor et retient les bords, sans éteindre les cartes. Le vrai travail de contraste est
+   fait par le verre dépoli des panneaux, juste derrière le texte qui en a besoin. */
 .lobby-bg-veil {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse 95% 80% at 50% 42%, rgba(5, 6, 10, 0.3), rgba(5, 6, 10, 0.88) 78%),
-    linear-gradient(180deg, rgba(5, 6, 10, 0.7), rgba(5, 6, 10, 0.2) 38%, rgba(5, 6, 10, 0.85));
+    radial-gradient(ellipse 96% 82% at 50% 44%, rgba(18, 11, 38, 0), rgba(14, 9, 30, 0.5) 84%),
+    linear-gradient(180deg, rgba(14, 9, 30, 0.42), rgba(14, 9, 30, 0) 32%, rgba(12, 8, 25, 0.55));
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -360,6 +370,15 @@ input::placeholder {
   font-size: 0.8rem;
   color: var(--text-dim);
 }
+/* Le titre et son accroche sont posés à même le décor, sans panneau derrière eux (le
+   consigne est de n'assombrir que les deux blocs centraux) : leur lisibilité passe donc
+   par une ombre portée, pas par un fond. */
+.lobby-brand-text h1 {
+  filter: drop-shadow(0 0 18px rgba(120, 160, 255, 0.28)) drop-shadow(0 2px 10px rgba(0, 0, 0, 0.85));
+}
+.lobby-tagline {
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
+}
 
 /* Gestion des decks : nécessaire, mais ce n'est pas ce qu'on vient chercher au salon.
    Rangée en onglets discrets pour ne pas encombrer la zone de lancement de partie. */
@@ -403,15 +422,18 @@ input::placeholder {
 
 /* -- Panneaux de verre ---------------------------------------------------- */
 
+/* Les deux blocs centraux sont les seuls endroits où le décor est réellement masqué :
+   verre dépoli teinté nuit, assez opaque pour que texte et boutons restent parfaitement
+   lisibles quelles que soient les cartes qui passent derrière. */
 .lobby-panel,
 .lobby-layout .deck-selected-panel {
   position: relative;
   border-radius: 20px;
-  background: rgba(8, 10, 16, 0.62);
-  backdrop-filter: blur(14px) saturate(135%);
-  -webkit-backdrop-filter: blur(14px) saturate(135%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  background: linear-gradient(180deg, rgba(26, 17, 50, 0.82), rgba(13, 9, 26, 0.86));
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid rgba(178, 150, 255, 0.16);
+  box-shadow: 0 30px 70px -28px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 .lobby-panel::before,
 .lobby-layout .deck-selected-panel::before {
@@ -893,10 +915,13 @@ input::placeholder {
   --gy-card-w: clamp(92px, 12.5vh, 126px);
   --card-pile-w: clamp(48px, 6.5vh, 66px);
   --card-opp-hand-w: clamp(34px, 4.5vh, 56px);
-  --active-card-w: clamp(240px, 32vh, 300px);
-  --active-card-h: clamp(96px, 14vh, 132px);
+  /* Les deux actifs sont les pièces maîtresses du plateau : ils prennent nettement plus
+     de place que tout le reste, et suivent la hauteur de la fenêtre pour ne jamais pousser
+     la main ou le banc hors de l'écran. */
+  --active-card-w: clamp(300px, 44vh, 430px);
+  --active-card-h: clamp(132px, 20vh, 196px);
   position: relative;
-  max-width: 1200px;
+  max-width: 1400px;
   height: 100dvh;
   margin: 0 auto;
   padding: 10px 16px;
@@ -1362,6 +1387,32 @@ input::placeholder {
   --landscape-h: var(--active-card-h);
   display: flex;
 }
+/* Typographie remise à l'échelle de la carte : agrandir le cadre sans toucher au texte
+   aurait juste donné une grande carte aux statistiques minuscules. */
+.active-slot .tcg-card-landscape .tcg-card-name-banner {
+  font-size: clamp(0.95rem, 1.7vh, 1.25rem);
+  padding: 8px 12px;
+}
+.active-slot .tcg-card-landscape .tcg-card-body {
+  gap: 5px;
+  padding: 7px 12px 9px;
+}
+.active-slot .hp-bar {
+  height: 10px;
+}
+.active-slot .shield-bar {
+  height: 6px;
+}
+.active-slot .hp-text {
+  font-size: clamp(0.72rem, 1.35vh, 0.95rem);
+}
+.active-slot .status-badge {
+  font-size: clamp(0.58rem, 1.05vh, 0.72rem);
+  padding: 1px 5px;
+}
+.active-slot .tcg-card-landscape .tcg-card-art {
+  flex: 0 0 42%;
+}
 .active-slot.self {
   justify-content: flex-end;
 }
@@ -1376,6 +1427,91 @@ input::placeholder {
   border-radius: var(--radius-md);
   color: var(--text-dim);
   font-size: 0.78rem;
+}
+
+/* En-tête de sous-famille dans le deck-builder et le panneau de deck : sépare les objets
+   à lier des objets basiques, pour qu'on distingue les deux au moment de composer. */
+.deck-subgroup-header {
+  margin: 10px 0 6px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--warn);
+  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 4px;
+}
+.deck-subgroup-header.compact {
+  margin: 8px 0 4px;
+  font-size: 0.68rem;
+}
+.deck-subgroup-hint {
+  font-weight: 500;
+  font-size: 0.68rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-dim);
+}
+
+/* Objets liés à un personnage.
+   - Personnage actif : la carte de l'objet est posée à côté, en plus petit, du côté
+     *extérieur* du plateau -- entre les deux actifs se joue le face-à-face, on n'y
+     intercale rien.
+   - Banc : pas la place pour une vignette accolée sans élargir toute la colonne, donc une
+     pastille posée sur le coin de la carte (dans le calque d'effets, seul endroit que
+     l'`overflow: hidden` de la carte ne rogne pas). */
+.char-with-attachments {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.active-slot.self .char-with-attachments {
+  flex-direction: row-reverse;
+}
+.attached-object-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.attached-object-card .tcg-card {
+  /* Nettement plus petite que le personnage : un accessoire accroché à la carte, pas une
+     carte de plus sur la table. */
+  width: clamp(52px, 7.5vh, 76px);
+  border-color: var(--warn);
+  box-shadow: 0 0 0 1px rgba(224, 168, 63, 0.35), var(--shadow-sm);
+}
+.attached-object-card .tcg-card-name-banner {
+  font-size: 0.5rem;
+  padding: 2px 3px;
+  line-height: 1.15;
+}
+
+.attached-object-chips {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 3;
+  display: flex;
+  gap: 2px;
+}
+.attached-object-chip {
+  display: block;
+  width: 18px;
+  height: 25px;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--warn);
+  background: var(--panel-alt);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+.attached-object-chip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 22%;
 }
 
 /* Banc : cartes verticales, sous l'actif du joueur et au-dessus de celui de l'adversaire. */
@@ -1538,6 +1674,66 @@ input::placeholder {
   opacity: 0.42;
   filter: grayscale(0.6);
 }
+
+/* Ciblage en cours : les cibles légales s'allument en vert et pulsent, tout le reste du
+   plateau passe en retrait pour qu'on ne puisse pas se tromper de carte. */
+.tcg-card.targetable {
+  cursor: crosshair;
+  border-color: var(--target);
+  border-width: 2px;
+  box-shadow: 0 0 0 1px var(--target), 0 0 18px var(--target-glow), var(--shadow-md);
+  animation: target-pulse 1.5s ease-in-out infinite;
+}
+.tcg-card.targetable:hover {
+  transform: translateY(-3px) scale(1.03);
+  box-shadow: 0 0 0 2px var(--target), 0 0 28px var(--target-glow), var(--shadow-lg);
+}
+.tcg-card.targetable.targeted {
+  animation: none;
+  border-color: #ffffff;
+  box-shadow: 0 0 0 3px var(--target), 0 0 34px var(--target-glow), var(--shadow-lg);
+}
+.tcg-card.targetable.targeted::after {
+  content: '✓';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 2;
+  width: 22px;
+  height: 22px;
+  line-height: 22px;
+  text-align: center;
+  border-radius: 50%;
+  background: var(--target);
+  color: #08130c;
+  font-weight: 800;
+  font-size: 0.9rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+/* `.tcg-card.clickable` est déclaré plus bas dans la feuille : à spécificité égale il
+   gagnerait sur le curseur, et viser garderait la main de « on peut cliquer ». */
+.tcg-card.clickable.targetable {
+  cursor: crosshair;
+}
+@keyframes target-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px var(--target), 0 0 14px var(--target-glow), var(--shadow-md);
+  }
+  50% {
+    box-shadow: 0 0 0 2px var(--target), 0 0 30px var(--target-glow), var(--shadow-md);
+  }
+}
+/* Tout ce qui n'est pas une cible s'efface -- y compris les cartes du plateau adverse. */
+.board.targeting .battlefield .tcg-card:not(.targetable) {
+  opacity: 0.4;
+  filter: grayscale(0.5);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tcg-card.targetable {
+    animation: none;
+  }
+}
 .tcg-card.clickable {
   cursor: pointer;
 }
@@ -1587,10 +1783,35 @@ input::placeholder {
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
 }
 
-.tcg-card-unique-badge {
+/* Pile de pastilles du coin haut-droit : le logo « équipement » et le « 1× » cohabitent
+   sans se marcher dessus quand une carte est les deux à la fois. */
+.tcg-card-badges {
   position: absolute;
   top: 3px;
   right: 3px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  pointer-events: none;
+}
+/* Objet à lier : reconnaissable au premier coup d'œil, avant même de lire le texte. */
+.tcg-card-equip-badge {
+  display: block;
+  padding: 1px 4px;
+  font-size: 0.62rem;
+  line-height: 1.25;
+  border-radius: 999px;
+  background: rgba(20, 24, 32, 0.88);
+  border: 1px solid var(--warn);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+.tcg-card-large .tcg-card-equip-badge {
+  font-size: 0.85rem;
+  padding: 2px 6px;
+}
+.tcg-card-unique-badge {
   z-index: 1;
   padding: 1px 4px;
   font-size: 0.6rem;
@@ -3127,6 +3348,61 @@ textarea {
   overflow-y: visible;
 }
 
+/* Barre de validation du ciblage : posée en bas, par-dessus la main (injouable tant qu'un
+   choix est en cours). Le plateau, lui, reste entièrement visible -- c'est tout l'intérêt
+   par rapport à la modale qu'elle remplace. */
+.targeting-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 46;
+  width: min(560px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--target);
+  background: linear-gradient(180deg, var(--panel-raised), var(--panel));
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(69, 224, 138, 0.18), 0 0 34px var(--target-glow);
+  animation: fade-slide-in 0.16s var(--ease);
+}
+.targeting-bar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.targeting-bar-prompt {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+.targeting-bar-status {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.targeting-bar-status strong {
+  color: var(--target);
+}
+.targeting-bar-count {
+  font-variant-numeric: tabular-nums;
+}
+.targeting-bar-actions {
+  display: flex;
+  gap: 8px;
+}
+.targeting-bar-actions button {
+  flex: 1;
+}
+.targeting-bar-actions .primary:not(:disabled) {
+  background: var(--target);
+  border-color: var(--target);
+  color: #08130c;
+}
+
 /* Carte jouée, projetée en très grand au centre du plateau pour les deux joueurs. Le
    calque ne capte aucun clic : l'animation ne doit jamais avaler une action. */
 .card-spotlight-layer {
@@ -3270,6 +3546,19 @@ textarea {
   }
   .card-spotlight .tcg-card {
     width: min(80vw, 44vh);
+  }
+
+  .targeting-bar {
+    left: 6px;
+    right: 6px;
+    bottom: 6px;
+    width: auto;
+    transform: none;
+    padding: 9px 11px;
+    gap: 6px;
+  }
+  .targeting-bar-prompt {
+    font-size: 0.8rem;
   }
 
   /* Plateau compacté : mêmes zones, cartes plus petites. */

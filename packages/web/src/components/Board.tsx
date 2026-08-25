@@ -13,6 +13,7 @@ import {
 import { CharacterCard } from './CharacterCard';
 import { CardFrame } from './CardFrame';
 import { ChoiceCountdownBadge, ChoiceModal } from './ChoiceModal';
+import { TargetingBar, useBoardTargeting, type BoardTargeting } from './Targeting';
 import { CommandPanel } from './CommandPanel';
 import { EffectsGlossaryButton } from './EffectsGlossary';
 import { EventLog } from './EventLog';
@@ -25,6 +26,7 @@ import { COMBAT_PREVIEW_DELAY_MS, DECK_PREVIEW_DELAY_MS, useCardInspect, useHove
 import { characterDetailBody, terrainDetailBody } from './cardDetails';
 import {
   abilityOptionsFor,
+  attachedObjectsOf,
   characterName,
   objectDenial,
   switchOptions,
@@ -165,10 +167,14 @@ function ActiveSlot({
   char,
   badges,
   side,
+  targeting,
+  state,
 }: {
   char: CharacterInstance | undefined;
   badges?: CharacterBadge[];
   side: 'self' | 'opponent';
+  targeting: BoardTargeting | null;
+  state: GameState;
 }) {
   if (!char) {
     return <div className={`active-slot empty ${side}`}>Aucun personnage actif</div>;
@@ -187,6 +193,10 @@ function ActiveSlot({
         size="large"
         orientation="landscape"
         badges={badges}
+        targetable={targeting?.options.has(char.instanceId)}
+        targeted={targeting?.selected.includes(char.instanceId)}
+        onTarget={() => targeting?.toggle(char.instanceId)}
+        attachedObjects={attachedObjectsOf(state, char)}
       />
     </div>
   );
@@ -260,6 +270,7 @@ function SelfBenchCard({
   isOpen,
   onToggle,
   onClose,
+  targeting,
 }: {
   char: CharacterInstance;
   badges?: CharacterBadge[];
@@ -270,6 +281,7 @@ function SelfBenchCard({
   isOpen: boolean;
   onToggle: () => void;
   onClose: () => void;
+  targeting: BoardTargeting | null;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const name = characterName(char.cardId);
@@ -315,6 +327,10 @@ function SelfBenchCard({
         badges={badges}
         selected={isOpen}
         onSelect={onToggle}
+        targetable={targeting?.options.has(char.instanceId)}
+        targeted={targeting?.selected.includes(char.instanceId)}
+        onTarget={() => targeting?.toggle(char.instanceId)}
+        attachedObjects={attachedObjectsOf(state, char)}
       />
       {isOpen && <BenchMenu name={name} options={options} onClose={onClose} onDetails={inspect.onClick} />}
     </div>
@@ -329,6 +345,7 @@ function BenchRow({
   you,
   conn,
   turnGate,
+  targeting,
 }: {
   player: PlayerState;
   isSelf: boolean;
@@ -337,8 +354,15 @@ function BenchRow({
   you: PlayerId;
   conn: GameConnection;
   turnGate: string | null;
+  targeting: BoardTargeting | null;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  // Un ciblage qui démarre referme le mini-menu : il recouvre les cartes voisines, donc
+  // celles qu'on est justement en train de demander au joueur de comparer.
+  const targetingOn = Boolean(targeting);
+  useEffect(() => {
+    if (targetingOn) setOpenId(null);
+  }, [targetingOn]);
   const bench = player.benchCharacterInstanceIds
     .map((id) => player.characters[id])
     .filter((char): char is CharacterInstance => char !== undefined);
@@ -365,6 +389,7 @@ function BenchRow({
             isOpen={openId === char.instanceId}
             onToggle={() => setOpenId((prev) => (prev === char.instanceId ? null : char.instanceId))}
             onClose={() => setOpenId(null)}
+            targeting={targeting}
           />
         ) : (
           <div className="bench-card-wrap" key={char.instanceId}>
@@ -375,6 +400,10 @@ function BenchRow({
               size="small"
               orientation="landscape"
               badges={badgesByCharacter.get(char.instanceId)}
+              targetable={targeting?.options.has(char.instanceId)}
+              targeted={targeting?.selected.includes(char.instanceId)}
+              onTarget={() => targeting?.toggle(char.instanceId)}
+              attachedObjects={attachedObjectsOf(state, char)}
             />
           </div>
         )
@@ -397,6 +426,13 @@ export function Board({ conn }: { conn: GameConnection }) {
   // Un refus que le client a vu venir (jouer une carte hors de son tour, deuxième terrain
   // du tour...) : il n'atteint jamais le serveur, donc il n'apparaît pas dans conn.error.
   const [localError, setLocalError] = useState<string | null>(null);
+
+  // Lu avant la sortie anticipée de fin de partie : `useBoardTargeting` est un hook, il
+  // doit être appelé à chaque rendu, y compris sur l'écran de résultat.
+  const pendingChoice = state.pendingChoice;
+  const targeting = useBoardTargeting(state, you, pendingChoice, (choiceId, selected) =>
+    conn.answerChoice(choiceId, { kind: 'select-characters', selected })
+  );
 
   // En combat, l'aperçu au survol attend franchement plus longtemps que dans le
   // deck-builder : la souris traverse le plateau en permanence sans chercher à lire quoi
@@ -433,7 +469,6 @@ export function Board({ conn }: { conn: GameConnection }) {
     );
   }
 
-  const pendingChoice = state.pendingChoice;
   const me = state.players[you];
   const opponent = state.players[opponentId];
   const myTurn = state.activePlayerId === you;
@@ -463,7 +498,9 @@ export function Board({ conn }: { conn: GameConnection }) {
   const showInitiativeWheel = !wheelDone && state.phase === 'setup';
 
   return (
-    <div className="board">
+    // `targeting` allume les cibles légales et éteint le reste du plateau : c'est la
+    // classe qui porte cette mise en avant, côté CSS.
+    <div className={`board${targeting ? ' targeting' : ''}`}>
       <header className={`board-header${myTurn ? ' my-turn' : ''}`}>
         <span className="board-header-room">
           Salon <strong>{conn.roomCode}</strong>
@@ -514,6 +551,7 @@ export function Board({ conn }: { conn: GameConnection }) {
                 you={you}
                 conn={conn}
                 turnGate={turnGate}
+                targeting={targeting}
               />
               <TerrainSlot player={me} />
             </div>
@@ -537,6 +575,8 @@ export function Board({ conn }: { conn: GameConnection }) {
               char={activeOf(me)}
               badges={badgesByCharacter.get(me.activeCharacterInstanceId ?? '')}
               side="self"
+              targeting={targeting}
+              state={state}
             />
           </div>
 
@@ -549,6 +589,8 @@ export function Board({ conn }: { conn: GameConnection }) {
               char={activeOf(opponent)}
               badges={badgesByCharacter.get(opponent.activeCharacterInstanceId ?? '')}
               side="opponent"
+              targeting={targeting}
+              state={state}
             />
           </div>
 
@@ -573,6 +615,7 @@ export function Board({ conn }: { conn: GameConnection }) {
                 you={you}
                 conn={conn}
                 turnGate={turnGate}
+                targeting={targeting}
               />
               <TerrainSlot player={opponent} />
             </div>
@@ -601,9 +644,16 @@ export function Board({ conn }: { conn: GameConnection }) {
         />
       )}
 
+      {/* Désigner des personnages se fait sur le plateau (surbrillance + validation) ;
+          la modale ne sert plus qu'aux choix que le plateau ne peut pas montrer : options
+          textuelles, oui/non, ordre de résolution, et le personnage de départ (pas encore
+          posé sur la table à ce moment-là). */}
+      {!showInitiativeWheel && targeting && (
+        <TargetingBar targeting={targeting} state={state} deadline={conn.choiceDeadline} />
+      )}
       {/* Le choix du personnage de départ attend que la roue ait rendu son verdict :
           les deux modales se superposeraient sinon dès la première seconde. */}
-      {!showInitiativeWheel && pendingChoice && pendingChoice.playerId === you && (
+      {!showInitiativeWheel && !targeting && pendingChoice && pendingChoice.playerId === you && (
         <ChoiceModal
           state={state}
           choice={pendingChoice}

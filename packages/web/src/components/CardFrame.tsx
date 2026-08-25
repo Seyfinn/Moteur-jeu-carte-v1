@@ -1,5 +1,21 @@
 import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
+import { getObjectCard } from 'engine';
 import { CardArt } from './CardArt';
+
+/**
+ * Un objet « à lier » se reconnaît d'un coup d'œil, partout où sa carte est affichée
+ * (main, cimetière, deck-builder, aperçu, mise en avant...) : le logo est dérivé du
+ * registre plutôt que passé en prop par chaque appelant, pour qu'aucune surface ne puisse
+ * l'oublier. Carte inconnue du registre = pas de logo, jamais d'erreur.
+ */
+export function isEquipmentCard(cardId: string, kind: 'character' | 'object' | 'terrain'): boolean {
+  if (kind !== 'object') return false;
+  try {
+    return getObjectCard(cardId).equipment === true;
+  } catch {
+    return false;
+  }
+}
 
 export interface HoverHandlers {
   onMouseEnter: (e: MouseEvent<HTMLDivElement>) => void;
@@ -16,6 +32,8 @@ export function CardFrame({
   highlight,
   dimmed,
   unique,
+  targetable,
+  targeted,
   footer,
   effects,
   onClick,
@@ -31,6 +49,10 @@ export function CardFrame({
   dimmed?: boolean;
   /** Marks the card as limited to a single copy per deck (a small corner badge). */
   unique?: boolean;
+  /** Cible légale du ciblage en cours : halo vert et curseur de visée. */
+  targetable?: boolean;
+  /** Déjà retenue dans le ciblage en cours (en attente de validation). */
+  targeted?: boolean;
   footer?: ReactNode;
   /** Absolutely-positioned overlay (status animations, damage flashes...) covering the whole card. */
   effects?: ReactNode;
@@ -43,6 +65,8 @@ export function CardFrame({
   if (highlight) classes.push('highlight');
   if (dimmed) classes.push('dimmed');
   if (onClick) classes.push('clickable');
+  if (targetable) classes.push('targetable');
+  if (targeted) classes.push('targeted');
 
   // Une carte cliquable est un vrai bouton pour le clavier et les lecteurs d'écran :
   // jouer une carte, ouvrir sa fiche ou le mini-menu d'un banc passait par un `div`, donc
@@ -66,9 +90,18 @@ export function CardFrame({
       title={title}
       {...hoverProps}
     >
-      {unique && (
-        <span className="tcg-card-unique-badge" title="Carte unique exemplaire (1 max par deck)">
-          1×
+      {(unique || isEquipmentCard(cardId, kind)) && (
+        <span className="tcg-card-badges">
+          {isEquipmentCard(cardId, kind) && (
+            <span className="tcg-card-equip-badge" title="Équipement : se lie à un personnage et le suit jusqu'à sa mort">
+              🔗
+            </span>
+          )}
+          {unique && (
+            <span className="tcg-card-unique-badge" title="Carte unique exemplaire (1 max par deck)">
+              1×
+            </span>
+          )}
         </span>
       )}
       <CardArt cardId={cardId} kind={kind} />

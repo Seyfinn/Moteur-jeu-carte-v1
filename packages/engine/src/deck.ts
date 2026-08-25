@@ -24,6 +24,8 @@ export interface DeckPoolEntry {
   durationTurns?: number;
   /** Effective max copies allowed in a deck for this card (own `maxCopies` override, or the general `DECK_LIMITS.maxCopiesPerCard`). */
   maxCopies: number;
+  /** Objects only. `true` = équipement (se lie à un personnage) plutôt qu'effet immédiat. */
+  equipment?: boolean;
 }
 
 /** Every card available to put in a deck, for deck-builder UIs. */
@@ -35,6 +37,7 @@ export function listDeckPool(): DeckPoolEntry[] {
     baseMaxHP: def.type === 'character' ? def.baseMaxHP : undefined,
     durationTurns: def.type === 'terrain' ? def.durationTurns : undefined,
     maxCopies: def.maxCopies ?? DECK_LIMITS.maxCopiesPerCard,
+    equipment: def.type === 'object' ? def.equipment : undefined,
   }));
 }
 

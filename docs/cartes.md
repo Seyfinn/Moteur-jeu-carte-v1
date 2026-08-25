@@ -422,6 +422,14 @@ récupérez une carte objet ou terrain au choix dans votre cimetière. »*
 *« À lier à votre personnage actif. Celui-ci subit 100% des dégâts de la prochaine attaque
 qu'il subit et en renvoie immédiatement 50% à l'attaquant, puis le miroir se détruit. »*
 
+- Seule carte **équipement** du pool (`equipment: true` + `ctx.attachSelfTo`) : elle reste
+  en jeu accrochée au porteur au lieu de partir au cimetière une fois jouée. Le client la
+  marque du logo 🔗 partout, la range dans « Objets à lier » au deck-builder, et dessine sa
+  carte à côté du porteur (en pastille sur le coin quand il est au banc).
+- Si le porteur meurt avant que le miroir ne se déclenche, l'objet part au cimetière avec
+  lui (`zones.koCharacter`) — dans le cimetière de **son** propriétaire, même s'il avait
+  été posé sur un personnage adverse.
+
 - Moteur : statut `damage-reflect` (`data: { percent, objectInstanceId }`) ; le moteur
   détruit l'objet porteur en consommant le statut. `attachSelfTo` lie l'objet à l'actif.
 

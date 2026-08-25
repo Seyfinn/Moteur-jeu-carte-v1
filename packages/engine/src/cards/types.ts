@@ -268,6 +268,17 @@ export interface ObjectCardDef {
   family?: string;
   /** Overrides DECK_LIMITS.maxCopiesPerCard for this specific card. Absent = use the general limit. */
   maxCopies?: number;
+  /**
+   * Objet « à lier » : au lieu de partir au cimetière une fois son effet résolu, il reste
+   * en jeu accroché à un personnage (et le suit au cimetière quand celui-ci meurt).
+   *
+   * Purement **déclaratif** : c'est `ctx.attachSelfTo()` dans `execute` qui réalise
+   * l'attache. Ce champ est ce que lit le client pour marquer la carte d'un logo
+   * « équipement » partout où elle est affichée, et pour la classer dans la sous-catégorie
+   * Équipements du deck-builder. Les deux vont ensemble : une carte qui s'attache sans ce
+   * champ n'aurait pas de logo, une carte qui le porte sans s'attacher mentirait au joueur.
+   */
+  equipment?: boolean;
 }
 
 export interface TerrainCardDef {

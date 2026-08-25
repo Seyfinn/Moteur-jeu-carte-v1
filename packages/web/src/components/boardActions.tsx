@@ -11,6 +11,7 @@ import {
   getEffectiveATK,
   getObjectCard,
   getTerrainCard,
+  type CharacterInstance,
   type GameState,
   type PlayerId,
   type Vote,
@@ -31,6 +32,28 @@ export function terrainName(cardId: string): string {
   } catch {
     return cardId;
   }
+}
+
+/** Un objet posé sur un personnage, tel que le plateau doit l'afficher à côté de lui. */
+export interface AttachedObjectView {
+  instanceId: string;
+  cardId: string;
+  name: string;
+}
+
+/**
+ * Les objets liés à un personnage. Ils sont cherchés dans les **deux** camps : le moteur
+ * autorise explicitement d'équiper un personnage adverse, donc l'objet n'appartient pas
+ * forcément au propriétaire de la carte sur laquelle il est posé.
+ */
+export function attachedObjectsOf(state: GameState, char: CharacterInstance): AttachedObjectView[] {
+  const views: AttachedObjectView[] = [];
+  for (const instanceId of char.attachedObjectInstanceIds) {
+    const obj = state.players.p1.objects[instanceId] ?? state.players.p2.objects[instanceId];
+    if (!obj) continue; // caviardé pour ce joueur : rien à montrer plutôt qu'une carte fantôme
+    views.push({ instanceId, cardId: obj.cardId, name: objectName(obj.cardId) });
+  }
+  return views;
 }
 
 export function characterName(cardId: string): string {
