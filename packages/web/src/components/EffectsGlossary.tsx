@@ -11,6 +11,7 @@ import {
   POISON_PERCENT_OF_MAX_HP,
   VULNERABLE_DAMAGE_BONUS_PERCENT,
 } from 'engine';
+import { STATUS_TONE_COLOR, type StatusTone } from './statusEffects';
 
 /**
  * Règles de jeu consultables en cours de partie. Chaque nombre affiché vient d'une
@@ -25,8 +26,12 @@ interface GlossaryEntry {
   id: string;
   name: string;
   icon: string;
-  /** Teinte de l'entrée, alignée sur l'effet visuel de la carte (voir statusEffects.tsx). */
-  color: string;
+  /**
+   * Famille de couleur, la même que celle du badge posé sur la carte : elle vient de
+   * `statusEffects.tsx` et jamais d'une teinte recopiée ici, sinon les deux surfaces
+   * finissent par se contredire sur le même effet.
+   */
+  tone: StatusTone;
   text: string;
 }
 
@@ -37,21 +42,21 @@ const ENTRIES: GlossaryEntry[] = [
     id: 'poison',
     name: 'Poison',
     icon: '☠',
-    color: '#b07ede',
+    tone: 'poison',
     text: `${POISON_FLAT_DAMAGE} HP + ${pct(POISON_PERCENT_OF_MAX_HP)} des HP max par tour.`,
   },
   {
     id: 'burn',
     name: 'Burn (Brûlure)',
     icon: '🔥',
-    color: '#ff8a3d',
+    tone: 'burn',
     text: `${BURN_DAMAGE} HP par tour. Rebrûler une cible déjà en feu additionne les durées.`,
   },
   {
     id: 'bleed',
     name: 'Bleed (Saignement)',
     icon: '🩸',
-    color: '#e05555',
+    tone: 'bleed',
     text:
       `Dégâts par tour selon le nombre de stacks sur les HP max ` +
       `(1 stack = ${pct(BLEED_PERCENT_PER_STACK)}, 2 = ${pct(BLEED_PERCENT_PER_STACK * 2)}, ` +
@@ -62,56 +67,56 @@ const ENTRIES: GlossaryEntry[] = [
     id: 'vulnerable',
     name: 'Vulnérable',
     icon: '🎯',
-    color: '#e0a83f',
+    tone: 'debuff',
     text: `La cible prend +${VULNERABLE_DAMAGE_BONUS_PERCENT}% de dégâts.`,
   },
   {
     id: 'stun',
     name: 'Stun',
     icon: '✦',
-    color: '#ffe066',
+    tone: 'freeze',
     text: "Bloque totalement le personnage (ne peut ni attaquer, ni switcher, ni utiliser d'ability).",
   },
   {
     id: 'disarmed',
     name: 'Désarmé',
     icon: '⊘',
-    color: '#b0b0b0',
+    tone: 'debuff',
     text: "Empêche d'effectuer une attaque.",
   },
   {
     id: 'silence-active',
     name: 'Silence actif',
     icon: '✕',
-    color: '#ff6b6b',
+    tone: 'debuff',
     text: "Empêche l'utilisation des abilities actives.",
   },
   {
     id: 'silence-passive',
     name: 'Silence passif',
     icon: '✕',
-    color: '#ff6b6b',
+    tone: 'debuff',
     text: 'Empêche le déclenchement des abilities passives.',
   },
   {
     id: 'silence-ultimate',
     name: 'Silence ultime',
     icon: '✕',
-    color: '#ff6b6b',
+    tone: 'debuff',
     text: 'Bloque simultanément les abilities actives et passives.',
   },
   {
     id: 'critical',
     name: 'Critique',
     icon: '◎',
-    color: '#ff4d4d',
+    tone: 'buff',
     text: `${CRITICAL_STATUS_CHANCE_PERCENT}% de chance de proc → fait x${BASE_CRITICAL_MULTIPLIER} de dégâts.`,
   },
   {
     id: 'evasive',
     name: 'Esquive',
     icon: '»',
-    color: '#7fc7f2',
+    tone: 'buff',
     text: `${EVASIVE_STATUS_CHANCE_PERCENT}% de chance d'esquiver.`,
   },
 ];
@@ -145,7 +150,11 @@ function GlossaryPanel({ onClose }: { onClose: () => void }) {
         <div className="glossary-scroll">
           <ul className="glossary-list">
             {ENTRIES.map((entry) => (
-              <li key={entry.id} className="glossary-entry" style={{ ['--glossary-accent' as string]: entry.color }}>
+              <li
+                key={entry.id}
+                className="glossary-entry"
+                style={{ ['--glossary-accent' as string]: STATUS_TONE_COLOR[entry.tone] }}
+              >
                 <span className="glossary-icon" aria-hidden="true">
                   {entry.icon}
                 </span>

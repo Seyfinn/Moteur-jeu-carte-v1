@@ -1,8 +1,15 @@
-import { getCharacterCard, getObjectCard, getTerrainCard, type CharacterInstance } from 'engine';
+import { getCharacterCard, getObjectCard, getTerrainCard, type CharacterInstance, type GameState } from 'engine';
 import { statusBadgeText } from './CharacterCard';
+import { attackReadouts } from './boardActions';
 
-export function characterDetailBody(cardId: string, instance?: CharacterInstance) {
+/**
+ * Fiche d'un personnage. Avec `instance` + `state`, les ATK affichés sont ceux du moment
+ * (dégâts évolutifs de Guts/Hulk/Mundo, buffs, malus) et non les valeurs imprimées : sans
+ * `state` -- deck-builder, aperçu d'une carte hors jeu -- on retombe sur la carte nue.
+ */
+export function characterDetailBody(cardId: string, instance?: CharacterInstance, state?: GameState) {
   const def = getCharacterCard(cardId);
+  const readouts = instance && state ? attackReadouts(state, instance) : [];
   const currentHP = instance ? Math.max(0, instance.currentMaxHP - instance.damage) : undefined;
   // Même total que sur la carte : bouclier du moteur + réserves portées par un statut
   // (`data.shield`, cf. Mana Barrier de Blitzcrank).
@@ -35,15 +42,22 @@ export function characterDetailBody(cardId: string, instance?: CharacterInstance
       {def.attacks.length > 0 && (
         <div className="hover-card-section">
           <h4>Attaques</h4>
-          {def.attacks.map((a) => (
-            <div key={a.id} className="hover-card-entry">
-              <div className="hover-card-entry-head">
-                <strong>{a.name}</strong>
-                <span className="hover-card-tag">{a.baseATK} ATK</span>
+          {def.attacks.map((a) => {
+            const live = readouts.find((r) => r.id === a.id);
+            const boosted = live !== undefined && live.effective !== a.baseATK;
+            return (
+              <div key={a.id} className="hover-card-entry">
+                <div className="hover-card-entry-head">
+                  <strong>{a.name}</strong>
+                  <span className={`hover-card-tag${boosted ? (live.effective > a.baseATK ? ' atk-up' : ' atk-down') : ''}`}>
+                    {live ? live.effective : a.baseATK} ATK
+                    {boosted && <span className="hover-card-tag-base"> (imprimé {a.baseATK})</span>}
+                  </span>
+                </div>
+                <p>{a.description}</p>
               </div>
-              <p>{a.description}</p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

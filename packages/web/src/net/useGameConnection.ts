@@ -61,6 +61,13 @@ export interface GameConnection {
   clearError(): void;
   /** Concedes the match: the opponent wins immediately, whoever's turn it is. */
   forfeit(): void;
+  /**
+   * Revanche : rejouer dans le même salon avec les mêmes decks. Il en faut une des deux
+   * camps -- `rematchVotes` dit qui l'a déjà demandée, pour que l'écran de fin puisse
+   * afficher « en attente de l'adversaire ».
+   */
+  requestRematch(): void;
+  rematchVotes: PlayerId[];
   /** Closes the socket and returns to the lobby (used once a game is over). */
   leave(): void;
 }
@@ -73,6 +80,7 @@ export function useGameConnection(): GameConnection {
   const [error, setError] = useState<string | null>(null);
   const [opponentDisconnected, setOpponentDisconnected] = useState(false);
   const [choiceDeadline, setChoiceDeadline] = useState<number | null>(null);
+  const [rematchVotes, setRematchVotes] = useState<PlayerId[]>([]);
   const [resuming, setResuming] = useState(() => readSessionToken() !== null);
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -134,6 +142,12 @@ export function useGameConnection(): GameConnection {
             setStatus('playing');
             setResuming(false);
             setError(null);
+            // Une partie en cours = la revanche précédente a abouti (ou n'a jamais été
+            // demandée) : les votes ne valent que pour la partie qu'ils concluent.
+            if (!message.state.result) setRematchVotes([]);
+            break;
+          case 'rematch-requested':
+            setRematchVotes((votes) => (votes.includes(message.by) ? votes : [...votes, message.by]));
             break;
           case 'opponent-disconnected':
             setOpponentDisconnected(true);
@@ -223,6 +237,9 @@ export function useGameConnection(): GameConnection {
   // Deliberately keeps the socket open: the server ends the match and both sides get the
   // result screen from the state broadcast, exactly like a game won on the board.
   const forfeit = useCallback(() => send({ type: 'forfeit' }), [send]);
+  // Comme l'abandon, la revanche garde le salon ouvert : le serveur remet une partie en
+  // place dès que les deux camps l'ont demandée et la diffuse comme n'importe quel état.
+  const requestRematch = useCallback(() => send({ type: 'rematch' }), [send]);
 
   const leave = useCallback(() => {
     writeSessionToken(null);
@@ -235,6 +252,7 @@ export function useGameConnection(): GameConnection {
     setYou(null);
     setRoomCode(null);
     setOpponentDisconnected(false);
+    setRematchVotes([]);
     setError(null);
     setStatus('idle');
   }, []);
@@ -252,6 +270,8 @@ export function useGameConnection(): GameConnection {
     answerChoice,
     clearError,
     forfeit,
+    requestRematch,
+    rematchVotes,
     leave,
     choiceDeadline,
     resuming,

@@ -54,9 +54,14 @@ const HoverCardCtx = createContext<HoverCardApi | null>(null);
 
 const POPOVER_WIDTH = 320;
 const POPOVER_MAX_HEIGHT = 420;
-/** Largeur de l'aperçu « carte en grand + texte » (la carte y occupe la majeure partie). */
-const PREVIEW_WIDTH = 800;
-const PREVIEW_MAX_HEIGHT = 700;
+/**
+ * Encombrement de la bulle d'aperçu (carte + texte, cf. `.card-preview`). Sert uniquement
+ * à décider de quel côté de la carte survolée elle s'ouvre : les deux nombres doivent
+ * rester alignés sur la CSS, sinon la bulle est placée comme si elle était plus grosse
+ * qu'elle ne l'est et bascule à gauche sans raison.
+ */
+const PREVIEW_WIDTH = 490;
+const PREVIEW_MAX_HEIGHT = 380;
 /**
  * Délai par défaut avant l'aperçu au survol : celui du deck-builder, où l'on parcourt une
  * grille de cartes pour les lire. Le plateau le remonte à `COMBAT_PREVIEW_DELAY_MS` via

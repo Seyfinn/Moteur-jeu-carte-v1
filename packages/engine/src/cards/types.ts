@@ -7,6 +7,7 @@ import type {
   GameState,
   ObjectInstance,
   PlayerId,
+  RaiseMaxHPOptions,
   StatusInstance,
   TerrainInstance,
 } from '../types.js';
@@ -148,8 +149,12 @@ export interface EffectContext {
   applyValeurLock(targetInstanceId: string, amount: number): Promise<void>;
   /** Restores lost (non-locked) HP, capped at currentMaxHP. Does not affect shield. */
   heal(targetInstanceId: string, amount: number): void;
-  /** The positive counterpart to applyValeurLock: permanently raises the HP ceiling. */
-  raiseMaxHP(targetInstanceId: string, amount: number): void;
+  /**
+   * The positive counterpart to applyValeurLock: permanently raises the HP ceiling. Les PV
+   * actuels montent d'autant, sauf avec `{ keepCurrentHP: true }` -- pour une carte qui
+   * donne des « HP max sans soin » (la prime de Coeur Acier).
+   */
+  raiseMaxHP(targetInstanceId: string, amount: number, options?: RaiseMaxHPOptions): void;
 
   /** Adds shield points on top of current HP; absorbs ordinary damage first, persists on the bench. */
   addShield(targetInstanceId: string, amount: number): void;
@@ -242,8 +247,14 @@ export interface CharacterCardDef {
   modifiers?: ModifierDef[];
   /** Card family for cross-card synergies (e.g. "NEN"). Absent = basic card, no family. */
   family?: string;
-  /** Overrides DECK_LIMITS.maxCopiesPerCard for this specific card. Absent = use the general limit. */
+  /** Overrides the general per-card copy limit of DECK_LIMITS for this specific card. Absent = use the general limit. */
   maxCopies?: number;
+  /**
+   * Cartes qui ne peuvent pas cohabiter avec celle-ci dans un même deck (ids). La relation
+   * est **symétrique** : la déclarer d'un seul côté suffit, `listDeckPool()` en renvoie la
+   * clôture pour que le deck-builder grise l'autre carte sans avoir à connaître le sens.
+   */
+  incompatibleWith?: string[];
 }
 
 export interface ObjectCardDef {
@@ -266,8 +277,14 @@ export interface ObjectCardDef {
   modifiers?: ModifierDef[];
   /** Card family for cross-card synergies (e.g. "NEN"). Absent = basic card, no family. */
   family?: string;
-  /** Overrides DECK_LIMITS.maxCopiesPerCard for this specific card. Absent = use the general limit. */
+  /** Overrides the general per-card copy limit of DECK_LIMITS for this specific card. Absent = use the general limit. */
   maxCopies?: number;
+  /**
+   * Cartes qui ne peuvent pas cohabiter avec celle-ci dans un même deck (ids). La relation
+   * est **symétrique** : la déclarer d'un seul côté suffit, `listDeckPool()` en renvoie la
+   * clôture pour que le deck-builder grise l'autre carte sans avoir à connaître le sens.
+   */
+  incompatibleWith?: string[];
   /**
    * Objet « à lier » : au lieu de partir au cimetière une fois son effet résolu, il reste
    * en jeu accroché à un personnage (et le suit au cimetière quand celui-ci meurt).
@@ -292,8 +309,14 @@ export interface TerrainCardDef {
   modifiers?: ModifierDef[];
   /** Card family for cross-card synergies (e.g. "NEN"). Absent = basic card, no family. */
   family?: string;
-  /** Overrides DECK_LIMITS.maxCopiesPerCard for this specific card. Absent = use the general limit. */
+  /** Overrides the general per-card copy limit of DECK_LIMITS for this specific card. Absent = use the general limit. */
   maxCopies?: number;
+  /**
+   * Cartes qui ne peuvent pas cohabiter avec celle-ci dans un même deck (ids). La relation
+   * est **symétrique** : la déclarer d'un seul côté suffit, `listDeckPool()` en renvoie la
+   * clôture pour que le deck-builder grise l'autre carte sans avoir à connaître le sens.
+   */
+  incompatibleWith?: string[];
 }
 
 export type CardDef = CharacterCardDef | ObjectCardDef | TerrainCardDef;

@@ -1,7 +1,26 @@
+/**
+ * Famille de couleur d'un statut. C'est le code couleur que le joueur apprend une fois
+ * pour toutes : violet = poison, orange = brûlure, rouge = saignement, cyan = entravé
+ * (stun / chaînes), vert = bonus, rouge sombre = malus. Il sert au badge posé sur la
+ * carte ET au glossaire en partie, pour que le même effet ait la même teinte partout.
+ */
+export type StatusTone = 'poison' | 'burn' | 'bleed' | 'freeze' | 'buff' | 'debuff' | 'neutral';
+
+export const STATUS_TONE_COLOR: Record<StatusTone, string> = {
+  poison: '#b07ede',
+  burn: '#ff8a3d',
+  bleed: '#e05555',
+  freeze: '#5fd0f0',
+  buff: '#4fd39a',
+  debuff: '#ff6b6b',
+  neutral: '#f0b7d0',
+};
+
 /** Maps a status id to its on-card visual treatment. Unknown/custom status ids (card-specific
  * counters, locks, etc.) fall back to a neutral generic effect so they still show *something*. */
 interface StatusVisual {
   className: string;
+  tone: StatusTone;
   particles?:
     | 'bubbles'
     | 'embers'
@@ -16,41 +35,54 @@ interface StatusVisual {
     | 'sparkle'
     | 'lock'
     | 'shield'
-    | 'drip';
+    | 'drip'
+    | 'mark'
+    | 'bounty';
 }
 
 const STATUS_VISUALS: Record<string, StatusVisual> = {
-  poison: { className: 'fx-poison', particles: 'bubbles' },
-  burn: { className: 'fx-burn', particles: 'embers' },
-  bleed: { className: 'fx-bleed', particles: 'drip' },
-  chained: { className: 'fx-chained', particles: 'chain' },
-  'atk-boost': { className: 'fx-atk-boost', particles: 'arrow-up' },
-  'atk-reduction': { className: 'fx-atk-reduction', particles: 'arrow-down' },
-  stun: { className: 'fx-stun', particles: 'stun-stars' },
-  disarmed: { className: 'fx-disarmed', particles: 'ban' },
-  evasive: { className: 'fx-evasive', particles: 'dash' },
-  critical: { className: 'fx-critical', particles: 'target' },
-  'silence-active': { className: 'fx-silence', particles: 'mute' },
-  'silence-passive': { className: 'fx-silence', particles: 'mute' },
-  'silence-ultimate': { className: 'fx-silence', particles: 'mute' },
+  poison: { className: 'fx-poison', particles: 'bubbles', tone: 'poison' },
+  burn: { className: 'fx-burn', particles: 'embers', tone: 'burn' },
+  bleed: { className: 'fx-bleed', particles: 'drip', tone: 'bleed' },
+  chained: { className: 'fx-chained', particles: 'chain', tone: 'freeze' },
+  'atk-boost': { className: 'fx-atk-boost', particles: 'arrow-up', tone: 'buff' },
+  'atk-reduction': { className: 'fx-atk-reduction', particles: 'arrow-down', tone: 'debuff' },
+  stun: { className: 'fx-stun', particles: 'stun-stars', tone: 'freeze' },
+  disarmed: { className: 'fx-disarmed', particles: 'ban', tone: 'debuff' },
+  evasive: { className: 'fx-evasive', particles: 'dash', tone: 'buff' },
+  critical: { className: 'fx-critical', particles: 'target', tone: 'buff' },
+  'silence-active': { className: 'fx-silence', particles: 'mute', tone: 'debuff' },
+  'silence-passive': { className: 'fx-silence', particles: 'mute', tone: 'debuff' },
+  'silence-ultimate': { className: 'fx-silence', particles: 'mute', tone: 'debuff' },
   // Other engine-recognized statuses (see BuiltinStatusId in engine/src/types.ts).
-  'death-ward': { className: 'fx-shield', particles: 'shield' },
-  'atk-multiplier': { className: 'fx-atk-boost', particles: 'arrow-up' },
-  concentration: { className: 'fx-critical', particles: 'target' },
-  'damage-reflect': { className: 'fx-shield', particles: 'shield' },
-  'bench-damage-bonus': { className: 'fx-atk-boost', particles: 'arrow-up' },
-  'hit-bounty': { className: 'fx-critical', particles: 'target' },
-  vulnerable: { className: 'fx-vulnerable', particles: 'target' },
+  'death-ward': { className: 'fx-shield', particles: 'shield', tone: 'buff' },
+  'atk-multiplier': { className: 'fx-atk-boost', particles: 'arrow-up', tone: 'buff' },
+  concentration: { className: 'fx-critical', particles: 'target', tone: 'buff' },
+  'damage-reflect': { className: 'fx-shield', particles: 'shield', tone: 'buff' },
+  'bench-damage-bonus': { className: 'fx-atk-boost', particles: 'arrow-up', tone: 'buff' },
+  // Marque posée sur le porteur au bénéfice de celui qui le frappe : un malus, pas un bonus.
+  // Visuel dédié (et non celui du critique) : c'est la version *armée* de `coeur-acier-mark`,
+  // même symbole, en or et en mouvement -- le porteur doit voir que la prime est prête.
+  'hit-bounty': { className: 'fx-bounty', particles: 'bounty', tone: 'debuff' },
+  vulnerable: { className: 'fx-vulnerable', particles: 'target', tone: 'debuff' },
   // Card-specific statuses whose semantics (shield / ability lock) match an existing
   // built-in visual closely enough to reuse it, rather than falling back to the generic one.
-  'blitzcrank-mana-barrier-shield': { className: 'fx-shield', particles: 'shield' },
-  'blitzcrank-hook-locked': { className: 'fx-locked', particles: 'lock' },
+  'blitzcrank-mana-barrier-shield': { className: 'fx-shield', particles: 'shield', tone: 'buff' },
+  // Marque de Coeur Acier, avant qu'elle ne se charge : même symbole que `hit-bounty`
+  // ci-dessus, en bleu acier et immobile -- « repérée, mais pas encore dangereuse ».
+  'coeur-acier-mark': { className: 'fx-mark', particles: 'mark', tone: 'debuff' },
+  'blitzcrank-hook-locked': { className: 'fx-locked', particles: 'lock', tone: 'debuff' },
 };
 
-const DEFAULT_VISUAL: StatusVisual = { className: 'fx-generic', particles: 'sparkle' };
+const DEFAULT_VISUAL: StatusVisual = { className: 'fx-generic', particles: 'sparkle', tone: 'neutral' };
 
 export function visualForStatus(statusId: string): StatusVisual {
   return STATUS_VISUALS[statusId] ?? DEFAULT_VISUAL;
+}
+
+/** Teinte du badge d'un statut. Un statut inventé par une carte reste neutre. */
+export function toneForStatus(statusId: string): StatusTone {
+  return visualForStatus(statusId).tone;
 }
 
 function Particles({ kind }: { kind: StatusVisual['particles'] }) {
@@ -101,6 +133,10 @@ function Particles({ kind }: { kind: StatusVisual['particles'] }) {
       return <span className="fx-icon fx-lock-icon">🔒</span>;
     case 'shield':
       return <span className="fx-icon fx-shield-icon">🛡</span>;
+    case 'mark':
+      return <span className="fx-icon fx-mark-icon">❖</span>;
+    case 'bounty':
+      return <span className="fx-icon fx-bounty-icon">❖</span>;
     default:
       return null;
   }

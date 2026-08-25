@@ -13,12 +13,13 @@ import {
 import { CharacterCard } from './CharacterCard';
 import { CardFrame } from './CardFrame';
 import { ChoiceCountdownBadge, ChoiceModal } from './ChoiceModal';
-import { TargetingBar, useBoardTargeting, type BoardTargeting } from './Targeting';
+import { switchTargeting, TargetingBar, useBoardTargeting, type BoardTargeting } from './Targeting';
 import { CommandPanel } from './CommandPanel';
 import { EffectsGlossaryButton } from './EffectsGlossary';
 import { EventLog } from './EventLog';
 import { GraveyardPile } from './GraveyardPile';
 import { InitiativeWheel } from './InitiativeWheel';
+import { MatchOverModal } from './MatchOverModal';
 import { ProcWheels } from './ProcWheel';
 import { CardSpotlights } from './CardSpotlight';
 import { OpponentHand, PlayerHand } from './HandFan';
@@ -197,6 +198,7 @@ function ActiveSlot({
         targeted={targeting?.selected.includes(char.instanceId)}
         onTarget={() => targeting?.toggle(char.instanceId)}
         attachedObjects={attachedObjectsOf(state, char)}
+        state={state}
       />
     </div>
   );
@@ -289,7 +291,7 @@ function SelfBenchCard({
     id: char.instanceId,
     title: name,
     card: { cardId: char.cardId, kind: 'character', name },
-    body: characterDetailBody(char.cardId, char),
+    body: characterDetailBody(char.cardId, char, state),
   });
 
   useEffect(() => {
@@ -331,6 +333,7 @@ function SelfBenchCard({
         targeted={targeting?.selected.includes(char.instanceId)}
         onTarget={() => targeting?.toggle(char.instanceId)}
         attachedObjects={attachedObjectsOf(state, char)}
+        state={state}
       />
       {isOpen && <BenchMenu name={name} options={options} onClose={onClose} onDetails={inspect.onClick} />}
     </div>
@@ -404,6 +407,7 @@ function BenchRow({
               targeted={targeting?.selected.includes(char.instanceId)}
               onTarget={() => targeting?.toggle(char.instanceId)}
               attachedObjects={attachedObjectsOf(state, char)}
+              state={state}
             />
           </div>
         )
@@ -427,12 +431,37 @@ export function Board({ conn }: { conn: GameConnection }) {
   // du tour...) : il n'atteint jamais le serveur, donc il n'apparaît pas dans conn.error.
   const [localError, setLocalError] = useState<string | null>(null);
 
-  // Lu avant la sortie anticipée de fin de partie : `useBoardTargeting` est un hook, il
-  // doit être appelé à chaque rendu, y compris sur l'écran de résultat.
   const pendingChoice = state.pendingChoice;
-  const targeting = useBoardTargeting(state, you, pendingChoice, (choiceId, selected) =>
+  const choiceTargeting = useBoardTargeting(state, you, pendingChoice, (choiceId, selected) =>
     conn.answerChoice(choiceId, { kind: 'select-characters', selected })
   );
+
+  const myTurn = state.activePlayerId === you;
+  const canAct = myTurn && state.phase === 'main' && !pendingChoice && !state.result;
+
+  // Changement de personnage : le bouton « Switch » n'ouvre plus de liste, il allume le
+  // banc et attend un clic sur une carte.
+  const [switchMode, setSwitchMode] = useState(false);
+  // Le mode ne survit pas à ce qui le rend illégal (fin du tour, choix du moteur qui
+  // s'ouvre, partie terminée) : sinon le plateau resterait allumé pour rien.
+  useEffect(() => {
+    if (!canAct) setSwitchMode(false);
+  }, [canAct]);
+
+  // Un choix du moteur passe devant : il est, lui, attendu par le serveur.
+  const targeting =
+    choiceTargeting ??
+    (switchMode
+      ? switchTargeting(
+          state,
+          you,
+          (instanceId) => {
+            conn.applyAction({ kind: 'switch', newActiveInstanceId: instanceId });
+            setSwitchMode(false);
+          },
+          () => setSwitchMode(false)
+        )
+      : null);
 
   // En combat, l'aperçu au survol attend franchement plus longtemps que dans le
   // deck-builder : la souris traverse le plateau en permanence sans chercher à lire quoi
@@ -443,38 +472,16 @@ export function Board({ conn }: { conn: GameConnection }) {
     return () => hover.setPreviewDelay(DECK_PREVIEW_DELAY_MS);
   }, [hover]);
 
-  if (state.result) {
-    // Une victoire par abandon se lit autrement qu'une victoire au plateau : sans le
-    // dire, le gagnant voit « Vous avez gagné » sans comprendre pourquoi la partie
-    // s'est arrêtée net.
-    const forfeited = state.result.kind === 'win' && state.result.reason === 'forfeit';
-    const message =
-      state.result.kind === 'draw'
-        ? 'Égalité parfaite !'
-        : state.result.winner === you
-          ? forfeited
-            ? `${state.players[opponentId].displayName || 'Adversaire'} a abandonné — vous gagnez !`
-            : 'Vous avez gagné !'
-          : forfeited
-            ? 'Vous avez abandonné la partie.'
-            : 'Vous avez perdu.';
-    return (
-      <div className="board">
-        <h1 className="result-banner">{message}</h1>
-        <button className="primary" onClick={conn.leave}>
-          Retour au lobby
-        </button>
-        <EventLog log={state.log} you={you} />
-      </div>
-    );
-  }
-
   const me = state.players[you];
   const opponent = state.players[opponentId];
-  const myTurn = state.activePlayerId === you;
   const opponentName = opponent.displayName || 'Adversaire';
-  const canAct = myTurn && state.phase === 'main' && !pendingChoice;
-  const turnGate = canAct ? null : pendingChoice ? 'choix en cours' : "ce n'est pas votre tour";
+  const turnGate = canAct
+    ? null
+    : state.result
+      ? 'la partie est terminée'
+      : pendingChoice
+        ? 'choix en cours'
+        : "ce n'est pas votre tour";
 
   // Same queries the engine uses, so the counters can never disagree with what the
   // server will actually accept. Wrapped: a query that can't resolve client-side must
@@ -581,7 +588,7 @@ export function Board({ conn }: { conn: GameConnection }) {
           </div>
 
           <div className="zone zone-lower-self">
-            <CommandPanel state={state} you={you} conn={conn} />
+            <CommandPanel state={state} you={you} conn={conn} onStartSwitch={() => setSwitchMode(true)} />
           </div>
 
           <div className="zone zone-active-opp">
@@ -667,6 +674,8 @@ export function Board({ conn }: { conn: GameConnection }) {
           {conn.choiceDeadline !== null && <ChoiceCountdownBadge deadline={conn.choiceDeadline} />}
         </div>
       )}
+
+      {state.result && <MatchOverModal state={state} you={you} conn={conn} />}
     </div>
   );
 }

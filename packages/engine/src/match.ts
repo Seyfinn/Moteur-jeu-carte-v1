@@ -705,10 +705,11 @@ export class Match {
         }
       },
 
-      raiseMaxHP(targetInstanceId, amount) {
+      raiseMaxHP(targetInstanceId, amount, options) {
         if (!api.isOnBoard(targetInstanceId)) return;
         const target = findCharacter(state, targetInstanceId);
-        hp.raiseMaxHP(target, amount);
+        if (options?.keepCurrentHP) hp.raiseMaxHPOnly(target, amount);
+        else hp.raiseMaxHP(target, amount);
         api.log(`${cardName(target.cardId)} gagne +${amount} HP max`, { kind: 'max-hp', targetInstanceId, amount });
       },
 

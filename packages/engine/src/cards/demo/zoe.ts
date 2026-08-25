@@ -119,6 +119,10 @@ export const zoe: CharacterCardDef = {
           statusId: SPELL_THIEF_COOLDOWN_STATUS_ID,
           label: 'Spell Thief (recharge)',
           remainingTurns: SPELL_THIEF_COOLDOWN_REMAINING_TURNS,
+          // Une recharge d'ability descend même au banc : sinon un personnage mis de côté
+          // gèlerait son propre compte à rebours, et « rechargement : N tours » voudrait
+          // dire « N tours passés au poste actif ».
+          ticksOnBench: true,
         });
 
         const self = ctx.getCharacter(ctx.sourceInstanceId);

@@ -277,6 +277,24 @@ describe('bench immunity scoping (Bouclier Ultime)', () => {
     await settle(match);
     expect(match.state.players.p1.characters[benchedSorakaId]!.damage).toBe(100);
   });
+
+  // Le terrain a longtemps eu une contrepartie : son possesseur ne pouvait plus switcher.
+  // Elle a été retirée -- et c'était le dernier modifier `canSwitchStandard` du pool.
+  it('ne verrouille plus le poste actif de son possesseur', async () => {
+    const { registerDemoCards, canSwitchStandard } = await import('../src/index.js');
+    registerDemoCards();
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: ROSTER, p2Roster: ROSTER, seed: 62 },
+      { p1ActiveCardId: 'gojo-satoru', p2ActiveCardId: 'gojo-satoru' }
+    );
+    const api = apiOf(match);
+    const terrainId = match.state.players.p1.unplayedTerrainInstanceIds[0]!;
+    const { moveTerrainFromPoolToActive } = await import('../src/zones.js');
+    await moveTerrainFromPoolToActive(match.state, 'p1', terrainId, api);
+
+    const activeId = match.state.players.p1.activeCharacterInstanceId!;
+    expect(canSwitchStandard(match.state, activeId).allow).toBe(true);
+  });
 });
 
 describe('event resolution', () => {

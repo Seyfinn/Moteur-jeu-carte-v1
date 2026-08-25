@@ -63,6 +63,10 @@ export const chopper: CharacterCardDef = {
           statusId: TRAQUE_COOLDOWN_STATUS_ID,
           label: 'Traque (recharge)',
           remainingTurns: TRAQUE_COOLDOWN_REMAINING_TURNS,
+          // Une recharge d'ability descend même au banc : sinon un personnage mis de côté
+          // gèlerait son propre compte à rebours, et « rechargement : N tours » voudrait
+          // dire « N tours passés au poste actif ».
+          ticksOnBench: true,
         });
 
         const allies = ctx.getAllOnBoard(ctx.ownerId);

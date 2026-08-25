@@ -20,10 +20,49 @@ export interface BoardTargeting {
   /** Instances désignables, telles que le moteur les a proposées. */
   options: ReadonlySet<string>;
   selected: string[];
+  /**
+   * Le clic sur une carte vaut action, sans étape de validation. Réservé aux ciblages
+   * purement locaux (le switch), où rien n'est envoyé au moteur tant que le joueur n'a
+   * pas cliqué : il n'y a donc pas de « clic malheureux » à protéger, seulement une
+   * action de plus à faire faire. Un vrai choix du moteur, lui, se valide toujours.
+   */
+  immediate?: boolean;
   /** Clic sur une carte : retient la cible, ou la retire si elle l'était déjà. */
   toggle(instanceId: string): void;
   clear(): void;
   confirm(): void;
+}
+
+/**
+ * Ciblage du changement de personnage. Ce n'est pas un choix du moteur (rien n'est en
+ * attente côté serveur) mais il emprunte exactement le même chemin visuel : les
+ * personnages du banc s'allument, le reste du plateau passe en retrait, et le clic
+ * envoie l'action. Ça remplace la liste de noms qui s'ouvrait sous le personnage actif.
+ */
+export function switchTargeting(
+  state: GameState,
+  you: PlayerId,
+  onPick: (instanceId: string) => void,
+  onCancel: () => void
+): BoardTargeting | null {
+  const player = state.players[you];
+  const benchIds = player.benchCharacterInstanceIds.filter((id) => player.characters[id]);
+  if (benchIds.length === 0) return null;
+
+  return {
+    choiceId: 'switch',
+    prompt: 'Envoyer au combat',
+    min: 1,
+    max: 1,
+    options: new Set(benchIds),
+    selected: [],
+    immediate: true,
+    toggle: (instanceId) => {
+      if (benchIds.includes(instanceId)) onPick(instanceId);
+    },
+    clear: onCancel,
+    confirm: onCancel,
+  };
 }
 
 function boardInstanceIds(state: GameState): Set<string> {
@@ -113,6 +152,22 @@ export function TargetingBar({
   const { selected, min, max } = targeting;
   const enough = selected.length >= min;
   const names = selected.map((id) => nameOf(state, id));
+
+  // Ciblage immédiat (le switch) : le clic sur la carte fait tout, la barre n'est plus
+  // qu'une consigne et une sortie de secours.
+  if (targeting.immediate) {
+    return (
+      <div className="targeting-bar" role="dialog" aria-label="Ciblage">
+        <div className="targeting-bar-head">
+          <span className="targeting-bar-prompt">{targeting.prompt}</span>
+        </div>
+        <p className="targeting-bar-status">Cliquez le personnage du banc à envoyer au combat.</p>
+        <div className="targeting-bar-actions">
+          <button onClick={targeting.clear}>Annuler</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="targeting-bar" role="dialog" aria-label="Ciblage">

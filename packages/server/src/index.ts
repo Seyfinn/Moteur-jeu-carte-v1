@@ -144,6 +144,7 @@ function parseClientMessage(raw: unknown): ClientMessage | null {
       return isString((action as Record<string, unknown>)['kind']) ? (message as unknown as ClientMessage) : null;
     }
     case 'forfeit':
+    case 'rematch':
       return message as unknown as ClientMessage;
     case 'answer-choice': {
       const answer = message['answer'];
@@ -274,6 +275,12 @@ function handleMessage(socket: WebSocket, message: ClientMessage): void {
       const conn = connections.get(socket);
       if (!conn) return sendError(socket, 'Not in a room');
       rooms.get(conn.roomCode)?.handleForfeit(conn.playerId);
+      return;
+    }
+    case 'rematch': {
+      const conn = connections.get(socket);
+      if (!conn) return sendError(socket, 'Not in a room');
+      rooms.get(conn.roomCode)?.handleRematch(conn.playerId);
       return;
     }
     case 'answer-choice': {

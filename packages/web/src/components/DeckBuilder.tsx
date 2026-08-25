@@ -70,12 +70,15 @@ function PoolCardTile({
   entry,
   count,
   disabledAdd,
+  blockedReason,
   onAdd,
   onRemove,
 }: {
   entry: DeckPoolEntry;
   count: number;
   disabledAdd: boolean;
+  /** Carte interdite par une autre déjà prise (Chopper / Soraka) : grisée, avec la raison. */
+  blockedReason: string | null;
   onAdd: () => void;
   onRemove: () => void;
 }) {
@@ -89,6 +92,8 @@ function PoolCardTile({
       size="normal"
       highlight={count > 0}
       unique={entry.maxCopies === 1}
+      dimmed={Boolean(blockedReason)}
+      title={blockedReason ?? undefined}
       onClick={coarse ? () => preview.showCentered(entry) : undefined}
       hoverProps={
         coarse
@@ -99,29 +104,32 @@ function PoolCardTile({
             }
       }
       footer={
-        <div className="deck-card-stepper">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove();
-            }}
-            disabled={count === 0}
-          >
-            −
-          </button>
-          <span>{count}</span>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onAdd();
-            }}
-            disabled={disabledAdd}
-          >
-            +
-          </button>
-        </div>
+        <>
+          {blockedReason && <span className="deck-card-blocked">{blockedReason}</span>}
+          <div className="deck-card-stepper">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+              disabled={count === 0}
+            >
+              −
+            </button>
+            <span>{count}</span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAdd();
+              }}
+              disabled={disabledAdd}
+            >
+              +
+            </button>
+          </div>
+        </>
       }
     />
   );
@@ -204,6 +212,20 @@ function DeckEditor({
 }) {
   const validation = validateRoster(deckToRoster(deck));
   const canSave = deck.name.trim().length > 0 && validation.ok;
+  /**
+   * Cartes interdites par ce que le deck contient déjà (Chopper / Soraka), et par quoi.
+   * Le moteur symétrise la relation dans `listDeckPool()`, donc peu importe laquelle des
+   * deux cartes la déclare : les deux sens sont ici.
+   */
+  const blockedBy = useMemo(() => {
+    const blocked = new Map<string, string>();
+    const inDeck = new Set([...deck.characterCardIds, ...deck.objectCardIds, ...deck.terrainCardIds]);
+    for (const entry of [...pool.character, ...pool.object, ...pool.terrain]) {
+      if (!inDeck.has(entry.id)) continue;
+      for (const otherId of entry.incompatibleWith) blocked.set(otherId, entry.name);
+    }
+    return blocked;
+  }, [deck, pool]);
   // Instantané pris au montage (le composant est monté avec une `key` par deck édité) :
   // sortir sans avoir rien touché ne doit pas réclamer de confirmation.
   const [initialSnapshot] = useState(() => JSON.stringify(deck));
@@ -286,18 +308,27 @@ function DeckEditor({
                         </h3>
                       )}
                       <div className="deck-card-grid">
-                        {group.entries.map((entry) => (
-                          <PoolCardTile
-                            key={entry.id}
-                            entry={entry}
-                            count={countOf(ids, entry.id)}
-                            // Per-card cap, not the global one: a "1x" card (Chopper, Chaînes...) used to be
-                            // addable twice, then blocked the whole deck at save time with a cryptic error.
-                            disabledAdd={ids.length >= section.max || countOf(ids, entry.id) >= entry.maxCopies}
-                            onAdd={() => add(section.key, section.max, entry.id, entry.maxCopies)}
-                            onRemove={() => remove(section.key, entry.id)}
-                          />
-                        ))}
+                        {group.entries.map((entry) => {
+                          const blockedByName = blockedBy.get(entry.id);
+                          return (
+                            <PoolCardTile
+                              key={entry.id}
+                              entry={entry}
+                              count={countOf(ids, entry.id)}
+                              // Per-card cap, not the global one: a "1x" card (Chopper, Chaînes, tous les
+                              // terrains...) used to be addable twice, then blocked the whole deck at save
+                              // time with a cryptic error.
+                              disabledAdd={
+                                ids.length >= section.max ||
+                                countOf(ids, entry.id) >= entry.maxCopies ||
+                                blockedByName !== undefined
+                              }
+                              blockedReason={blockedByName ? `Incompatible avec ${blockedByName}` : null}
+                              onAdd={() => add(section.key, section.max, entry.id, entry.maxCopies)}
+                              onRemove={() => remove(section.key, entry.id)}
+                            />
+                          );
+                        })}
                       </div>
                     </div>
                   ))}

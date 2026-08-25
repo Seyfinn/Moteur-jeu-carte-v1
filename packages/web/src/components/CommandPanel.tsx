@@ -4,19 +4,24 @@ import { useHoverCard } from './HoverCard';
 import { abilityOptions, attackOptions, switchOptions, type ActionOption } from './boardActions';
 import type { GameConnection } from '../net/useGameConnection';
 
-type Section = 'attack' | 'ability' | 'switch';
+/**
+ * Le switch n'ouvre plus de rubrique : il allume les personnages du banc sur le plateau
+ * et se joue au clic sur la carte voulue (cf. `switchTargeting`). Une liste de noms sous
+ * le personnage actif ne disait rien des PV, des statuts ni de qui on envoyait au feu.
+ */
+type Section = 'attack' | 'ability';
 
 const SECTION_TITLE: Record<Section, string> = {
   attack: 'Attaques',
   ability: 'Capacités',
-  switch: 'Changer de personnage',
 };
 
 const SECTION_EMPTY: Record<Section, string> = {
   attack: 'Aucune attaque disponible.',
   ability: 'Pas de capacité activable.',
-  switch: 'Personne sur le banc.',
 };
+
+const SWITCH_EMPTY = 'Personne sur le banc.';
 
 function OptionButton({ option }: { option: ActionOption }) {
   const hover = useHoverCard();
@@ -54,23 +59,28 @@ function RootButton({
   icon,
   label,
   options,
+  emptyHint,
+  /** Le bouton agit directement (switch) : bloqué = rien à ouvrir, donc rien à cliquer. */
+  blockedIsDisabled,
   onOpen,
 }: {
-  kind: Section;
+  kind: Section | 'switch';
   icon: string;
   label: string;
   options: ActionOption[];
+  emptyHint: string;
+  blockedIsDisabled?: boolean;
   onOpen: () => void;
 }) {
   const empty = options.length === 0;
   const allBlocked = !empty && options.every((o) => o.disabledReason);
-  const hint = empty ? SECTION_EMPTY[kind] : allBlocked ? options[0]!.disabledReason ?? undefined : undefined;
+  const hint = empty ? emptyHint : allBlocked ? options[0]!.disabledReason ?? undefined : undefined;
 
   return (
     <button
       className={`cmd-button cmd-${kind}${empty || allBlocked ? ' cmd-button-blocked' : ''}`}
       onClick={onOpen}
-      disabled={empty}
+      disabled={empty || (allBlocked && blockedIsDisabled)}
       title={hint}
     >
       <span className="cmd-button-icon">{icon}</span>
@@ -86,7 +96,18 @@ function RootButton({
  * détaillée de la rubrique choisie. Les objets et les terrains ne sont plus ici -- ils se
  * jouent depuis la main en bas de l'écran.
  */
-export function CommandPanel({ state, you, conn }: { state: GameState; you: PlayerId; conn: GameConnection }) {
+export function CommandPanel({
+  state,
+  you,
+  conn,
+  onStartSwitch,
+}: {
+  state: GameState;
+  you: PlayerId;
+  conn: GameConnection;
+  /** Allume les personnages du banc sur le plateau et attend le clic sur l'un d'eux. */
+  onStartSwitch: () => void;
+}) {
   const [section, setSection] = useState<Section | null>(null);
   const isMyTurn = state.activePlayerId === you && state.phase === 'main' && !state.pendingChoice;
 
@@ -109,7 +130,7 @@ export function CommandPanel({ state, you, conn }: { state: GameState; you: Play
     return (
       <div className="cmd-panel cmd-panel-waiting">
         <span className="cmd-waiting-label">
-          {state.pendingChoice ? 'Choix en cours…' : "Tour de l'adversaire"}
+          {state.result ? 'Partie terminée' : state.pendingChoice ? 'Choix en cours…' : "Tour de l'adversaire"}
         </span>
       </div>
     );
@@ -118,7 +139,7 @@ export function CommandPanel({ state, you, conn }: { state: GameState; you: Play
   const attacks = attackOptions(state, you, conn);
   const abilities = abilityOptions(state, you, conn);
   const switches = switchOptions(state, you, conn);
-  const optionsOf: Record<Section, ActionOption[]> = { attack: attacks, ability: abilities, switch: switches };
+  const optionsOf: Record<Section, ActionOption[]> = { attack: attacks, ability: abilities };
 
   if (section) {
     const options = optionsOf[section];
@@ -143,12 +164,34 @@ export function CommandPanel({ state, you, conn }: { state: GameState; you: Play
   return (
     <div className="cmd-panel">
       <div className="cmd-grid">
-        <RootButton kind="attack" icon="⚔️" label="Attaque" options={attacks} onOpen={() => setSection('attack')} />
+        <RootButton
+          kind="attack"
+          icon="⚔️"
+          label="Attaque"
+          options={attacks}
+          emptyHint={SECTION_EMPTY.attack}
+          onOpen={() => setSection('attack')}
+        />
         {/* Volontairement pas de « tir automatique » quand il n'y a qu'une option : une
             capacité est souvent coûteuse (un ultime une fois par partie, un allié qui paie
             100 PV) et la déclencher depuis le bouton la dépensait sans rien laisser lire. */}
-        <RootButton kind="ability" icon="✨" label="Capacité" options={abilities} onOpen={() => setSection('ability')} />
-        <RootButton kind="switch" icon="🔁" label="Switch" options={switches} onOpen={() => setSection('switch')} />
+        <RootButton
+          kind="ability"
+          icon="✨"
+          label="Capacité"
+          options={abilities}
+          emptyHint={SECTION_EMPTY.ability}
+          onOpen={() => setSection('ability')}
+        />
+        <RootButton
+          kind="switch"
+          icon="🔁"
+          label="Switch"
+          options={switches}
+          emptyHint={SWITCH_EMPTY}
+          blockedIsDisabled
+          onOpen={onStartSwitch}
+        />
         <button className="cmd-button cmd-pass" onClick={() => conn.applyAction({ kind: 'pass' })}>
           <span className="cmd-button-icon">⏭️</span>
           <span className="cmd-button-label">Passer</span>

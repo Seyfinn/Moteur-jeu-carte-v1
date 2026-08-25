@@ -53,6 +53,9 @@ export const blitzcrank: CharacterCardDef = {
           label: 'Hook verrouillé',
           sourceCardInstanceId: ctx.sourceInstanceId,
           remainingTurns: HOOK_LOCK_TURNS,
+          // Même règle que les recharges d'ability : le verrou descend aussi au banc --
+          // et Mana Barrier se déclenche justement depuis le banc.
+          ticksOnBench: true,
         });
         ctx.log(`Mana Barrier se déclenche : bouclier de ${SHIELD_AMOUNT} et Hook verrouillé ${HOOK_LOCK_TURNS} tours`, {
           characterInstanceId: ctx.sourceInstanceId,

@@ -18,6 +18,11 @@ projet (packages, comment lancer le jeu...), voir [README.md](README.md).
    légal. Ne pas y toucher les limites. `DEMO_STARTER_DECK` juste au-dessus est le deck
    par défaut (6 persos / 6 objets / 2 terrains, ≤2 exemplaires) : il doit rester valide
    au sens de `validateRoster`, ne l'étendre qu'en remplaçant une carte par une autre.
+   Règles de deck utiles à connaître ici (`deck.ts`) : 6 persos / 8 objets / 3 terrains,
+   2 exemplaires par carte — mais **1 seul par terrain**, et `maxCopies: 1` sur la carte
+   pour une « carte unique ». `incompatibleWith: ['autre-id']` (champ commun aux trois
+   types, relation symétrique, à ne déclarer que d'un côté) interdit deux cartes dans le
+   même deck : le deck-builder grise l'autre carte sans rien avoir à savoir de plus.
 4. Ajouter son entrée dans [docs/cartes.md](docs/cartes.md) : le texte imprimé + ce que le
    moteur fait vraiment derrière (statuts posés, modifiers, `+1` de durée, garde-fous...).
    C'est le pendant obligatoire de la règle « texte exact » ci-dessous : tout ce que la
@@ -74,7 +79,7 @@ pas à enrichir le propos.
 interface CharacterCardDef {
   type: 'character'; id: string; name: string; baseMaxHP: number;
   attacks: AttackDef[]; abilities: AbilityDef[]; modifiers?: ModifierDef[];
-  family?: string; maxCopies?: number;
+  family?: string; maxCopies?: number; incompatibleWith?: string[];
 }
 interface ObjectCardDef {
   type: 'object'; id: string; name: string; description: string;
@@ -175,7 +180,7 @@ ctx.isKO(characterInstanceId): boolean
 
 ctx.dealDamage(targetId, amount, options?): Promise<void> // dégâts classiques, soignables
 ctx.applyValeurLock(targetId, amount): Promise<void>      // retire du max HP, jamais soignable
-ctx.heal(targetId, amount); ctx.raiseMaxHP(targetId, amount)
+ctx.heal(targetId, amount); ctx.raiseMaxHP(targetId, amount, {keepCurrentHP?}?)
 ctx.addShield(targetId, amount); ctx.removeShield(targetId, amount?)
 ctx.koCharacter(id); ctx.reviveCharacter(id, hp, 'active'|'bench')
 
@@ -353,6 +358,17 @@ Garde-fous appliqués automatiquement, inutile de les re-coder par carte :
   et revenait intact bien plus tard (bug corrigé sur Potion force, Détermination,
   Adrénaline Ultime et Couteau dans le dos). `ticksOnBench` ne fait que décompter :
   seuls burn/poison/bleed infligent leurs dégâts au banc.
+- **Recharge d'ability (« rechargement : N tours ») : `ticksOnBench: true`, toujours.**
+  « N tours » veut dire N tours, pas N tours passés au poste actif : sans ce champ, un
+  personnage mis de côté gèle son propre compte à rebours, et une ability faite pour être
+  lancée du banc (la Traque de Chopper) ne revient jamais. Vaut aussi pour un verrou
+  d'ability à durée (le Hook de Blitzcrank). La règle du `+1` ci-dessous s'applique
+  toujours, et `ticksOnBench` ne change pas la cadence : un statut ne décompte que pendant
+  les tours de son porteur, banc ou pas.
+- **Donner des HP max sans soigner** : `ctx.raiseMaxHP(id, n, { keepCurrentHP: true })`.
+  Par défaut, monter le plafond monte aussi les PV actuels d'autant (l'écart au plafond ne
+  bouge pas) ; avec l'option, seuls les HP max montent. C'est ce que veut dire une carte
+  qui promet des « HP max (pas de soin) », comme la prime de Coeur Acier.
 - **Statut de bookkeeping interne** (compteur, mémoire de la dernière attaque adverse,
   suivi de verrou) : ajouter `hidden: true`. Le journal ne l'annonce pas et la carte
   n'affiche pas de badge pour lui — aucun changement mécanique, seulement de la

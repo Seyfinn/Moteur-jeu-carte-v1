@@ -56,6 +56,50 @@ export function attachedObjectsOf(state: GameState, char: CharacterInstance): At
   return views;
 }
 
+/** Une attaque telle qu'elle frappe *maintenant* : sa valeur imprimée et sa valeur réelle. */
+export interface AttackReadout {
+  id: string;
+  name: string;
+  /** Ce qui est écrit sur la carte. */
+  base: number;
+  /** Ce qui sera réellement infligé : buffs, debuffs, auras de terrain et passives cumulatives compris. */
+  effective: number;
+}
+
+/**
+ * ATK réel d'une attaque. Le client interroge le moteur exactement comme le serveur le
+ * fera au moment de résoudre le coup ; si la vue caviardée ne suffit pas à résoudre la
+ * requête, on retombe sur la valeur imprimée plutôt que d'afficher n'importe quoi.
+ */
+export function effectiveATK(state: GameState, characterInstanceId: string, baseATK: number): number {
+  try {
+    return getEffectiveATK(state, characterInstanceId, baseATK);
+  } catch {
+    return baseATK;
+  }
+}
+
+/**
+ * Les attaques d'un personnage en jeu, avec les deux nombres. Sert autant au panneau de
+ * commandes qu'à la fiche et à la carte : les cartes à dégâts évolutifs (Guts, Hulk,
+ * Mundo, Sukuna sous Autel...) affichent une valeur imprimée qui n'est plus la bonne dès
+ * le deuxième tour, et le joueur n'avait aucun moyen de lire la vraie.
+ */
+export function attackReadouts(state: GameState, char: CharacterInstance): AttackReadout[] {
+  let def;
+  try {
+    def = getCharacterCard(char.cardId);
+  } catch {
+    return [];
+  }
+  return def.attacks.map((attack) => ({
+    id: attack.id,
+    name: attack.name,
+    base: attack.baseATK,
+    effective: effectiveATK(state, char.instanceId, attack.baseATK),
+  }));
+}
+
 export function characterName(cardId: string): string {
   try {
     return getCharacterCard(cardId).name;
@@ -106,12 +150,7 @@ export function attackOptions(state: GameState, you: PlayerId, conn: GameConnect
     // ATK effectif, pas la valeur imprimée : buffs, debuffs et passives cumulatives
     // atterrissent ici, et le joueur n'avait aucun moyen de voir le nombre qu'il allait
     // réellement infliger.
-    let effective = attack.baseATK;
-    try {
-      effective = getEffectiveATK(state, activeId, attack.baseATK);
-    } catch {
-      /* la vue client n'arrive pas à le résoudre -- on retombe sur la valeur imprimée */
-    }
+    const effective = effectiveATK(state, activeId, attack.baseATK);
     const suffix = effective === attack.baseATK ? '' : ` (base ${attack.baseATK})`;
     return {
       key: attack.id,

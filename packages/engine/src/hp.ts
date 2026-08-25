@@ -37,10 +37,25 @@ export function heal(char: CharacterInstance, amount: number): void {
   char.damage = Math.max(0, char.damage - amount);
 }
 
-/** The positive counterpart to applyValeurLock -- permanently raises the HP ceiling. */
+/**
+ * The positive counterpart to applyValeurLock -- permanently raises the HP ceiling. Current
+ * HP follows: nothing about the character got *more* damaged, so the gap to the ceiling is
+ * unchanged and the bearer effectively gains `amount` HP right now.
+ */
 export function raiseMaxHP(char: CharacterInstance, amount: number): void {
   if (amount <= 0) return;
   char.currentMaxHP += amount;
+}
+
+/**
+ * Raises the ceiling *only* : les PV actuels ne bougent pas d'un point, l'écart au plafond
+ * grandit d'autant. C'est ce que veut dire une carte qui promet des « HP max, pas de soin »
+ * (la prime de Coeur Acier) -- sinon elle rendrait aussi les PV perdus au passage.
+ */
+export function raiseMaxHPOnly(char: CharacterInstance, amount: number): void {
+  if (amount <= 0) return;
+  char.currentMaxHP += amount;
+  char.damage += amount;
 }
 
 /** Adds shield points, stacking on top of any shield already present. */

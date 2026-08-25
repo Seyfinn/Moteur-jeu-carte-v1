@@ -39,20 +39,28 @@ function sanitizeDeck(raw: unknown): Deck | null {
   const source = raw as Record<string, unknown>;
   if (typeof source['id'] !== 'string') return null;
 
-  // Per-card `maxCopies` (a "1x" card) rather than the general cap, so a stored deck
-  // that predates a card becoming unique is trimmed here instead of being rejected
-  // later with an opaque server error.
-  const maxCopiesById = new Map(listDeckPool().map((entry) => [entry.id, entry.maxCopies] as const));
+  // Per-card `maxCopies` (a "1x" card, un terrain) rather than the general cap, so a
+  // stored deck that predates a card becoming unique is trimmed here instead of being
+  // rejected later with an opaque server error.
+  const pool = listDeckPool();
+  const maxCopiesById = new Map(pool.map((entry) => [entry.id, entry.maxCopies] as const));
+  const incompatibleById = new Map(pool.map((entry) => [entry.id, entry.incompatibleWith] as const));
+  // Même logique pour les incompatibilités (Chopper / Soraka) : la première carte gardée
+  // interdit l'autre pour tout le reste du deck. `banned` est volontairement partagé entre
+  // les trois appels de `trim` -- une incompatibilité n'a aucune raison de rester dans un
+  // seul groupe de cartes.
+  const banned = new Set<string>();
   const trim = (ids: string[], max: number) => {
     const kept: string[] = [];
     const copies = new Map<string, number>();
     for (const id of ids) {
       const maxCopies = maxCopiesById.get(id);
-      if (maxCopies === undefined || kept.length >= max) continue;
+      if (maxCopies === undefined || kept.length >= max || banned.has(id)) continue;
       const used = copies.get(id) ?? 0;
       if (used >= maxCopies) continue;
       copies.set(id, used + 1);
       kept.push(id);
+      for (const otherId of incompatibleById.get(id) ?? []) banned.add(otherId);
     }
     return kept;
   };
