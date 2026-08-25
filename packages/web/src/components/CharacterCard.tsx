@@ -4,6 +4,8 @@ import { CardFrame } from './CardFrame';
 import { useCardInspect, useHoverCard, type HoverPayload } from './HoverCard';
 import { characterDetailBody } from './cardDetails';
 import { StatusEffectLayers } from './statusEffects';
+import { AttachedObjectCards, AttachedObjectChips } from './AttachedObjects';
+import type { AttachedObjectView } from './boardActions';
 import { CharacterActionBadges } from './gameEventBadges';
 import type { CharacterBadge } from './gameEvents';
 
@@ -46,6 +48,10 @@ export function CharacterCard({
   badges,
   onSelect,
   selected,
+  targetable,
+  targeted,
+  onTarget,
+  attachedObjects,
 }: {
   char: CharacterInstance;
   isActive: boolean;
@@ -59,6 +65,17 @@ export function CharacterCard({
   onSelect?: () => void;
   /** Marque la carte comme celle dont le mini-menu est ouvert. */
   selected?: boolean;
+  /** Cible légale du ciblage en cours -- le clic vise au lieu d'ouvrir la fiche. */
+  targetable?: boolean;
+  /** Déjà retenue dans le ciblage en cours. */
+  targeted?: boolean;
+  onTarget?: () => void;
+  /**
+   * Objets liés à ce personnage, résolus par le plateau (`attachedObjectsOf`). Fournis =
+   * les cartes sont dessinées ; absents = repli sur la ligne « N objet(s) attaché(s) »,
+   * pour les surfaces qui n'ont pas l'état complet sous la main.
+   */
+  attachedObjects?: AttachedObjectView[];
 }) {
   const hover = useHoverCard();
   const currentHP = Math.max(0, char.currentMaxHP - char.damage);
@@ -104,6 +121,11 @@ export function CharacterCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveKey, hover]);
 
+  // À côté sur le personnage actif (carte large, il y a la place) ; en pastille posée sur
+  // le coin au banc, où une vignette accolée élargirait toute la colonne.
+  const asideAttachments = size === 'large' ? (attachedObjects ?? []) : [];
+  const chipAttachments = size === 'large' ? [] : (attachedObjects ?? []);
+
   const prevDamageRef = useRef(char.damage);
   const floaterSeqRef = useRef(0);
   const [flashing, setFlashing] = useState(false);
@@ -129,7 +151,7 @@ export function CharacterCard({
 
   useEffect(() => () => timersRef.current.forEach(clearTimeout), []);
 
-  return (
+  const card = (
     <CardFrame
       cardId={char.cardId}
       kind="character"
@@ -138,12 +160,17 @@ export function CharacterCard({
       orientation={orientation}
       highlight={isActive || selected}
       dimmed={dead && isKOable}
+      targetable={targetable}
+      targeted={targeted}
       {...inspect}
-      onClick={onSelect ?? inspect.onClick}
+      // Pendant un ciblage, le clic sert à viser : ni fiche de carte, ni mini-menu de
+      // banc, qui recouvriraient le plateau au moment précis où il faut le lire.
+      onClick={targetable ? onTarget : (onSelect ?? inspect.onClick)}
       effects={
         <>
           <StatusEffectLayers statusIds={visibleStatuses.map((s) => s.statusId)} />
           {shieldTotal > 0 && <div className="fx-layer fx-shield" />}
+          {chipAttachments.length > 0 && <AttachedObjectChips objects={chipAttachments} />}
           {badges && <CharacterActionBadges badges={badges} />}
           {flashing && <div className="fx-damage-flash" />}
           {floaters.length > 0 && (
@@ -185,11 +212,22 @@ export function CharacterCard({
               ))}
             </div>
           )}
-          {char.attachedObjectInstanceIds.length > 0 && (
+          {/* Repli : sans la liste résolue, au moins dire qu'il y a quelque chose. */}
+          {!attachedObjects && char.attachedObjectInstanceIds.length > 0 && (
             <div className="attached-objects">{char.attachedObjectInstanceIds.length} objet(s) attaché(s)</div>
           )}
         </>
       }
     />
+  );
+
+  if (asideAttachments.length === 0) return card;
+  // Le sens (objet à gauche ou à droite du personnage) est décidé en CSS par le camp :
+  // l'objet se pose du côté extérieur, pour ne pas s'intercaler dans le face-à-face.
+  return (
+    <div className="char-with-attachments">
+      {card}
+      <AttachedObjectCards objects={asideAttachments} />
+    </div>
   );
 }

@@ -78,6 +78,7 @@ interface CharacterCardDef {
 }
 interface ObjectCardDef {
   type: 'object'; id: string; name: string; description: string;
+  equipment?: boolean;  // objet « à lier » : voir la section Patterns
   condition?(ctx: EffectContext): boolean;
   // Refus lisible évalué sur le seul GameState (donc côté client aussi) : renvoyer une
   // phrase quand la carte n'a rien à cibler et serait gaspillée. Le serveur refuse
@@ -206,6 +207,14 @@ Garde-fous appliqués automatiquement, inutile de les re-coder par carte :
 - ⚠️ `ctx.choose({kind:'select-characters'})` ne sait afficher que des **personnages**
   côté client. Pour faire choisir un objet/terrain (réserve, cimetière...), utiliser
   `ctx.chooseOption` (cf. `echange-equivalent.ts`).
+- ⚠️ `ctx.choose({kind:'select-characters'})` se joue **sur le plateau** : le client allume
+  les cartes proposées, le joueur clique dessus puis valide (`web/components/Targeting.tsx`).
+  Il faut donc que **toutes** les options soient des personnages posés sur la table (actif
+  ou banc, n'importe quel camp). Une option hors plateau — un mort au cimetière, un
+  personnage pas encore placé — fait retomber le client sur l'ancienne modale, qui reste le
+  filet de sécurité : la partie n'est jamais bloquée, mais le ciblage visuel est perdu.
+  Pour ranimer depuis le cimetière, passer par `ctx.chooseOption` avec un `card` par option
+  (cf. `absorption-vitale.ts`).
 
 ## Économie de tour (`match.ts` / `queries.ts`)
 
@@ -237,6 +246,18 @@ Garde-fous appliqués automatiquement, inutile de les re-coder par carte :
   `execute` écrit `ctx.scratch['ma-cle'] = true` et `endsTurn(ctx)` retourne
   `!ctx.scratch['ma-cle']`. **Ne jamais utiliser une variable au niveau du module** pour
   ça : un serveur héberge plusieurs parties en parallèle et elles se marcheraient dessus.
+- **Objet « à lier » (équipement)** : deux choses vont ensemble et ne se devinent pas
+  l'une l'autre — `ctx.attachSelfTo(characterInstanceId)` dans `execute` (la carte reste
+  en jeu accrochée au personnage au lieu de partir au cimetière) **et** `equipment: true`
+  sur la `ObjectCardDef`. Le second est purement déclaratif : c'est lui que le client lit
+  pour poser le logo 🔗 sur la carte partout où elle s'affiche, la ranger dans la
+  sous-catégorie « Objets à lier » du deck-builder, et dessiner la carte à côté de son
+  porteur (à côté de l'actif, en pastille sur le coin au banc). Une carte qui s'attache
+  sans le champ n'aurait pas de logo ; une carte qui porte le champ sans s'attacher
+  mentirait au joueur.
+  Le départ au cimetière avec le porteur est déjà géré par le moteur (`zones.koCharacter`),
+  y compris pour un objet posé sur un personnage **adverse** : il retourne dans le
+  cimetière de son propre propriétaire, pas dans celui du porteur.
 - **Carte qui peut être jouée « dans le vide »** (annuler un terrain quand il n'y en a
   pas, se téléporter sans banc) : donner un `unplayableReason(state, ownerId)` à
   l'`ObjectCardDef` plutôt que de laisser `execute` faire un no-op. C'est du pur

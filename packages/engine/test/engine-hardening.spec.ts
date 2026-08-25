@@ -398,6 +398,46 @@ describe('zone integrity', () => {
     expect(match.state.players.p1.objects[objectId]).toBeUndefined();
     expect(match.state.players.p1.inPlayObjectInstanceIds).not.toContain(objectId);
   });
+
+  it('un objet lié suit son porteur au cimetière quand celui-ci meurt -- y compris posé sur un ennemi', async () => {
+    const roster: RosterConfig = {
+      characterCardIds: ['fx-striker', 'fx-tank', 'fx-glass'],
+      objectCardIds: ['fx-sticky-object', 'fx-sticky-object'],
+      terrainCardIds: [],
+    };
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: roster, p2Roster: roster, seed: 41 },
+      {}
+    );
+    const api = apiOf(match);
+
+    // Un objet de p1 posé sur son propre actif, un autre posé sur l'actif de p2 : le moteur
+    // autorise explicitement d'équiper un personnage adverse, et chaque carte doit repartir
+    // dans le cimetière de SON propriétaire, pas dans celui du porteur.
+    const ownActiveId = match.state.players.p1.activeCharacterInstanceId!;
+    const enemyActiveId = match.state.players.p2.activeCharacterInstanceId!;
+    const [ownObjectId, enemyObjectId] = match.state.players.p1.unplayedObjectInstanceIds;
+    match.state.players.p1.unplayedObjectInstanceIds = [];
+    match.state.players.p1.inPlayObjectInstanceIds.push(ownObjectId!, enemyObjectId!);
+    api.attachObject(ownObjectId!, ownActiveId);
+    api.attachObject(enemyObjectId!, enemyActiveId);
+
+    // Banc adverse vidé : le KO d'un actif ouvrirait sinon le choix du remplaçant, et ce
+    // test-là ne parle que du sort des objets liés.
+    match.state.players.p2.benchCharacterInstanceIds = [];
+    await api.koCharacter(enemyActiveId);
+
+    // Le porteur adverse est mort : son équipement part au cimetière de p1 (son propriétaire),
+    // quitte le jeu, et n'est plus rattaché à personne.
+    expect(match.state.players.p1.graveyardObjectInstanceIds).toContain(enemyObjectId);
+    expect(match.state.players.p1.inPlayObjectInstanceIds).not.toContain(enemyObjectId);
+    expect(match.state.players.p1.objects[enemyObjectId!]!.attachedToCharacterInstanceId).toBeUndefined();
+    expect(match.state.players.p2.characters[enemyActiveId]!.attachedObjectInstanceIds).toEqual([]);
+
+    // L'objet posé sur un personnage encore vivant, lui, n'a pas bougé.
+    expect(match.state.players.p1.inPlayObjectInstanceIds).toContain(ownObjectId);
+    expect(match.state.players.p1.characters[ownActiveId]!.attachedObjectInstanceIds).toContain(ownObjectId);
+  });
 });
 
 describe('effect context isolation', () => {

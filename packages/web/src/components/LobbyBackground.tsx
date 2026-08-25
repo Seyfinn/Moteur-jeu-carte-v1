@@ -18,10 +18,12 @@ const COLUMNS = 6;
 const ROWS = 3;
 const DRIFT_VARIANTS = 5;
 
-/** Opacité des cartes selon leur profondeur : assez présentes pour qu'on les reconnaisse,
-    assez discrètes pour ne jamais concurrencer l'interface posée par-dessus. */
-const OPACITY_NEAR = 0.2;
-const OPACITY_FAR = 0.15;
+/** Opacité des cartes selon leur profondeur. Le décor doit rester *lisible comme des
+    cartes* -- on reconnaît les illustrations et leurs couleurs -- pendant que la lisibilité
+    de l'interface est assurée ailleurs : par le voile léger du fond et surtout par le verre
+    dépoli des deux panneaux centraux, pas en éteignant le décor. */
+const OPACITY_NEAR = 0.5;
+const OPACITY_FAR = 0.4;
 
 /**
  * Une graine par *chargement de page*, pas par montage du composant : aller au
@@ -89,7 +91,9 @@ function buildLayout(cardIds: string[], rand: () => number): FloatingCard[] {
         // Délai négatif : sans lui toutes les cartes repartiraient du même point au
         // chargement et respireraient à l'unisson, ce qui se voit immédiatement.
         delay: -rand() * 40,
-        blur: 3 + depth * 5,
+        // Flou de profondeur seulement : au-delà, les illustrations se réduisent à des
+        // taches de couleur et le décor perd ce qui en fait un décor de cartes.
+        blur: 0.8 + depth * 3.2,
         opacity: OPACITY_NEAR - depth * (OPACITY_NEAR - OPACITY_FAR),
         tilt: (rand() - 0.5) * 24,
       });

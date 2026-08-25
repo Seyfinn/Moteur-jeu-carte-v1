@@ -15,6 +15,33 @@ export const SECTIONS: Array<{ key: DeckSectionKey; type: CardKind; max: number;
   { key: 'terrainCardIds', type: 'terrain', max: DECK_LIMITS.terrain, title: 'Terrains' },
 ];
 
+/**
+ * Les objets se lisent en deux familles très différentes : ceux qui se **lient** à un
+ * personnage et restent en jeu, et ceux qui produisent leur effet et partent aussitôt.
+ * Les équipements passent devant : ce sont eux qui engagent une place sur un personnage,
+ * donc ceux qu'on choisit en premier quand on compose un deck.
+ *
+ * `null` en libellé pour les personnages et les terrains : une seule famille, aucun
+ * en-tête intermédiaire à afficher.
+ */
+export const OBJECT_SUBGROUPS: Array<{ key: 'equipment' | 'basic'; title: string; hint: string }> = [
+  { key: 'equipment', title: 'Objets à lier', hint: "S'accrochent à un personnage et le suivent jusqu'à sa mort" },
+  { key: 'basic', title: 'Objets basiques', hint: 'Effet immédiat, puis la carte part au cimetière' },
+];
+
+/** Découpe une liste de cartes en sous-familles affichables. Un seul groupe hors objets. */
+export function splitBySubgroup<T>(
+  type: CardKind,
+  entries: T[],
+  isEquipment: (entry: T) => boolean
+): Array<{ key: string; title: string | null; hint?: string; entries: T[] }> {
+  if (type !== 'object') return [{ key: 'all', title: null, entries }];
+  return OBJECT_SUBGROUPS.map((group) => ({
+    ...group,
+    entries: entries.filter((entry) => isEquipment(entry) === (group.key === 'equipment')),
+  })).filter((group) => group.entries.length > 0);
+}
+
 export function detailBodyFor(entry: DeckPoolEntry) {
   switch (entry.type) {
     case 'character':
@@ -270,36 +297,47 @@ export function DeckContentsPanel({
               </h3>
               {groups.length === 0 ? (
                 <p className="subtitle">Aucune carte pour l'instant.</p>
-              ) : variant === 'list' ? (
-                <ul className="deck-row-list">
-                  {groups.map(({ id, count }) => {
-                    const entry = poolById.get(id);
-                    if (!entry) return null;
-                    return (
-                      <DeckCardRow
-                        key={id}
-                        entry={entry}
-                        count={count}
-                        onRemove={onRemove ? () => onRemove(section.key, id) : undefined}
-                      />
-                    );
-                  })}
-                </ul>
               ) : (
-                <div className="deck-selected-grid">
-                  {groups.map(({ id, count }) => {
-                    const entry = poolById.get(id);
-                    if (!entry) return null;
-                    return (
-                      <SelectedCardTile
-                        key={id}
-                        entry={entry}
-                        count={count}
-                        onRemove={onRemove ? () => onRemove(section.key, id) : undefined}
-                      />
-                    );
-                  })}
-                </div>
+                // Même découpage que le pool du deck-builder : équipements d'abord, objets
+                // basiques ensuite, pour qu'on lise son deck comme on l'a composé.
+                splitBySubgroup(section.type, groups, ({ id }) => poolById.get(id)?.equipment === true).map(
+                  (group) => (
+                    <div key={group.key}>
+                      {group.title && <h4 className="deck-subgroup-header compact">{group.title}</h4>}
+                      {variant === 'list' ? (
+                        <ul className="deck-row-list">
+                          {group.entries.map(({ id, count }) => {
+                            const entry = poolById.get(id);
+                            if (!entry) return null;
+                            return (
+                              <DeckCardRow
+                                key={id}
+                                entry={entry}
+                                count={count}
+                                onRemove={onRemove ? () => onRemove(section.key, id) : undefined}
+                              />
+                            );
+                          })}
+                        </ul>
+                      ) : (
+                        <div className="deck-selected-grid">
+                          {group.entries.map(({ id, count }) => {
+                            const entry = poolById.get(id);
+                            if (!entry) return null;
+                            return (
+                              <SelectedCardTile
+                                key={id}
+                                entry={entry}
+                                count={count}
+                                onRemove={onRemove ? () => onRemove(section.key, id) : undefined}
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                )
               )}
             </div>
           );
