@@ -81,6 +81,10 @@ describe('Dio Brando -- "Za Warudo !" : le tour bonus du moteur', () => {
     const { getEffectiveATK } = await import('../src/queries.js');
 
     await drive(match, 'p1', { kind: 'use-ability', characterInstanceId: dioId, abilityId: 'za-warudo' });
+    // Le tour de lancement reste un tour normal : 100 % des dégâts.
+    expect(getEffectiveATK(match.state, dioId, 50)).toBe(50);
+    expect(getEffectiveATK(match.state, allyId, 50)).toBe(50);
+
     await drive(match, 'p1', { kind: 'pass' }); // on est maintenant dans le tour bonus
     expect(getEffectiveATK(match.state, dioId, 50)).toBe(25);
     expect(getEffectiveATK(match.state, allyId, 50)).toBe(25); // toute l'équipe, pas seulement Dio
@@ -88,6 +92,32 @@ describe('Dio Brando -- "Za Warudo !" : le tour bonus du moteur', () => {
     await drive(match, 'p1', { kind: 'pass' });
     await drive(match, 'p2', { kind: 'pass' });
     expect(getEffectiveATK(match.state, dioId, 50)).toBe(50); // le malus n'a duré que le tour bonus
+  });
+
+  it('ferme tous les switchs pendant le tour arrêté, des deux camps', async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: ROSTER, p2Roster: FOE, seed: 4 },
+      { p1ActiveCardId: dioBrando.id, p2ActiveCardId: 'fx-tank' }
+    );
+    await ensureTurn(match, 'p1');
+    const dioId = findInstance(match, 'p1', dioBrando.id);
+    const allyId = findInstance(match, 'p1', 'fx-tank');
+    const foeActiveId = match.state.players.p2.activeCharacterInstanceId!;
+    const foeBenchId = match.state.players.p2.benchCharacterInstanceIds[0]!;
+
+    await drive(match, 'p1', { kind: 'use-ability', characterInstanceId: dioId, abilityId: 'za-warudo' });
+    // Tour de lancement : rien n'est encore figé.
+    expect(canSwitchAny(match.state, 'p1', dioId, allyId).allow).toBe(true);
+
+    await drive(match, 'p1', { kind: 'pass' }); // tour arrêté
+    expect(canSwitchAny(match.state, 'p1', dioId, allyId).allow).toBe(false);
+    // Y compris pour le camp d'en face, donc un `forceSwitch` de carte ne passe pas non plus.
+    expect(canSwitchAny(match.state, 'p2', foeActiveId, foeBenchId).allow).toBe(false);
+    expect(match.applyAction('p1', { kind: 'switch', newActiveInstanceId: allyId }).ok).toBe(false);
+
+    await drive(match, 'p1', { kind: 'pass' });
+    await drive(match, 'p2', { kind: 'pass' });
+    expect(canSwitchAny(match.state, 'p1', dioId, allyId).allow).toBe(true); // le temps repart
   });
 
   it('rend 30 % des dégâts portés, bouclier compris', async () => {
@@ -150,7 +180,7 @@ describe('Aki -- une passive imprimée, trois events', () => {
     expect(match.state.players.p2.characters[foeId]!.statuses.some((s) => s.statusId === 'stun')).toBe(true);
   });
 
-  it("gagne 20 PV et 20 PV max quand l'ennemi attaque, sans que le plafond ne soigne", async () => {
+  it("soigne 20 PV quand l'ennemi attaque, sans toucher au plafond", async () => {
     const match = await createReadyMatch(
       { p1Name: 'A', p2Name: 'B', p1Roster: ROSTER, p2Roster: FOE, seed: 9 },
       { p1ActiveCardId: aki.id, p2ActiveCardId: 'fx-stunner' }
@@ -165,11 +195,42 @@ describe('Aki -- une passive imprimée, trois events', () => {
     await drive(match, 'p2', { kind: 'attack', characterInstanceId: foeId, attackId: 'jab' });
 
     const self = match.state.players.p1.characters[akiId]!;
-    expect(self.currentMaxHP).toBe(maxBefore + 20);
-    // Les deux moitiés se lisent sur les PV actuels : le +20 de plafond n'en rend aucun
-    // (`keepCurrentHP`), seul le soin de 20 compte -- puis le jab reprend 5.
-    // `onAttackDeclared` part avant que le coup ne soit résolu, d'où cet ordre.
+    expect(self.currentMaxHP).toBe(maxBefore); // simple soin : le plafond ne bouge pas
+    // `onAttackDeclared` part avant que le coup ne soit résolu, d'où cet ordre :
+    // +20 rendus, puis le jab reprend 5.
     expect(getCurrentHP(self)).toBe(hpBefore + 20 - 5);
+  });
+
+  it("ne rend rien quand Aki est déjà à pleine vie", async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: ROSTER, p2Roster: FOE, seed: 9 },
+      { p1ActiveCardId: aki.id, p2ActiveCardId: 'fx-stunner' }
+    );
+    await ensureTurn(match, 'p2');
+    const akiId = findInstance(match, 'p1', aki.id);
+    const foeId = match.state.players.p2.activeCharacterInstanceId!;
+
+    const maxBefore = match.state.players.p1.characters[akiId]!.currentMaxHP;
+    await drive(match, 'p2', { kind: 'attack', characterInstanceId: foeId, attackId: 'jab' });
+
+    const self = match.state.players.p1.characters[akiId]!;
+    expect(self.currentMaxHP).toBe(maxBefore);
+    expect(self.damage).toBe(5); // rien à soigner avant le coup, donc seul le jab compte
+  });
+
+  it("ne lit plus le jeu depuis le banc", async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: ROSTER, p2Roster: FOE_WITH_OBJECT, seed: 9 },
+      { p1ActiveCardId: 'fx-tank', p2ActiveCardId: 'fx-tank' }
+    );
+    await ensureTurn(match, 'p2');
+    const akiId = findInstance(match, 'p1', aki.id);
+    expect(match.state.players.p1.benchCharacterInstanceIds).toContain(akiId);
+    const { getEffectiveATK } = await import('../src/queries.js');
+
+    const objectId = Object.values(match.state.players.p2.objects).find((o) => o.cardId === 'fx-heal-object')!.instanceId;
+    await drive(match, 'p2', { kind: 'play-object', objectInstanceId: objectId });
+    expect(getEffectiveATK(match.state, akiId, 55)).toBe(55); // aucun bonus depuis le banc
   });
 
   it("rejoue l'objet adverse une fois, puis se referme jusqu'au prochain objet", async () => {

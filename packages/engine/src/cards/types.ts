@@ -91,6 +91,20 @@ export interface ModifierDef {
    * while I am the active character".
    */
   isActive?(ctx: ModifierEvalContext): boolean;
+  /**
+   * Marque ce modifier comme l'implémentation d'une **capacité passive imprimée** de la
+   * carte (L'Infini de Gojo, Sharingan de Kakashi : une passive dont le texte promet un
+   * effet permanent, codée en modifier plutôt qu'en `execute`). Le moteur le coupe alors
+   * dès que le porteur est réduit au silence passif (`silence-passive` ou
+   * `silence-ultimate`) -- ce qu'un modifier ignore autrement, puisqu'il vit tant que la
+   * carte est en jeu et ne passe jamais par `canUseAbility`.
+   *
+   * N'a de sens que sur une `CharacterCardDef` : un objet ou un terrain ne peut pas être
+   * silencé, le champ y est ignoré. À ne PAS mettre sur un modifier qui implémente le
+   * texte d'une **attaque** (le critique de Blackflash) : le silence passif ne ferme pas
+   * les attaques.
+   */
+  silencedByPassive?: boolean;
   /** For permission-style queries (boolean). */
   vote?(ctx: ModifierEvalContext): Vote | undefined;
   /** For value-style queries (numbers, target lists, ...). */

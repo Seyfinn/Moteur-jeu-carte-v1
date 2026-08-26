@@ -1,54 +1,56 @@
 import type { CharacterCardDef, EffectContext } from '../types.js';
-import { otherPlayer } from '../../types.js';
 import { getStatus, hasStatus } from '../../statuses.js';
 import { getCharacterCard } from '../registry.js';
+import { cardName } from '../../names.js';
 
-/** Nombre de tours passés d'affilée au poste actif avant la crise cardiaque. */
-const DEATH_CLOCK_TURNS = 5;
-const CONTRAINTE_DAMAGE = 60;
+/** Nombre de marques "Nom" avant la crise cardiaque. */
+const MARKS_TO_KILL = 8;
+const CONTRAINTE_DAMAGE_PER_MARK = 50;
+/** "Écriture du Nom" : esquive offerte à Light pour le tour adverse qui suit immédiatement.
+ *  Posée pendant SON tour, elle n'est décomptée qu'au tick d'ouverture de SON tour suivant
+ *  -- donc elle tient telle quelle pendant tout le tour adverse entre les deux, ce qui est
+ *  exactement la fenêtre visée. Pas de `+1` : ce n'est pas un statut bloquant posé sur
+ *  l'ennemi (voir CLAUDE.md), juste un buff sur soi qui doit survivre un seul tour adverse. */
+const EVASION_REMAINING_TURNS = 1;
 
 /**
- * L'horloge portée par l'actif adverse : `data.turns` = tours déjà comptés. Posée sans
- * `remainingTurns` (ce n'est pas un compte à rebours du moteur mais un compteur que la
- * carte tient elle-même, cf. le pattern du compteur persistant dans CLAUDE.md), et
- * volontairement visible : c'est l'information la plus importante du plateau pour
- * l'adversaire, qui doit pouvoir décider de fuir à temps.
+ * La marque "Nom" portée par l'actif adverse : `data.count` = marques déjà posées. Statut
+ * custom sans `remainingTurns` (compteur tenu par la carte, pas un décompte du moteur, cf.
+ * le pattern du compteur persistant dans CLAUDE.md), et volontairement visible : c'est
+ * l'information la plus importante du plateau pour l'adversaire, qui doit pouvoir décider
+ * de fuir à temps.
  */
-const DEATH_CLOCK_STATUS_ID = 'light-yagami-crise';
-
-/** L'emprise de "Manipulation" : bloque le switch de base de celui qui la porte. */
-const GRIP_STATUS_ID = 'light-yagami-emprise';
-/** Posée sur l'adversaire pendant le tour de Light Yagami : elle doit survivre au tick du
- *  début de SON prochain tour pour le bloquer pendant ce tour-là, d'où le +1. */
-const GRIP_REMAINING_TURNS = 1 + 1;
-
-const MANIPULATION_COOLDOWN_STATUS_ID = 'light-yagami-manipulation-recharge';
-/** « 2 tours de cooldown » : utilisée au tour N, de retour au tour N+3. Statut bloquant
- *  posé sur soi pendant son propre tour, donc +1 (cf. CLAUDE.md). */
-const MANIPULATION_COOLDOWN_REMAINING_TURNS = 2 + 1;
+const NOM_MARK_STATUS_ID = 'light-yagami-marque-nom';
 
 /** Light Yagami tient-il le poste actif ? Toute son exécution en dépend. */
 function isOnActivePost(ctx: EffectContext): boolean {
   return ctx.state.players[ctx.ownerId].activeCharacterInstanceId === ctx.sourceInstanceId;
 }
 
-function clockTurnsOf(ctx: EffectContext, characterInstanceId: string): number {
+function marksOf(ctx: EffectContext, characterInstanceId: string): number {
   const char = ctx.state.players[ctx.opponentId].characters[characterInstanceId];
   if (!char) return 0;
-  return Number(getStatus(char, DEATH_CLOCK_STATUS_ID)?.data?.['turns'] ?? 0);
+  return Number(getStatus(char, NOM_MARK_STATUS_ID)?.data?.['count'] ?? 0);
 }
 
 /**
- * Avance l'horloge de `by` et déclenche la crise cardiaque une fois l'heure atteinte.
- * Point de passage unique du compteur : le tour qui s'écoule (Serment de Vengeance) comme
- * l'avance forcée (Écriture du Nom) tombent ici, donc l'heure de la mort se juge au même
- * endroit dans les deux cas.
+ * Pose une marque "Nom" de plus sur la cible et déclenche la crise cardiaque une fois les
+ * 8 marques atteintes. Point de passage unique du compteur : l'attaque ("Écriture du Nom")
+ * comme le tic de fin de tour ("Serment de Vengeance") tombent ici, donc l'échéance se
+ * juge au même endroit dans les deux cas.
+ *
+ * L'esquive se roule ICI, avant de toucher au compteur (`ctx.rollEvasion` puis
+ * `skipEvasionRoll` sur la repose) -- comme Marteau de Locke : un jet perdu pendant la
+ * repose (remove + reapply n'a pas d'API "update") effacerait sinon les marques déjà
+ * posées au lieu de simplement ne pas en ajouter une nouvelle.
  */
-async function advanceDeathClock(ctx: EffectContext, targetInstanceId: string, by: number): Promise<void> {
-  const turns = clockTurnsOf(ctx, targetInstanceId) + by;
+async function addNameMark(ctx: EffectContext, targetInstanceId: string): Promise<void> {
+  if (ctx.rollEvasion(targetInstanceId)) return;
+
+  const marks = marksOf(ctx, targetInstanceId) + 1;
   const target = ctx.getCharacter(targetInstanceId);
 
-  if (turns >= DEATH_CLOCK_TURNS) {
+  if (marks >= MARKS_TO_KILL) {
     ctx.log(`${getCharacterCard(target.cardId).name} subit une crise cardiaque`, {
       kind: 'ko',
       characterInstanceId: targetInstanceId,
@@ -57,34 +59,46 @@ async function advanceDeathClock(ctx: EffectContext, targetInstanceId: string, b
     return;
   }
 
-  // Pas d'API « mettre à jour un statut » : on repose le compteur avec sa nouvelle valeur.
-  if (hasStatus(target, DEATH_CLOCK_STATUS_ID)) ctx.removeStatus(targetInstanceId, DEATH_CLOCK_STATUS_ID);
-  ctx.applyStatus(targetInstanceId, {
-    statusId: DEATH_CLOCK_STATUS_ID,
-    label: `Heure de la mort (${turns}/${DEATH_CLOCK_TURNS})`,
-    sourcePlayerId: ctx.ownerId,
-    sourceCardInstanceId: ctx.sourceInstanceId,
-    data: { turns },
-  });
+  if (hasStatus(target, NOM_MARK_STATUS_ID)) ctx.removeStatus(targetInstanceId, NOM_MARK_STATUS_ID);
+  ctx.applyStatus(
+    targetInstanceId,
+    {
+      statusId: NOM_MARK_STATUS_ID,
+      label: `Marque du Nom (${marks}/${MARKS_TO_KILL})`,
+      sourcePlayerId: ctx.ownerId,
+      sourceCardInstanceId: ctx.sourceInstanceId,
+      data: { count: marks },
+    },
+    { skipEvasionRoll: true } // déjà résolu ci-dessus via rollEvasion
+  );
 }
 
 export const lightYagami: CharacterCardDef = {
   type: 'character',
   id: 'light-yagami',
   name: 'Light Yagami',
-  baseMaxHP: 200,
+  baseMaxHP: 290,
   attacks: [
     {
       id: 'ecriture-du-nom',
       name: 'Écriture du Nom',
       baseATK: 0,
-      description: "Avance l'heure de la mort d'un tour.",
+      description: 'Pose une marque "Nom" sur le personnage actif adverse. Octroi au prochain tour esquive à light',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
-        // Aucun dégât : l'attaque ne fait qu'avancer le compteur. Cumulable, donc une
+        // Aucun dégât : l'attaque ne fait qu'ajouter une marque. Cumulable, donc une
         // deuxième Écriture rapproche encore l'échéance.
-        await advanceDeathClock(ctx, target.instanceId, 1);
+        await addNameMark(ctx, target.instanceId);
+
+        ctx.applyStatus(ctx.sourceInstanceId, {
+          statusId: 'evasive',
+          label: 'Écriture du Nom (esquive)',
+          sourcePlayerId: ctx.ownerId,
+          sourceCardInstanceId: ctx.sourceInstanceId,
+          remainingTurns: EVASION_REMAINING_TURNS,
+          ticksOnBench: true, // sinon un Light mis au banc entre-temps gèlerait le compte à rebours
+        });
       },
     },
   ],
@@ -94,26 +108,27 @@ export const lightYagami: CharacterCardDef = {
       name: 'Sermet de Vengeance',
       kind: 'passive',
       description:
-        "Si le personnage ennemi reste sur le poste actif pendant 5 tours d'affilé, il subit une crise cardiaque (KO instantané).",
-      trigger: 'onTurnStart',
+        'À la fin de ton tour, pose 1 marque "Nom" sur le personnage actif adverse. À 8 marques, il subit une crise cardiaque et la carte Meurt',
+      trigger: 'onTurnEnd',
       condition(ctx) {
-        // Un tour de l'adversaire qui commence, et Light Yagami doit tenir le poste actif :
-        // au banc, il ne regarde plus personne et l'horloge s'arrête là où elle en est.
-        if (ctx.event?.playerId !== ctx.opponentId) return false;
+        // À la fin du tour de Light lui-même, et seulement s'il tient le poste actif : au
+        // banc, il ne regarde plus personne.
+        if (ctx.event?.playerId !== ctx.ownerId) return false;
         if (!isOnActivePost(ctx)) return false;
         return !!ctx.getActive(ctx.opponentId);
       },
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
-        await advanceDeathClock(ctx, target.instanceId, 1);
+        await addNameMark(ctx, target.instanceId);
       },
     },
     {
       id: 'contrainte',
       name: 'Contrainte',
       kind: 'passive',
-      description: "Switcher vers le banc annule l'exécution, mais le personnage entrant subit 60 dégâts",
+      description:
+        'Switcher vers le banc efface les marques du personnage qui fuit. En contrepartie, le personnage qui fuit subit 50 dégâts par marque effacée',
       trigger: 'onSwitch',
       condition(ctx) {
         // `onSwitch` n'est émis que pour un vrai changement d'actif, volontaire ou forcé
@@ -124,60 +139,50 @@ export const lightYagami: CharacterCardDef = {
       },
       async execute(ctx) {
         const previousId = ctx.event?.data['previousActiveInstanceId'];
-        const newActiveId = ctx.event?.data['newActiveInstanceId'];
+        if (typeof previousId !== 'string') return;
 
-        // « Annule l'exécution » : le compte « d'affilé » repart de zéro. Nettoyé des deux
-        // côtés du switch -- celui qui s'échappe emporte sinon son compteur au banc et le
-        // retrouverait intact en revenant.
-        if (typeof previousId === 'string') ctx.removeStatus(previousId, DEATH_CLOCK_STATUS_ID);
-        if (typeof newActiveId !== 'string') return;
-        ctx.removeStatus(newActiveId, DEATH_CLOCK_STATUS_ID);
+        // « Le personnage qui fuit », pas l'entrant : seules ses propres marques comptent,
+        // et lui seul encaisse les dégâts qui en découlent.
+        const marks = marksOf(ctx, previousId);
+        if (marks <= 0) return;
 
-        await ctx.dealDamage(newActiveId, CONTRAINTE_DAMAGE);
+        ctx.removeStatus(previousId, NOM_MARK_STATUS_ID);
+        await ctx.dealDamage(previousId, marks * CONTRAINTE_DAMAGE_PER_MARK);
       },
     },
     {
       id: 'manipulation',
       name: 'Manipulation',
       kind: 'active',
-      description: "Empêche le personnage actif adverse d'effectuer un switch lors de son prochain tour. 2 tours de cooldown",
+      description:
+        "Force le personnage actif ennemi à retourner sur le banc. L'adversaire doit envoyer un nouveau personnage de son choix sur le terrain Utilisable une fois",
+      usesPerGame: 1,
       condition(ctx) {
-        const self = ctx.getCharacter(ctx.sourceInstanceId);
-        if (hasStatus(self, MANIPULATION_COOLDOWN_STATUS_ID)) return false;
-        return !!ctx.getActive(ctx.opponentId);
+        return !!ctx.getActive(ctx.opponentId) && ctx.getBench(ctx.opponentId).length > 0;
       },
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
-        if (!target) return;
+        const bench = ctx.getBench(ctx.opponentId);
+        if (!target || bench.length === 0) return;
 
-        ctx.applyStatus(target.instanceId, {
-          statusId: GRIP_STATUS_ID,
-          label: 'Manipulation (switch bloqué)',
-          sourcePlayerId: ctx.ownerId,
-          sourceCardInstanceId: ctx.sourceInstanceId,
-          remainingTurns: GRIP_REMAINING_TURNS,
-        });
-        ctx.applyStatus(ctx.sourceInstanceId, {
-          statusId: MANIPULATION_COOLDOWN_STATUS_ID,
-          label: 'Manipulation (recharge)',
-          remainingTurns: MANIPULATION_COOLDOWN_REMAINING_TURNS,
-          ticksOnBench: true,
-        });
-      },
-    },
-  ],
-  modifiers: [
-    {
-      // L'emprise ne ferme que l'action de switch du joueur. Volontairement pas le statut
-      // 'chained' du moteur, qui bloquerait AUSSI les switchs forcés par une carte : le
-      // texte ne parle que du switch que l'adversaire déciderait lui-même.
-      query: 'canSwitchStandard',
-      vote(ctx) {
-        const leavingId = ctx.query['characterInstanceId'] as string;
-        const enemy = ctx.state.players[otherPlayer(ctx.sourceOwnerId)];
-        const char = enemy.characters[leavingId];
-        if (!char || !hasStatus(char, GRIP_STATUS_ID)) return undefined;
-        return { allow: false, source: 'light-yagami-manipulation', reason: 'manipulé (Light Yagami)' };
+        // C'est l'ADVERSAIRE qui choisit son remplaçant, pas Light : `chooseOptionFor`
+        // adresse la question à `ctx.opponentId` (cf. Offrande du Dieu de la Mort).
+        // `ctx.choose({kind:'select-characters'})` ne sait poser la question qu'au
+        // propriétaire de l'effet, donc pas utilisable ici.
+        const chosen = await ctx.chooseOptionFor(
+          ctx.opponentId,
+          'Manipulation : choisissez le personnage qui prend le poste actif',
+          bench.map((c) => ({
+            key: c.instanceId,
+            label: cardName(c.cardId),
+            card: { cardId: c.cardId, kind: 'character' as const },
+          }))
+        );
+        const replacementId = bench.some((c) => c.instanceId === chosen) ? chosen : bench[0]!.instanceId;
+
+        // zones.switchActive refuse de lui-même un actif enchaîné ou explicitement bloqué :
+        // aucune vérification supplémentaire à faire ici.
+        await ctx.forceSwitch(ctx.opponentId, replacementId);
       },
     },
   ],

@@ -86,12 +86,10 @@ const STATUS_VISUALS: Record<string, StatusVisual> = {
   'forced-attack': { className: 'fx-vulnerable', particles: 'target', tone: 'debuff' },
   // « Sacrifice » de Makima : une compétence fermée, comme un silence -- mais ciblée.
   'makima-sceau': { className: 'fx-silence', particles: 'mute', tone: 'debuff' },
-  // « Sermet de Vengeance » de Light Yagami : le compte à rebours avant la crise cardiaque.
-  // Le symbole de la marque, celui qui dit « repéré » sans annoncer de dégâts immédiats.
-  'light-yagami-crise': { className: 'fx-mark', particles: 'mark', tone: 'debuff' },
-  // « Manipulation » de Light Yagami : un switch fermé à clé, pas une chaîne (les switchs
-  // forcés passent toujours) -- d'où le cadenas plutôt que le visuel de `chained`.
-  'light-yagami-emprise': { className: 'fx-locked', particles: 'lock', tone: 'debuff' },
+  // « Serment de Vengeance » / « Écriture du Nom » de Light Yagami : les marques "Nom"
+  // avant la crise cardiaque. Le symbole de la marque, celui qui dit « repéré » sans
+  // annoncer de dégâts immédiats.
+  'light-yagami-marque-nom': { className: 'fx-mark', particles: 'mark', tone: 'debuff' },
   // « Mise à mort » de Yumeko : un pari remporté, des dégâts en réserve pour son attaque.
   'yumeko-pari-gagne': { className: 'fx-atk-boost', particles: 'arrow-up', tone: 'buff' },
   // « Double Face » de Chrollo : la carte est fermée -- ni capacité, ni attaque, ni retour

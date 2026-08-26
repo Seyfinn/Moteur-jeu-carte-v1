@@ -1,5 +1,15 @@
 import type { ObjectCardDef } from '../types.js';
 
+/**
+ * Interdit de jouer "Attaque cloné" quand un de ces trois personnages est au poste actif :
+ * l'interaction est jugée trop puissante (Locke double-attaquerait avec Marteau, un clou de
+ * plus par tour vers l'explosion garantie ; Light Yagami et Yumeko profitent chacun d'une
+ * seconde chance de déclencher leur propre effet sur-coup dans le même tour). Blocage
+ * volontairement au niveau de la carte (liste en dur), pas un modifier générique : rien
+ * d'autre dans le moteur n'a besoin de refuser "par personnage nommé".
+ */
+const BANNED_ACTIVE_CARD_IDS = ['locke', 'light-yagami', 'yumeko'];
+
 const EXTRA_ATTACKS = 1;
 const SECOND_ATTACK_DAMAGE_PERCENT = 50;
 const SILENCE_EFFECTIVE_TURNS = 2;
@@ -25,8 +35,14 @@ export const attaqueClone: ObjectCardDef = {
     `${SECOND_ATTACK_DAMAGE_PERCENT}% des dégâts. Incapable d’utiliser son actif aux ` +
     `${SILENCE_EFFECTIVE_TURNS} prochains tours.`,
   unplayableReason(state, ownerId) {
-    if (!state.players[ownerId].activeCharacterInstanceId) {
+    const player = state.players[ownerId];
+    const activeId = player.activeCharacterInstanceId;
+    if (!activeId) {
       return "Vous n'avez pas de personnage actif pour attaquer.";
+    }
+    const activeCardId = player.characters[activeId]?.cardId;
+    if (activeCardId && BANNED_ACTIVE_CARD_IDS.includes(activeCardId)) {
+      return 'Interaction trop puissante.';
     }
     return null;
   },

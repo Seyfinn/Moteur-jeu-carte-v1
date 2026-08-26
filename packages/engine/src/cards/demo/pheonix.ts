@@ -1,8 +1,8 @@
 import type { ObjectCardDef } from '../types.js';
 
-const REVIVE_DELAY_TURNS = 20;
-const BONUS_MAX_HP = 100;
-const BONUS_ATK = 50;
+const REVIVE_DELAY_TURNS = 10;
+const BONUS_MAX_HP = 80;
+const BONUS_ATK = 30;
 
 export const pheonix: ObjectCardDef = {
   type: 'object',

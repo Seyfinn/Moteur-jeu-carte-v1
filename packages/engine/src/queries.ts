@@ -50,8 +50,15 @@ function getInPlaySources(state: GameState, queryName: QueryName): ModifierSourc
       const char = player.characters[id];
       if (!char) continue;
       const def = getCharacterCard(char.cardId);
+      // Un modifier qui porte le texte d'une passive imprimée (L'Infini, Sharingan) doit
+      // tomber avec elle quand le porteur est réduit au silence passif : sans ce garde, la
+      // passive restait active sous Silence Ultime, puisqu'un modifier ne passe jamais par
+      // `canUseAbility`.
+      const silencedPassive = isSilencedPassive(char);
       for (const mod of def.modifiers ?? []) {
-        if (mod.query === queryName) sources.push({ def: mod, sourceInstanceId: id, sourceOwnerId: playerId });
+        if (mod.query !== queryName) continue;
+        if (mod.silencedByPassive && silencedPassive) continue;
+        sources.push({ def: mod, sourceInstanceId: id, sourceOwnerId: playerId });
       }
     }
     for (const objId of player.inPlayObjectInstanceIds) {

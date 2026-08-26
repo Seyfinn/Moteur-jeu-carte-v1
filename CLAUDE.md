@@ -424,6 +424,14 @@ autour de l'appel à `evolveCharacter` -- il n'y a volontairement pas de champ d
   `Math.max(current, MON_POURCENTAGE)`. Base : 5 % d'esquive, 2 % de critique ; les
   statuts `evasive`/`critical` montent la base à 33 % (`critical` accepte un
   `data.percent` pour un one-shot, cf. Godspeed de Killua à 100 %).
+- ⚠️ **Un modifier qui porte le texte d'une capacité PASSIVE doit déclarer
+  `silencedByPassive: true`.** Un modifier vit tant que la carte est en jeu et ne passe
+  jamais par `canUseAbility` : sans ce champ, une passive codée en modifier (L'Infini de
+  Gojo, Sharingan de Kakashi) continuait de marcher sous `silence-passive` /
+  `silence-ultimate`. Le moteur coupe alors le modifier tant que son porteur est silencé
+  (garde dans `queries.ts::getInPlaySources`). À ne **pas** mettre sur un modifier qui
+  porte le texte d'une **attaque** (le critique de Blackflash) : le silence passif ne ferme
+  pas les attaques. Ignoré sur un objet/terrain, qui ne peut pas être silencé.
 - **Statuts génériques reconnus par le moteur** (aucune logique à écrire côté carte,
   il suffit de les poser) :
   - `death-ward` : les dégâts classiques ne peuvent plus descendre le porteur sous 1 HP.
@@ -598,6 +606,8 @@ avant qu'il ne puisse agir. Donc :
   burn/poison/bleed échappaient à la suspension des durées au banc. Il est désormais
   honoré (décompte uniquement, pas de dégâts).
 - Les triggers `onTerrainPlayed` se déclenchaient pour le terrain de n'importe qui.
+- Une passive codée en **modifier** (esquive innée de Gojo/Kakashi) survivait au silence
+  passif / ultime : c'est ce que corrige `silencedByPassive` (voir Patterns récurrents).
 - Un KO tuant via valeur lock (Mahito, poison Sang Maudit) ne nommait pas son tueur :
   les passives « sur kill » le rataient.
 - Les objets équipés sur un personnage d'un **autre** camp partaient dans le mauvais
