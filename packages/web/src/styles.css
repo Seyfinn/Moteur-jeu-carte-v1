@@ -3262,6 +3262,39 @@ textarea {
   text-transform: uppercase;
   color: var(--danger);
 }
+/* Mode Pioche : la Main Personnage, à côté du cimetière. En lecture seule -- ces cartes
+   descendent au banc toutes seules dès qu'une place s'y libère. */
+.character-hand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.character-hand-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.65;
+  white-space: nowrap;
+}
+.character-hand-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+/* Compteur d'éliminations du Mode Pioche : discret, puis alarmant à l'approche du seuil. */
+.nameplate-eliminations {
+  font-variant-numeric: tabular-nums;
+}
+.nameplate-eliminations.critical {
+  color: #ff6b6b;
+  font-weight: 600;
+}
+.board-header-piles {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
 /* Choix du mode de jeu, à la création du salon. */
 .lobby-mode {
   border: 1px solid rgba(255, 255, 255, 0.12);

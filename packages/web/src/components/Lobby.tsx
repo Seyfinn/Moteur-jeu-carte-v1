@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { listDeckPool, RANDOM_POOL_SIZE, type DeckPoolEntry, type GameMode } from 'engine';
+import {
+  DRAW_MODE_ELIMINATIONS_TO_WIN,
+  DRAW_MODE_STARTING_CHARACTERS,
+  listDeckPool,
+  RANDOM_POOL_SIZE,
+  type DeckPoolEntry,
+  type GameMode,
+} from 'engine';
 import type { GameConnection } from '../net/useGameConnection';
 import { deckIssue, deckToRoster, loadDecks, type Deck } from '../decks';
 import { DeckContentsPanel, type CardKind } from './DeckContentsPanel';
@@ -43,7 +50,10 @@ export function Lobby({
   // En Mode Aléatoire, le deck sélectionné n'est pas joué : chacun compose le sien dans le
   // tirage que le serveur lui donne. Inutile donc d'exiger un deck valide pour créer.
   const randomMode = mode === 'random';
-  const canPlay = randomMode || (Boolean(selectedDeck) && issue === null);
+  const drawMode = mode === 'draw';
+  // Ni le Mode Aléatoire ni le Mode Pioche ne jouent le deck sélectionné : inutile d'exiger
+  // qu'il soit valide pour créer le salon.
+  const canPlay = randomMode || drawMode || (Boolean(selectedDeck) && issue === null);
   const busy = conn.status === 'connecting' || conn.resuming;
   const deckSize = selectedDeck
     ? selectedDeck.characterCardIds.length + selectedDeck.objectCardIds.length + selectedDeck.terrainCardIds.length
@@ -108,7 +118,17 @@ export function Lobby({
                 Mode Aléatoire — chacun compose son équipe dans un tirage de{' '}
                 {RANDOM_POOL_SIZE.character}/{RANDOM_POOL_SIZE.object}/{RANDOM_POOL_SIZE.terrain}
               </label>
-              {randomMode && (
+              <label>
+                <input
+                  type="radio"
+                  name="game-mode"
+                  checked={drawMode}
+                  onChange={() => setMode('draw')}
+                />
+                Mode Pioche — {DRAW_MODE_STARTING_CHARACTERS} personnages au départ, une carte
+                piochée par tour, {DRAW_MODE_ELIMINATIONS_TO_WIN} éliminations pour gagner
+              </label>
+              {(randomMode || drawMode) && (
                 <p className="subtitle">
                   Le mode s'applique au salon entier. Votre deck n'est pas utilisé.
                 </p>
@@ -149,7 +169,13 @@ export function Lobby({
               >
                 <span className="lobby-cta-label">Créer un salon</span>
                 <span className="lobby-cta-sub">
-                  {randomMode ? 'Tirage à la connexion' : canPlay ? `${deckSize} cartes prêtes` : 'Deck injouable'}
+                  {drawMode
+                    ? 'Tout sort des piles'
+                    : randomMode
+                      ? 'Tirage à la connexion'
+                      : canPlay
+                        ? `${deckSize} cartes prêtes`
+                        : 'Deck injouable'}
                 </span>
               </button>
 

@@ -13,7 +13,12 @@ export const RANDOM_POOL_SIZE = {
   terrain: 6,
 } as const;
 
-export type GameMode = 'normal' | 'random';
+/**
+ * Le mode choisi dans le lobby. 'normal' et 'random' débouchent tous deux sur une partie
+ * `MatchMode: 'standard'` (on joue un deck fixé d'avance, construit ou drafté) ; 'draw' est
+ * le Mode Pioche, qui suit ses propres règles (voir draw-mode.ts).
+ */
+export type GameMode = 'normal' | 'random' | 'draw';
 
 /** La réserve tirée pour UN joueur. Même forme qu'un roster, mais ce n'est pas un deck jouable. */
 export type DraftPool = RosterConfig;

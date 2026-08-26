@@ -5,6 +5,7 @@ import { otherPlayer, type GameState, type PlayerId } from './types.js';
 import { cardName, playerName } from './names.js';
 import { getCharacterCard } from './cards/registry.js';
 import { canAttack, getEffectiveATK } from './queries.js';
+import { drawAtEndOfTurn, refillBenchFromHand } from './draw-mode.js';
 
 /**
  * 'forced-attack' ("Manipulation" de Makima) : l'actif manipulé frappe un personnage de
@@ -128,6 +129,14 @@ export async function endTurn(state: GameState, api: EngineApi): Promise<void> {
   const endingPlayer = state.activePlayerId;
   state.players[endingPlayer].hasHadFirstTurn = true;
   await api.emitEvent({ name: 'onTurnEnd', playerId: endingPlayer, data: {} });
+  if (state.result) return;
+
+  // Mode Pioche : « à la toute fin du tour », donc après les effets de fin de tour et
+  // avant que la main ne change de camp. Un personnage pioché peut compléter le banc, d'où
+  // le rattrapage juste derrière.
+  await drawAtEndOfTurn(state, endingPlayer, api);
+  await refillBenchFromHand(state, endingPlayer, api);
+  checkWinCondition(state);
   if (state.result) return;
 
   // "Za Warudo !" : le même joueur rouvre un tour complet au lieu de passer la main. La
