@@ -59,9 +59,20 @@ export {
   getTerrainCard,
   listCards,
   clearRegistry,
+  evolutionFormsOf,
+  evolvedFormIds,
+  isEvolvedForm,
 } from './cards/registry.js';
 
 export * from './cards/demo/index.js';
 export type { ClientMessage, ServerMessage } from './protocol.js';
-export { DECK_LIMITS, listDeckPool, validateRoster } from './deck.js';
-export type { DeckPoolEntry, RosterValidation } from './deck.js';
+export { DECK_LIMITS, evolutionEntries, listDeckPool, validateRoster } from './deck.js';
+export {
+  RANDOM_POOL_SIZE,
+  drawRandomPool,
+  drawRandomPools,
+  draftIssue,
+  validateDraftedRoster,
+} from './draft.js';
+export type { DraftPool, GameMode } from './draft.js';
+export type { DeckPoolEntry, EvolutionFormEntry, RosterValidation } from './deck.js';

@@ -144,6 +144,32 @@ function classifyLogEntry(entry: LogEntry, state: GameState): Classified[] {
       ];
     }
 
+    // Une évolution mérite la même mise en avant qu'une capacité : c'est la carte elle-même
+    // qui change, les deux joueurs doivent voir laquelle arrive.
+    case 'evolve': {
+      const characterInstanceId = d['characterInstanceId'] as string | undefined;
+      const cardId = d['cardId'] as string | undefined;
+      if (!characterInstanceId || !cardId) return [];
+      let name = 'Évolution';
+      try {
+        name = getCharacterCard(cardId).name;
+      } catch {
+        /* unknown card id -- keep fallback label */
+      }
+      return [
+        { anchor: 'character', characterInstanceId, badge: { kind: 'ability', label: 'Évolution' } },
+        {
+          anchor: 'spotlight',
+          spotlight: {
+            cardId,
+            cardKind: 'character',
+            name,
+            action: `${playerName(state, entryPlayerId(entry))} · évolution`,
+          },
+        },
+      ];
+    }
+
     case 'play-object': {
       const cardId = d['cardId'] as string | undefined;
       if (!cardId) return [];

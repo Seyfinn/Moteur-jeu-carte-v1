@@ -1,6 +1,7 @@
 import type { CharacterCardDef } from '../types.js';
 import { hasDeathWard } from '../../statuses.js';
 import { cardName } from '../../names.js';
+import { canTargetBench } from '../../queries.js';
 
 const PURGATOIRE_THRESHOLD_PERCENT = 10;
 
@@ -30,7 +31,14 @@ export const locke: CharacterCardDef = {
         "Locke enfonce un clou sur n'importe quel ennemi, même sur le banc. Cette attaque " +
         "inflige a 65% de chance d'infliger silence ultime si Locke attaque l'ennemi actif.",
       async execute(ctx) {
-        const enemies = ctx.getAllOnBoard(ctx.opponentId);
+        // L'actif reste toujours ciblable ; le banc, seulement s'il est atteignable
+        // (Bouclier Ultime le protège, Arène l'isole).
+        const activeEnemy = ctx.getActive(ctx.opponentId);
+        const enemies = ctx.getAllOnBoard(ctx.opponentId).filter(
+          (c) =>
+            c.instanceId === activeEnemy?.instanceId ||
+            canTargetBench(ctx.state, ctx.sourceInstanceId, c.instanceId, true).allow
+        );
         if (enemies.length === 0) return;
         const [targetId] = await ctx.choose({
           kind: 'select-characters',

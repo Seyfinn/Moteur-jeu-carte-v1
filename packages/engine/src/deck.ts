@@ -1,4 +1,4 @@
-import { getCard, listCards } from './cards/registry.js';
+import { evolutionFormsOf, evolvedFormIds, getCard, listCards } from './cards/registry.js';
 import type { CardDef } from './cards/types.js';
 import type { RosterConfig } from './match.js';
 
@@ -58,6 +58,17 @@ function incompatibilityIndex(): Map<string, Set<string>> {
   return index;
 }
 
+/**
+ * Une forme évoluée telle que le deck-builder doit la MONTRER : rattachée à sa carte de
+ * base, jamais sélectionnable elle-même. C'est ce qui permet de voir que Kayn évolue en
+ * Rhaast ou en Kayn Assassin sans que ces deux cartes n'entrent dans le quota du deck.
+ */
+export interface EvolutionFormEntry {
+  id: string;
+  name: string;
+  baseMaxHP: number;
+}
+
 export interface DeckPoolEntry {
   id: string;
   type: 'character' | 'object' | 'terrain';
@@ -72,12 +83,26 @@ export interface DeckPoolEntry {
   incompatibleWith: string[];
   /** Objects only. `true` = équipement (se lie à un personnage) plutôt qu'effet immédiat. */
   equipment?: boolean;
+  /**
+   * Personnages seulement : les formes vers lesquelles cette carte peut évoluer, à afficher
+   * (illustration + PV) mais jamais à sélectionner. Vide pour l'immense majorité des cartes.
+   */
+  evolutions?: EvolutionFormEntry[];
 }
 
-/** Every card available to put in a deck, for deck-builder UIs. */
+/**
+ * Every card available to put in a deck, for deck-builder UIs.
+ *
+ * Les **formes évoluées en sont exclues** : elles n'entrent pas dans le quota du deck et ne
+ * sont pas sélectionnables. Elles restent visibles, mais uniquement rattachées à leur carte
+ * de base, via le champ `evolutions` de celle-ci.
+ */
 export function listDeckPool(): DeckPoolEntry[] {
   const incompatibilities = incompatibilityIndex();
-  return listCards().map((def) => ({
+  const evolvedIds = evolvedFormIds();
+  return listCards()
+    .filter((def) => !evolvedIds.has(def.id))
+    .map((def) => ({
     id: def.id,
     type: def.type,
     name: def.name,
@@ -86,7 +111,29 @@ export function listDeckPool(): DeckPoolEntry[] {
     maxCopies: maxCopiesOf(def),
     incompatibleWith: [...(incompatibilities.get(def.id) ?? [])],
     equipment: def.type === 'object' ? def.equipment : undefined,
+    evolutions: def.type === 'character' ? evolutionEntries(def.id) : undefined,
   }));
+}
+
+/** Les formes évoluées d'une carte, prêtes à afficher (nom + PV). Vide si elle n'évolue pas. */
+export function evolutionEntries(cardId: string): EvolutionFormEntry[] {
+  let def;
+  try {
+    def = getCard(cardId);
+  } catch {
+    return [];
+  }
+  const entries: EvolutionFormEntry[] = [];
+  for (const formId of evolutionFormsOf(def)) {
+    try {
+      const form = getCard(formId);
+      if (form.type !== 'character') continue;
+      entries.push({ id: form.id, name: form.name, baseMaxHP: form.baseMaxHP });
+    } catch {
+      /* forme déclarée mais pas encore enregistrée -- on l'ignore plutôt que de casser l'UI */
+    }
+  }
+  return entries;
 }
 
 export type RosterValidation = { ok: true } | { ok: false; error: string };
@@ -108,6 +155,7 @@ const GROUPS: Array<{ key: keyof RosterConfig; type: DeckPoolEntry['type']; max:
 
 /** Validates a roster against the deck-building rules (caps + max copies per card). */
 export function validateRoster(roster: RosterConfig): RosterValidation {
+  const evolvedIds = evolvedFormIds();
   for (const group of GROUPS) {
     const ids = roster[group.key];
     if (ids.length > group.max) {
@@ -125,6 +173,11 @@ export function validateRoster(roster: RosterConfig): RosterValidation {
       }
       if (def.type !== group.type) {
         return { ok: false, error: `"${id}" n'est pas une carte ${group.label}` };
+      }
+      // Une forme évoluée n'est jamais choisie : elle arrive en jeu par l'évolution de sa
+      // base, et ne compte donc pas dans le quota du deck.
+      if (evolvedIds.has(id)) {
+        return { ok: false, error: `« ${cardName(id)} » est une forme évoluée : elle ne se met pas dans un deck` };
       }
       copies.set(id, (copies.get(id) ?? 0) + 1);
       maxCopiesById.set(id, maxCopiesOf(def));

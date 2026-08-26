@@ -13,9 +13,12 @@ const SILENCE_REMAINING_TURNS = SILENCE_EFFECTIVE_TURNS;
 export const attaqueClone: ObjectCardDef = {
   type: 'object',
   id: 'attaque-clone',
-  // Pas d'`equipment: true` : tout l'effet est porté par des statuts temporaires, plus
-  // rien n'a besoin de rester en jeu. Garder le logo 🔗 promettrait un lien durable qui
-  // n'existe pas, et l'objet occuperait un des 2 emplacements du personnage pour rien.
+  // À lier (maquette) : s'accroche au porteur (ctx.attachSelfTo ci-dessous) pour toute la
+  // durée où son effet est encore actif (double-attaque puis silence). Le statut posé en
+  // `onExpire` porte `data.objectInstanceId` : le moteur détruit l'objet tout seul quand ce
+  // silence expire naturellement (statuses.ts), donc rien ne reste accroché pour rien une
+  // fois l'effet réellement terminé.
+  equipment: true,
   name: 'Attaque cloné',
   description:
     'Permet d’attaquer deux fois pendant ce tour, la deuxième attaque inflige ' +
@@ -30,6 +33,8 @@ export const attaqueClone: ObjectCardDef = {
   async execute(ctx) {
     const active = ctx.getActive(ctx.ownerId);
     if (!active) return;
+
+    ctx.attachSelfTo(active.instanceId);
 
     // Statut générique du moteur ('extra-attack', cf. types.ts) : la carte ne fait que le
     // poser. C'est `match.ts::applyAction` qui, après une attaque, dépense une charge au
@@ -53,6 +58,10 @@ export const attaqueClone: ObjectCardDef = {
         sourcePlayerId: ctx.ownerId,
         remainingTurns: SILENCE_REMAINING_TURNS,
         ticksOnBench: true,
+        // Convention 'damage-reflect' réutilisée ici pour une expiration NATURELLE (pas
+        // une consommation sur coup) : à la toute fin du silence, statuses.ts détruit
+        // l'objet qui a posé ce statut au lieu de le laisser accroché indéfiniment.
+        data: { objectInstanceId: ctx.sourceInstanceId },
       },
     });
   },

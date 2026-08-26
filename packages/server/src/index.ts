@@ -146,6 +146,15 @@ function parseClientMessage(raw: unknown): ClientMessage | null {
     case 'forfeit':
     case 'rematch':
       return message as unknown as ClientMessage;
+    case 'submit-draft': {
+      const roster = message['roster'];
+      if (!roster || typeof roster !== 'object') return null;
+      const r = roster as Record<string, unknown>;
+      const isIdArray = (v: unknown) => Array.isArray(v) && v.every(isString);
+      return isIdArray(r['characterCardIds']) && isIdArray(r['objectCardIds']) && isIdArray(r['terrainCardIds'])
+        ? (message as unknown as ClientMessage)
+        : null;
+    }
     case 'answer-choice': {
       const answer = message['answer'];
       if (!isString(message['choiceId']) || !answer || typeof answer !== 'object') return null;
@@ -217,7 +226,8 @@ function handleMessage(socket: WebSocket, message: ClientMessage): void {
       }
       const room = new Room(code);
       rooms.set(code, room);
-      const playerId = room.addPlayer(socket, message.playerName, message.roster);
+      // Le mode n'est lu qu'ici : c'est l'hôte qui décide pour le salon entier.
+      const playerId = room.addPlayer(socket, message.playerName, message.roster, message.mode);
       connections.set(socket, { roomCode: code, playerId });
       const sessionToken = issueSession(code, playerId);
       sendMessage(socket, { type: 'room-created', roomCode: code, you: playerId, sessionToken });
@@ -281,6 +291,12 @@ function handleMessage(socket: WebSocket, message: ClientMessage): void {
       const conn = connections.get(socket);
       if (!conn) return sendError(socket, 'Not in a room');
       rooms.get(conn.roomCode)?.handleRematch(conn.playerId);
+      return;
+    }
+    case 'submit-draft': {
+      const conn = connections.get(socket);
+      if (!conn) return sendError(socket, 'Not in a room');
+      rooms.get(conn.roomCode)?.handleSubmitDraft(conn.playerId, message.roster);
       return;
     }
     case 'answer-choice': {

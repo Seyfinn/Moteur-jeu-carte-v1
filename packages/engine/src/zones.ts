@@ -3,6 +3,8 @@ import { otherPlayer, type CharacterInstance, type GameState, type PlayerId, typ
 import type { EngineApi } from './engine-api.js';
 import { getCharacterCard, getTerrainCard } from './cards/registry.js';
 import { getLinkedPartnerId, hasStatus } from './statuses.js';
+// Pas de cycle : queries.ts n'importe pas zones.ts (il ne dépend que de types/registry/statuses).
+import { canSwitchAny, describeDenials } from './queries.js';
 import { cardName, playerName } from './names.js';
 
 export function findCharacterOwner(state: GameState, instanceId: string): PlayerId {
@@ -123,6 +125,11 @@ export async function koCharacter(
     }
   }
 
+  // ⚠️ Remplacer un personnage KO n'est PAS un switch : ce chemin ne passe volontairement
+  // ni par `switchActive`, ni par `canSwitchStandard`, ni par `canSwitchAny`, et n'émet pas
+  // `onSwitch` (seulement `onBecomeActive` avec `reason: 'ko-replacement'`). Aucune carte
+  // ne doit pouvoir empêcher un camp de remettre quelqu'un au poste actif -- sinon il n'a
+  // plus d'actif, ne peut plus rien faire, et la partie se bloque sans que personne ne gagne.
   if (wasActive && player.activeCharacterInstanceId === null && player.benchCharacterInstanceIds.length > 0) {
     const answer = await api.chooseFor(ownerId, {
       kind: 'select-characters',
@@ -289,6 +296,18 @@ export async function switchActive(state: GameState, playerId: PlayerId, newActi
     api.log(
       `${cardName(previousActive.cardId)} est enchaîné : impossible de le sortir du poste actif`,
       { kind: 'blocked', characterInstanceId: previousActiveId, reason: 'chained' },
+      playerId
+    );
+    return;
+  }
+  // Même logique, ouverte aux cartes : `canSwitchAny` ferme TOUS les switchs, y compris
+  // ceux qu'une carte force (Arène isole le poste actif ; le scellement de Chrollo empêche
+  // sa victime de revenir). Le garde vit ici, dans l'unique point de passage.
+  const switchPermission = canSwitchAny(state, playerId, previousActiveId, newActiveInstanceId);
+  if (!switchPermission.allow) {
+    api.log(
+      `Changement de personnage impossible : ${describeDenials(switchPermission.votes)}`,
+      { kind: 'blocked', characterInstanceId: previousActiveId ?? newActiveInstanceId },
       playerId
     );
     return;

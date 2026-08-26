@@ -6,6 +6,12 @@ import { canUseAbility, evaluateTransform, findCharacter } from './queries.js';
 import { cardName } from './names.js';
 import type { EngineEvent, EventName, GameState, PlayerId } from './types.js';
 
+/** `trigger` accepte un event ou une liste : "cette passive réagit à n'importe lequel". */
+function listensTo(ability: AbilityDef, eventName: EventName): boolean {
+  if (!ability.trigger) return false;
+  return Array.isArray(ability.trigger) ? ability.trigger.includes(eventName) : ability.trigger === eventName;
+}
+
 interface TriggeredSource {
   ability: AbilityDef;
   sourceInstanceId: string;
@@ -34,6 +40,7 @@ const EVENT_LABELS: Partial<Record<EventName, string>> = {
   afterDamage: 'après les dégâts',
   onCharacterKO: 'KO',
   onCharacterRevived: 'résurrection',
+  onCharacterEvolved: 'évolution',
   onObjectPlayed: 'objet joué',
   onTerrainPlayed: 'terrain posé',
   onTerrainRemoved: 'terrain retiré',
@@ -64,7 +71,7 @@ function getTriggeredSources(state: GameState, event: EngineEvent): TriggeredSou
       if (!char) continue;
       const def = getCharacterCard(char.cardId);
       for (const ability of def.abilities) {
-        if (ability.trigger === event.name) {
+        if (listensTo(ability, event.name)) {
           sources.push({ ability, sourceInstanceId: id, sourceOwnerId: playerId, kind: 'character' });
         }
       }
@@ -74,7 +81,7 @@ function getTriggeredSources(state: GameState, event: EngineEvent): TriggeredSou
       if (terrain) {
         const def = getTerrainCard(terrain.cardId);
         for (const ability of def.abilities ?? []) {
-          if (ability.trigger === event.name) {
+          if (listensTo(ability, event.name)) {
             sources.push({ ability, sourceInstanceId: terrain.instanceId, sourceOwnerId: playerId, kind: 'terrain' });
           }
         }
@@ -91,7 +98,7 @@ function getTriggeredSources(state: GameState, event: EngineEvent): TriggeredSou
         const terrain = state.players[playerId].terrains[removedId];
         if (!terrain || state.players[playerId].activeTerrainInstanceId === removedId) continue;
         for (const ability of getTerrainCard(terrain.cardId).abilities ?? []) {
-          if (ability.trigger === 'onTerrainRemoved') {
+          if (listensTo(ability, 'onTerrainRemoved')) {
             sources.push({ ability, sourceInstanceId: removedId, sourceOwnerId: playerId, kind: 'terrain' });
           }
         }
@@ -112,7 +119,7 @@ function getTriggeredSources(state: GameState, event: EngineEvent): TriggeredSou
         if (!char) continue;
         const def = getCharacterCard(char.cardId);
         for (const ability of def.abilities) {
-          if (ability.trigger === 'onCharacterKO') {
+          if (listensTo(ability, 'onCharacterKO')) {
             sources.push({ ability, sourceInstanceId: diedId, sourceOwnerId: playerId, kind: 'character' });
           }
         }

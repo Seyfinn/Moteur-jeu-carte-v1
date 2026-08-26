@@ -111,14 +111,20 @@ interface AttackDef {
 }
 interface AbilityDef {
   id: string; name: string; kind: 'active' | 'passive'; description: string;
-  trigger?: EventName; // les passives réagissent à un event ; sans trigger = purement descriptive
+  trigger?: EventName | EventName[]; // un event, ou "n'importe lequel de ceux-ci" ; sans trigger = purement descriptive
   condition?(ctx: EffectContext): boolean;
   usableFromBench?: boolean; // défaut false
   usesPerTurn?: number; // défaut 1
   usesPerGame?: number; // défaut illimité
+  endsTurn?: boolean | ((ctx: EffectContext) => boolean); // défaut FALSE, évalué APRÈS execute()
   execute(ctx: EffectContext): Promise<void>;
 }
 ```
+
+⚠️ `endsTurn` est le seul point commun entre `AttackDef` et `AbilityDef` où les défauts
+s'opposent : une **attaque** ferme le tour sauf mention contraire, une **capacité** est
+gratuite sauf mention contraire (ex : « Manipulation » de Makima, dont le texte dit
+explicitement qu'elle met fin au tour).
 
 ⚠️ **Seules les abilities `kind: 'active'` sans `trigger` sont activables manuellement**
 (par le joueur, via le menu "Capacité"). Une `kind: 'passive'` est soit déclenchée par un
@@ -128,7 +134,7 @@ l'`AttackDef`) — le moteur refuse son activation manuelle et l'UI ne la propos
 ## Événements (`trigger`)
 
 `onGameStart onTurnStart onTurnEnd onBecomeActive onAttackDeclared beforeDamage
-afterDamage onCharacterKO onCharacterRevived onObjectPlayed onTerrainPlayed
+afterDamage onCharacterKO onCharacterRevived onCharacterEvolved onObjectPlayed onTerrainPlayed
 onTerrainRemoved onStatusExpired onSwitch onAbilityUsed`.
 
 Payloads utiles (voir `EventPayloads` dans `types.ts` pour la liste complète) :
@@ -201,8 +207,11 @@ ctx.destroyObject(objectInstanceId)
 ctx.extendTerrain(id, turns); ctx.shortenTerrain(id, turns); ctx.destroyTerrain(id)
 ctx.forceSwitch(playerId, newActiveInstanceId): Promise<void>
 ctx.cloneCharacter(sourceInstanceId, hp, 'active'|'bench'): string // renvoie le nouvel instanceId
+ctx.evolveCharacter(characterInstanceId, toCardId?): Promise<boolean> // cartes évolutives
 ctx.createObject(cardId): string
 
+ctx.playObjectImmediately(cardId, forPlayerId?)  // joue un objet gratuitement (hors budget)
+ctx.grantExtraTurn(forPlayerId?)                // rejoue un tour complet après celui-ci
 ctx.buildEffectContext(sourceInstanceId, 'attack'|'ability'|'other'): EffectContext
 ctx.scheduleRevive(characterInstanceId, {turns, bonusMaxHP?, bonusATK?})
 ctx.chooseOptionFor(playerId, prompt, options)  // poser la question à l'ADVERSAIRE
@@ -250,9 +259,69 @@ Garde-fous appliqués automatiquement, inutile de les re-coder par carte :
   `onTerrainRemoved` avec `reason: 'replaced'`. La durée du nouveau terrain est déjà
   posée quand cet event part, et si une réaction le détruit dans la foulée, `onTerrainPlayed`
   n'est pas émis.
+- **Un tour bonus** (« Za Warudo ! » de Dio) : `ctx.grantExtraTurn()`. `endTurn` rouvre
+  alors un tour complet pour le même joueur au lieu de passer la main, et la marque est
+  consommée à ce moment-là -- une pose ne peut donc jamais en donner deux. C'est un **vrai**
+  tour : poisons, brûlures et recharges tiquent une seconde fois. `state.turnNumber` ne
+  bouge pas (la manche n'a pas fait le tour des deux joueurs).
+- **Remplacer un personnage KO n'est PAS un switch.** Ce chemin ne passe ni par
+  `zones.switchActive`, ni par `canSwitchStandard`, ni par `canSwitchAny`, et n'émet pas
+  `onSwitch` (seulement `onBecomeActive` avec `reason: 'ko-replacement'`). Aucune carte ne
+  doit pouvoir empêcher un camp de remettre quelqu'un au poste actif : sinon il n'a plus
+  d'actif, ne peut plus rien faire, et la partie se bloque sans que personne ne gagne.
 - `abilityUsesThisTurn` est remis à zéro pour **les deux camps** au début de chaque tour.
   Un passive qui réagit à une action adverse (`afterDamage`, `onCharacterKO`...) dispose
   donc bien de son quota à chaque tour de jeu, et pas seulement un tour sur deux.
+
+## Cartes évolutives (Gon ➔ Gon Adulte, Kayn ➔ Assassin / Rhaast)
+
+Une carte de base déclare ses formes avec **`evolvesTo`** (`string` ou `string[]`) sur sa
+`CharacterCardDef`. Ce seul champ suffit à sortir les formes évoluées du jeu de sélection :
+`listDeckPool()` ne les renvoie plus et `validateRoster` refuse de les mettre dans un deck --
+elles **ne comptent pas dans le quota** et arrivent uniquement par l'évolution de leur base.
+Le deck-builder les affiche quand même, en vignettes non sélectionnables sous la carte de
+base (`DeckPoolEntry.evolutions`), pour qu'on voie où la carte mène.
+
+La **condition** d'évolution n'est PAS déclarative : elle vit dans une passive de la carte
+de base, qui appelle `ctx.evolveCharacter()` le moment venu (compteur d'attaques, kill,
+seuil de PV...). Idem pour le **choix de la branche** quand il y en a plusieurs : sur Kayn,
+c'est une passive `onBecomeActive` qui pose la question à son arrivée au poste actif et
+range la réponse dans un statut caché, relu plus tard par la condition.
+
+`ctx.evolveCharacter(instanceId, toCardId?)` fait l'évolution **en place** -- `toCardId` est
+obligatoire dès qu'il y a plusieurs formes, et doit faire partie du `evolvesTo` de la carte
+actuelle (sinon l'appel renvoie `false` sans rien faire). Ce qui est conservé, sans une
+ligne à écrire côté carte, parce que c'est la **même instance** qui continue de vivre :
+
+- **la position** (poste actif comme banc) ;
+- **les dégâts déjà subis** -- d'où `PV actuels = PV Max (évolué) − dégâts subis` ;
+- **tous les statuts**, buffs comme malus (poison, brûlure, stun...) ;
+- **les objets équipés**, qui restent accrochés à la nouvelle forme ;
+- et c'est mécaniquement **la forme évoluée qui part au cimetière**, la base n'y
+  réapparaissant jamais.
+
+Ce que le moteur fait en plus :
+
+- **Le plafond de PV suit la nouvelle carte en gardant les modifications accumulées** : un
+  `+100` de HP max encaissé avant l'évolution n'est pas perdu (`nouveau plafond =
+  baseMaxHP de la forme + écart déjà acquis`). Évoluer vers un plafond plus bas que les
+  dégâts déjà subis **tue sur le coup**, par le même chemin qu'un valeur lock.
+- **Les compteurs d'usage des capacités sont remis à zéro** (`1×/partie`, `1×/tour`) : ils
+  sont nominatifs, donc une capacité de la forme évoluée qui partagerait un id avec celle
+  de la base naîtrait sinon déjà épuisée.
+- L'event **`onCharacterEvolved`** est émis (`{ characterInstanceId, fromCardId, toCardId }`),
+  et le journal porte `kind: 'evolve'` -- la carte évoluée est projetée en grand au centre
+  du plateau, comme pour une capacité.
+
+Évoluer ne coûte **ni le tour, ni une action**. Une forme évoluée qui déclare à son tour un
+`evolvesTo` fait une chaîne ; sans rien déclarer, elle est terminale. Il n'y a pas de retour
+en arrière, et une résurrection ramène bien la **forme évoluée** (même instance).
+
+⚠️ Les **exceptions** à la règle des PV (« soigne tous ses PV en se transformant », « double
+ses PV actuels ») et à la conservation des statuts se codent **à la main dans la carte**,
+autour de l'appel à `evolveCharacter` -- il n'y a volontairement pas de champ déclaratif pour
+ça. Comme d'habitude, le texte exact va dans `description` et le comportement réel dans
+[docs/cartes.md](docs/cartes.md).
 
 ## Patterns récurrents
 
@@ -306,6 +375,46 @@ Garde-fous appliqués automatiquement, inutile de les re-coder par carte :
   `ctx.addShield`.
 - **AoE sur tout le board adverse** : `ctx.getAllOnBoard(ctx.opponentId)` puis
   `dealDamage` sur chaque instance.
+- **Fermer UNE compétence / UNE attaque précise** (le « Sacrifice » de Makima) : les statuts
+  `silence-active` / `silence-passive` / `disarmed` ferment des **catégories entières**, ils ne
+  savent pas viser une compétence nommée. Pour ça, un modifier qui refuse un id précis :
+  `canUseAbility` reçoit `{ characterInstanceId, abilityId }` et `canAttack` reçoit
+  `{ characterInstanceId, attackId? }`. ⚠️ Sur `canAttack`, ne rien refuser quand `attackId`
+  est absent (la requête jauge alors le personnage en général) — sinon un sceau sur une seule
+  attaque désarmerait un personnage qui en a plusieurs.
+- **Bloquer un switch : trois portées, trois outils.** `canSwitchStandard` (modifier) ne
+  ferme que l'**action de switch du joueur** -- un `forceSwitch` de carte passe encore
+  (Manipulation de Light Yagami). Le statut `chained` et le modifier **`canSwitchAny`**
+  ferment **tous** les switchs, forcés compris, parce qu'ils sont évalués dans
+  `zones.switchActive`, l'unique point de passage (Arène, le scellement de Chrollo).
+  `canSwitchAny` reçoit `{ playerId, outgoingInstanceId, incomingInstanceId }`, donc il sait
+  aussi refuser UNE carte précise à l'entrée. Aucun des trois ne touche au remplacement
+  après un KO (voir la section « Économie de tour »).
+- **Rejouer/copier un objet** (« Spectre » d'Aki) : `ctx.playObjectImmediately(cardId)`.
+  L'objet est créé, mis en jeu, résolu, puis part au cimetière (ou reste accroché si c'est
+  un équipement) -- le cycle de vie complet d'un objet posé, mais hors du budget de 2 objets
+  par tour. Ne jamais exécuter un `ObjectCardDef.execute` avec un contexte sourcé sur un
+  **personnage** : un objet à lier appellerait `attachSelfTo` depuis une source qui n'est
+  pas un objet.
+- **Atteindre un personnage du banc** : toujours passer par `canTargetBench(state,
+  sourceInstanceId, targetInstanceId, true)` avant de le désigner ou de le frapper, y
+  compris pour son **propre** banc (soin, équipement, buff). C'est ce qui permet à une carte
+  adverse de protéger un banc (Bouclier Ultime) ou de l'isoler (Arène). ⚠️ Le 4ᵉ paramètre
+  est le défaut : `true` = « ma carte s'autorise le banc », et sans aucune voix contraire la
+  requête renvoie donc `allow`. Pour tester le vote d'une carte, l'interroger avec `false`.
+- **Attaquer depuis le banc** (le « Bonus » de Yumeko) : refusé pour tout le monde par
+  défaut, et ouvert par un modifier `canAttackFromBench` (permission-style, défaut **deny**)
+  qui vote `allow` pour son propre `sourceInstanceId`. Le reste ne change pas : l'attaquant du
+  banc repasse par tous les refus ordinaires de `canAttack`, et son attaque ferme son tour
+  normalement. `usableFromBench` sur une `AbilityDef` reste, lui, indépendant de ça.
+- **Une passive imprimée qui surveille plusieurs sortes d'action** (« si l'ennemi utilise
+  un objet… / un actif… / attaque… », Vision du Futur d'Aki) : `trigger: ['onObjectPlayed',
+  'onAbilityUsed', 'onAttackDeclared']` et un `switch` sur `ctx.event.name` dans `execute`.
+  Surtout **pas** une capacité par event : la carte afficherait la même ligne trois fois.
+- **Attaque marquée « peut crit »** : convention maison, ça veut dire **33 %** de chance de
+  critique (contre 2 % de base). S'implémente avec le statut générique `critical` et son
+  `data.percent`, posé juste avant `dealDamage` et retiré juste après (cf. Levi, Killua) --
+  en laissant tranquille un `critical` que le personnage porterait déjà.
 - **Override d'une règle générale** (fréquence, ciblage du banc, ATK effectif, limite
   d'objets équipés...) : passer par `modifiers: ModifierDef[]` sur la carte plutôt que
   du code impératif — c'est le système que le moteur scanne automatiquement tant que la
@@ -349,6 +458,13 @@ Garde-fous appliqués automatiquement, inutile de les re-coder par carte :
     moyen de prolonger un tour après une attaque : `doesActionEndTurn` existe dans
     `QueryName` mais n'est évaluée nulle part, et un modifier — fonction pure — ne pourrait
     de toute façon pas consommer la charge qu'il lit.
+  - `forced-attack` (`data: { targetInstanceId }`) : au début du tour de son porteur, celui-ci
+    retourne les **dégâts** de son attaque (ATK effectif) sur le personnage désigné de son
+    PROPRE banc, puis son tour se termine aussitôt. Ex : Manipulation de Makima. Résolu par
+    `turn.ts::resolveForcedAttack` et consommé à la lecture, même si la cible a disparu
+    entre-temps. Seuls les dégâts sont retournés, pas le corps de l'`execute()` de l'attaque
+    (qui vise en dur l'actif d'en face). C'est le **seul** moyen de fermer le tour d'un autre
+    joueur : `endsTurn` ne ferme que le tour en cours, celui de la carte qui agit.
   - `stun` `disarmed` `silence-active` `silence-passive` `silence-ultimate`
     `evasive` `critical` `burn` `poison`.
 
@@ -512,3 +628,9 @@ Trois `kind` déclenchent une animation plein plateau, visible par **les deux** 
   s'enchaînent au lieu de se superposer.
 - `chance-roll` (et les jets d'esquive/critique portés par une carte) → une roue de
   pourcentage tourne et s'arrête sur le résultat réel (`ProcWheel`).
+
+## Pull requests : description vide
+
+Une PR créée sur ce dépôt n'a **pas de description** : `gh pr create --title "<titre>" --body ""`.
+Pas de résumé, pas de liste de changements, pas de plan de test, et pas de footer
+« 🤖 Generated with Claude Code ». La réponse à l'utilisateur est juste le lien de la PR.

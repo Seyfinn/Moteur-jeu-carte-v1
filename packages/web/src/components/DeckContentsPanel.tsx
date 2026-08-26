@@ -53,11 +53,18 @@ export function detailBodyFor(entry: DeckPoolEntry) {
   }
 }
 
-/** Collapses a list of ids into { id, count } pairs, in order of first appearance. */
-function groupByCount(ids: string[]): Array<{ id: string; count: number }> {
+/**
+ * Collapses a list of ids into { id, count } pairs, **par ordre alphabétique de nom** --
+ * le même classement que les grilles du pool à côté. L'ordre d'ajout, qui prévalait avant,
+ * ne veut rien dire pour qui relit son deck, et faisait sauter une carte de place dès qu'on
+ * la retirait puis la remettait.
+ */
+function groupByCount(ids: string[], nameOf: (id: string) => string): Array<{ id: string; count: number }> {
   const counts = new Map<string, number>();
   for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1);
-  return [...counts.entries()].map(([id, count]) => ({ id, count }));
+  return [...counts.entries()]
+    .map(([id, count]) => ({ id, count }))
+    .sort((a, b) => nameOf(a.id).localeCompare(nameOf(b.id), 'fr', { sensitivity: 'base' }));
 }
 
 /** Hover-and-hold preview: unlike the instant in-game HoverCard, this waits for the
@@ -289,7 +296,7 @@ export function DeckContentsPanel({
         <h2>{title}</h2>
         {SECTIONS.map((section) => {
           const ids = deck[section.key];
-          const groups = groupByCount(ids);
+          const groups = groupByCount(ids, (id) => poolById.get(id)?.name ?? id);
           return (
             <div className="deck-selected-group" key={section.key}>
               <h3>

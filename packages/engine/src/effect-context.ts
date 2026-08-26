@@ -2,6 +2,7 @@ import type { EffectContext } from './cards/types.js';
 import type { EngineApi } from './engine-api.js';
 import { isKO } from './hp.js';
 import {
+  canApplyStatus,
   evaluateTransform,
   findCharacter,
   getCriticalMultiplier,
@@ -14,6 +15,7 @@ import {
 import { BASE_CRITICAL_CHANCE_PERCENT, BASE_EVASION_CHANCE_PERCENT } from './statuses.js';
 import { getStatus } from './statuses.js';
 import { chancePercent } from './rng.js';
+import { evolutionFormsOf, getCharacterCard } from './cards/registry.js';
 import { findCharacterOwner } from './zones.js';
 import { cardName } from './names.js';
 import { otherPlayer, type EngineEvent, type GameState, type PlayerId } from './types.js';
@@ -309,12 +311,14 @@ export function buildEffectContext(
       }
 
       let finalAmount = amount;
+      let didCrit = false;
       if (concentration) {
         const percent = Number(concentration.data?.['percent'] ?? 70);
         if (chancePercent(state.rng, percent)) {
           api.removeStatus(source!.instanceId, 'concentration');
           const multiplier = getCriticalMultiplier(state, sourceInstanceId);
           finalAmount = amount * multiplier;
+          didCrit = true;
           // La Concentration est un objet : son taux vient toujours d'une carte.
           api.log(`${cardName(source!.cardId)} se concentre et fait un critique (x${multiplier}) !`, { kind: 'critical', sourceInstanceId, targetInstanceId: resolvedTargetId, baseAmount: amount, amount: finalAmount, percent, fromCard: true });
         } else {
@@ -326,7 +330,24 @@ export function buildEffectContext(
         if (crit) {
           const multiplier = getCriticalMultiplier(state, sourceInstanceId);
           finalAmount = amount * multiplier;
+          didCrit = true;
           api.log(`${cardName(source.cardId)} inflige un coup critique (x${multiplier}) !`, { kind: 'critical', sourceInstanceId, targetInstanceId: resolvedTargetId, baseAmount: amount, amount: finalAmount, percent, fromCard });
+        }
+      }
+
+      // 'crit-streak' (e.g. "Crit +"): count every crit the bearer actually lands, engine-side
+      // -- no event carries a "this hit crit" flag (afterDamage doesn't), and an object has no
+      // trigger to react to one anyway. Clamped at `threshold`: past it there's nothing more to
+      // track, the guaranteed rate in getCriticalPercent already kicked in.
+      if (source && didCrit) {
+        const streak = getStatus(source, 'crit-streak');
+        if (streak) {
+          const threshold = Number(streak.data?.['threshold'] ?? 2);
+          const boostPercent = Number(streak.data?.['boostPercent'] ?? 70);
+          const count = Math.min(threshold, Number(streak.data?.['count'] ?? 0) + 1);
+          streak.data = { ...streak.data, count };
+          streak.label =
+            count >= threshold ? `Critique garanti (${boostPercent}%)` : `Critiques (${count}/${threshold})`;
         }
       }
 
@@ -418,6 +439,19 @@ export function buildEffectContext(
     },
 
     applyStatus(targetInstanceId, status, options) {
+      // Innate immunity (e.g. Toji vs stun/silence/disarmed) wins before any dice are
+      // even rolled -- an immune target was never going to take the status either way.
+      if (!canApplyStatus(state, targetInstanceId, status.statusId).allow) {
+        const target = findCharacter(state, targetInstanceId);
+        api.log(`${cardName(target.cardId)} est immunisé contre « ${status.label || status.statusId} »`, {
+          kind: 'status',
+          targetInstanceId,
+          statusId: status.statusId,
+          sourceInstanceId,
+          blocked: true,
+        });
+        return;
+      }
       // Same esquive scoping as dealDamage: hostile attacks/abilities only.
       if (!options?.skipEvasionRoll && canRollAgainst(targetInstanceId)) {
         const target = findCharacter(state, targetInstanceId);
@@ -478,6 +512,23 @@ export function buildEffectContext(
     },
     createObject(cardId, forPlayerId) {
       return api.createObject(forPlayerId ?? ownerId, cardId);
+    },
+
+    async playObjectImmediately(cardId, forPlayerId) {
+      return api.playObjectImmediately(forPlayerId ?? ownerId, cardId);
+    },
+
+    grantExtraTurn(forPlayerId) {
+      state.pendingExtraTurnFor = forPlayerId ?? ownerId;
+    },
+
+    async evolveCharacter(characterInstanceId, toCardId) {
+      const target = findCharacter(state, characterInstanceId);
+      const forms = evolutionFormsOf(getCharacterCard(target.cardId));
+      // Une seule forme déclarée : la carte n'a pas à la renommer à chaque appel.
+      const resolved = toCardId ?? (forms.length === 1 ? forms[0] : undefined);
+      if (!resolved) return false;
+      return api.evolveCharacter(characterInstanceId, resolved);
     },
 
     buildEffectContext(newSourceInstanceId, damageSource) {

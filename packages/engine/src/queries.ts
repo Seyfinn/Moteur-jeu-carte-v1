@@ -163,12 +163,27 @@ export function evaluateTransform<T>(
 // Typed convenience queries used by the action handlers
 // ---------------------------------------------------------------------------
 
-export function canAttack(state: GameState, characterInstanceId: string): PermissionResult {
+/**
+ * `attackId` nomme l'attaque que le moteur est en train d'autoriser, quand il y en a une.
+ * C'est ce qui permet à une carte de sceller UNE attaque précise ("Sacrifice" de Makima)
+ * au lieu de désarmer tout le personnage -- un `disarmed` reste, lui, un refus global.
+ */
+export function canAttack(state: GameState, characterInstanceId: string, attackId?: string): PermissionResult {
   const char = findCharacter(state, characterInstanceId);
   const extra: Vote[] = [];
   if (isStunned(char)) extra.push({ allow: false, source: 'status:stun' });
   if (isDisarmed(char)) extra.push({ allow: false, source: 'status:disarmed' });
-  return evaluatePermission(state, 'canAttack', { characterInstanceId }, true, extra);
+  return evaluatePermission(state, 'canAttack', { characterInstanceId, attackId }, true, extra);
+}
+
+/**
+ * Attaquer depuis le banc : refusé par défaut pour tout le monde, et ouvert seulement par
+ * la carte qui le dit elle-même ("Bonus" de Yumeko). Séparé de `canAttack` pour qu'un
+ * personnage autorisé à frapper du banc reste soumis aux mêmes refus que les autres
+ * (stun, désarmé, sceau...).
+ */
+export function canAttackFromBench(state: GameState, characterInstanceId: string): PermissionResult {
+  return evaluatePermission(state, 'canAttackFromBench', { characterInstanceId }, false);
 }
 
 /**
@@ -182,6 +197,29 @@ export function canSwitchStandard(state: GameState, characterInstanceId: string)
   if (isStunned(char)) extra.push({ allow: false, source: 'status:stun' });
   if (hasStatus(char, 'chained')) extra.push({ allow: false, source: 'status:chained' });
   return evaluatePermission(state, 'canSwitchStandard', { characterInstanceId }, true, extra);
+}
+
+/**
+ * Le garde commun à TOUS les switchs, y compris ceux qu'une carte force
+ * (`zones.switchActive` est leur unique point de passage). `canSwitchStandard`, lui, ne
+ * ferme que l'action de switch du joueur.
+ *
+ * ⚠️ Le remplacement d'un personnage KO n'est pas un switch et ne passe jamais par ici :
+ * un camp dont l'actif meurt doit toujours pouvoir remettre quelqu'un au poste, sans quoi
+ * la partie se bloquerait.
+ */
+export function canSwitchAny(
+  state: GameState,
+  playerId: PlayerId,
+  outgoingInstanceId: string | null,
+  incomingInstanceId: string
+): PermissionResult {
+  return evaluatePermission(
+    state,
+    'canSwitchAny',
+    { playerId, outgoingInstanceId, incomingInstanceId },
+    true
+  );
 }
 
 export function getAbilityUsesPerTurn(
@@ -235,6 +273,19 @@ export function getMaxAttachedObjects(state: GameState, characterInstanceId: str
   return evaluateTransform(state, 'getMaxAttachedObjects', { characterInstanceId }, 2);
 }
 
+/**
+ * Le camp auquel appartient une instance, quelle qu'elle soit (personnage, objet, terrain).
+ * `zones.safeFindCharacterOwner` ne sait répondre que pour un personnage, or la source d'un
+ * effet est très souvent un objet ou un terrain.
+ */
+export function findInstanceOwner(state: GameState, instanceId: string): PlayerId | undefined {
+  for (const playerId of ['p1', 'p2'] as PlayerId[]) {
+    const p = state.players[playerId];
+    if (p.characters[instanceId] || p.objects[instanceId] || p.terrains[instanceId]) return playerId;
+  }
+  return undefined;
+}
+
 /** Default targeting (section 11): bench is only targetable when the acting card's own text says so. */
 export function canTargetBench(
   state: GameState,
@@ -243,6 +294,11 @@ export function canTargetBench(
   allowedBySource: boolean
 ): PermissionResult {
   return evaluatePermission(state, 'canTargetBench', { sourceInstanceId, targetInstanceId }, allowedBySource);
+}
+
+/** Innate status immunity (e.g. Toji vs stun/silence/disarmed): any modifier can veto a specific statusId. */
+export function canApplyStatus(state: GameState, targetInstanceId: string, statusId: string): PermissionResult {
+  return evaluatePermission(state, 'canApplyStatus', { targetInstanceId, statusId }, true);
 }
 
 /**
@@ -350,7 +406,13 @@ export function rollEvasion(state: GameState, char: CharacterInstance): boolean 
  */
 export function getCriticalPercent(state: GameState, char: CharacterInstance): number {
   const status = char.statuses.find((s) => s.statusId === 'critical');
-  const base = status ? Number(status.data?.['percent'] ?? CRITICAL_STATUS_CHANCE_PERCENT) : BASE_CRITICAL_CHANCE_PERCENT;
+  let base = status ? Number(status.data?.['percent'] ?? CRITICAL_STATUS_CHANCE_PERCENT) : BASE_CRITICAL_CHANCE_PERCENT;
+  // 'crit-streak' (e.g. "Crit +"): once the bearer has landed `data.threshold` crits, its
+  // rate is guaranteed `data.boostPercent`% -- same treatment as the 'critical' status above.
+  const streak = char.statuses.find((s) => s.statusId === 'crit-streak');
+  if (streak && Number(streak.data?.['count'] ?? 0) >= Number(streak.data?.['threshold'] ?? 2)) {
+    base = Math.max(base, Number(streak.data?.['boostPercent'] ?? 70));
+  }
   const percent = Number(
     evaluateTransform(state, 'getCriticalPercent', { characterInstanceId: char.instanceId }, base)
   );

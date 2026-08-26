@@ -42,6 +42,8 @@ export const BUILTIN_STATUS_IDS: ReadonlySet<string> = new Set<BuiltinStatusId>(
   'vulnerable',
   'linked',
   'extra-attack',
+  'crit-streak',
+  'forced-attack',
 ]);
 
 /** Human labels for the three damage-over-time statuses, used in the event log. */
@@ -304,6 +306,15 @@ export async function tickStatusesAtTurnStart(state: GameState, playerId: Player
       // starts at the bearer's next turn, which is why it needs no `+1`.
       if (status.onExpire && api.isOnBoard(instanceId)) {
         applyStatus(char, { ...status.onExpire });
+      }
+      // Same convention as 'damage-reflect' (data.objectInstanceId), but for a status that
+      // is consumed by TIME instead of by a hit: whichever object carried this status is
+      // destroyed the moment the status itself naturally expires. destroyObject is a no-op
+      // if the object already left play some other way. Used by "Attaque cloné" so its
+      // equipped object doesn't linger, inert, once the silence it grants runs out.
+      const objectInstanceId = status.data?.['objectInstanceId'];
+      if (typeof objectInstanceId === 'string') {
+        api.destroyObject(objectInstanceId);
       }
       await api.emitEvent({
         name: 'onStatusExpired',

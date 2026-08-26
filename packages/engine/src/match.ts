@@ -13,7 +13,7 @@ import type {
   TerrainInstance,
 } from './types.js';
 import type { EngineApi } from './engine-api.js';
-import { getCharacterCard, getObjectCard, getTerrainCard } from './cards/registry.js';
+import { evolutionFormsOf, getCharacterCard, getObjectCard, getTerrainCard } from './cards/registry.js';
 import { buildEffectContext } from './effect-context.js';
 import { emitEvent } from './events.js';
 import { recordAbilityUse } from './abilities.js';
@@ -22,7 +22,9 @@ import * as statusesMod from './statuses.js';
 import * as zones from './zones.js';
 import {
   canAttack,
+  canAttackFromBench,
   canPlayObject,
+  canSwitchAny,
   canPlayTerrain,
   canSwitchStandard,
   canUseAbility,
@@ -443,15 +445,21 @@ export class Match {
         return { ok: true };
       }
       case 'attack': {
+        // Attaquer est réservé à l'actif, sauf pour un personnage dont une carte ouvre
+        // explicitement le banc ("Bonus" de Yumeko) -- il doit alors être bel et bien au
+        // banc de ce camp, pas hors du plateau.
         if (player.activeCharacterInstanceId !== action.characterInstanceId) {
-          return { ok: false, error: 'Seul le personnage actif peut attaquer' };
+          const onBench = player.benchCharacterInstanceIds.includes(action.characterInstanceId);
+          if (!onBench || !canAttackFromBench(state, action.characterInstanceId).allow) {
+            return { ok: false, error: 'Seul le personnage actif peut attaquer' };
+          }
         }
         const char = player.characters[action.characterInstanceId];
         if (!char) return { ok: false, error: 'Personnage inconnu' };
         const def = getCharacterCard(char.cardId);
         const attack = def.attacks.find((a) => a.id === action.attackId);
         if (!attack) return { ok: false, error: 'Attaque inconnue' };
-        const permission = canAttack(state, action.characterInstanceId);
+        const permission = canAttack(state, action.characterInstanceId, action.attackId);
         if (!permission.allow) {
           return { ok: false, error: `Impossible d'attaquer : ${describeDenials(permission.votes)}` };
         }
@@ -472,6 +480,13 @@ export class Match {
         if (!permission.allow) {
           return { ok: false, error: `Switch impossible : ${describeDenials(permission.votes)}` };
         }
+        // Le garde de `zones.switchActive` est aussi consulté ici : sans ça, l'action serait
+        // acceptée puis avalée sans effet (le joueur perdrait son tour pour rien) et la main
+        // n'aurait aucun moyen de la griser.
+        const anyPermission = canSwitchAny(state, playerId, player.activeCharacterInstanceId, action.newActiveInstanceId);
+        if (!anyPermission.allow) {
+          return { ok: false, error: `Switch impossible : ${describeDenials(anyPermission.votes)}` };
+        }
         return { ok: true };
       }
       case 'pass':
@@ -491,7 +506,7 @@ export class Match {
         await this.handlePlayTerrain(playerId, action.terrainInstanceId);
         break;
       case 'use-ability':
-        await this.handleUseAbility(playerId, action.characterInstanceId, action.abilityId);
+        endsTurn = await this.handleUseAbility(playerId, action.characterInstanceId, action.abilityId);
         break;
       case 'attack':
         endsTurn = await this.handleAttack(playerId, action.characterInstanceId, action.attackId);
@@ -522,6 +537,35 @@ export class Match {
     zones.moveObjectFromPoolToInPlay(state, playerId, objectInstanceId);
     player.objectsPlayedThisTurn += 1;
 
+    await this.resolveObjectInPlay(playerId, objectInstanceId, { alreadyInPlay: true });
+
+    // Section 3: playing a second object in a turn is a *final* action. The second
+    // player gets one free pass on their very first turn to make up for the initiative
+    // -- scoped to the second object exactly, so the exception can't be re-claimed by a
+    // third, fourth... object (the per-turn cap in validateAction backs this up).
+    const isSecondPlayerFirstTurnException =
+      player.objectsPlayedThisTurn === 2 && playerId !== state.startingPlayerId && !player.hasHadFirstTurn;
+    return isSecondObject && !isSecondPlayerFirstTurnException;
+  }
+
+  /**
+   * Le cycle de vie d'un objet une fois qu'il entre en jeu : annonce, `onObjectPlayed`,
+   * effet, puis départ au cimetière s'il ne s'est pas accroché à un personnage. Partagé
+   * entre la pose normale (`handlePlayObject`, qui gère en plus le budget du tour) et la
+   * pose gratuite offerte par une carte (`api.playObjectImmediately`, ex: "Spectre" d'Aki),
+   * pour qu'un objet joué par ricochet ne puisse pas rester coincé en jeu.
+   */
+  private async resolveObjectInPlay(
+    playerId: PlayerId,
+    objectInstanceId: string,
+    opts?: { alreadyInPlay?: boolean }
+  ): Promise<void> {
+    const state = this.state;
+    const player = state.players[playerId];
+    const obj = player.objects[objectInstanceId]!;
+    const def = getObjectCard(obj.cardId);
+    if (!opts?.alreadyInPlay) zones.moveObjectFromPoolToInPlay(state, playerId, objectInstanceId);
+
     this.api.log(`${playerName(state, playerId)} joue l'objet ${def.name}`, { kind: 'play-object', objectInstanceId, cardId: def.id }, playerId);
     await this.api.emitEvent({ name: 'onObjectPlayed', playerId, data: { objectInstanceId } });
 
@@ -536,14 +580,6 @@ export class Match {
         zones.moveObjectToGraveyard(state, playerId, objectInstanceId);
       }
     }
-
-    // Section 3: playing a second object in a turn is a *final* action. The second
-    // player gets one free pass on their very first turn to make up for the initiative
-    // -- scoped to the second object exactly, so the exception can't be re-claimed by a
-    // third, fourth... object (the per-turn cap in validateAction backs this up).
-    const isSecondPlayerFirstTurnException =
-      player.objectsPlayedThisTurn === 2 && playerId !== state.startingPlayerId && !player.hasHadFirstTurn;
-    return isSecondObject && !isSecondPlayerFirstTurnException;
   }
 
   private async handlePlayTerrain(playerId: PlayerId, terrainInstanceId: string): Promise<void> {
@@ -563,7 +599,7 @@ export class Match {
     await this.api.emitEvent({ name: 'onTerrainPlayed', playerId, data: { terrainInstanceId } });
   }
 
-  private async handleUseAbility(playerId: PlayerId, characterInstanceId: string, abilityId: string): Promise<void> {
+  private async handleUseAbility(playerId: PlayerId, characterInstanceId: string, abilityId: string): Promise<boolean> {
     const state = this.state;
     const char = state.players[playerId].characters[characterInstanceId]!;
     const def = getCharacterCard(char.cardId);
@@ -573,6 +609,10 @@ export class Match {
     const ctx = this.api.buildEffectContext(characterInstanceId, playerId);
     await ability.execute(ctx);
     await this.api.emitEvent({ name: 'onAbilityUsed', playerId, data: { characterInstanceId, abilityId } });
+    // Utiliser une capacité est normalement gratuit ; une carte peut déclarer le contraire
+    // ("Manipulation" de Makima). Évalué après coup, sur le même contexte, comme pour une attaque.
+    if (typeof ability.endsTurn === 'function') return ability.endsTurn(ctx);
+    return ability.endsTurn ?? false;
   }
 
   /**
@@ -655,7 +695,10 @@ export class Match {
 
     const partnerAttacks = getCharacterCard(partner.cardId).attacks;
     const ctx = this.api.buildEffectContext(partnerInstanceId, playerId, undefined, 'attack');
-    const available = partnerAttacks.filter((a) => !a.condition || a.condition(ctx));
+    const available = partnerAttacks.filter(
+      // Un sceau ne vise qu'une attaque : le partenaire garde les autres.
+      (a) => canAttack(state, partnerInstanceId, a.id).allow && (!a.condition || a.condition(ctx))
+    );
     if (available.length === 0) return;
 
     let chosen = available[0]!;
@@ -927,6 +970,59 @@ export class Match {
 
       cloneCharacter(ownerId, sourceInstanceId, hpAmount, placement) {
         return zones.createCharacterClone(state, ownerId, sourceInstanceId, hpAmount, placement);
+      },
+
+      async evolveCharacter(characterInstanceId, toCardId) {
+        if (!api.isOnBoard(characterInstanceId)) return false;
+        const char = findCharacter(state, characterInstanceId);
+        const fromCardId = char.cardId;
+        const fromDef = getCharacterCard(fromCardId);
+
+        // La forme visée doit être déclarée par la carte actuelle : sans ce garde, une
+        // carte pourrait se transformer en n'importe quoi en passant par ce chemin.
+        if (!evolutionFormsOf(fromDef).includes(toCardId)) return false;
+        const toDef = getCharacterCard(toCardId);
+
+        // Plafond de PV : la nouvelle carte apporte sa base, mais tout ce qui a été gagné
+        // ou perdu en cours de partie (Coeur Acier, valeur lock de Mahito...) est conservé
+        // -- un buff déjà payé ne doit pas s'évaporer à l'évolution.
+        const accumulated = char.currentMaxHP - char.baseMaxHP;
+        char.cardId = toCardId;
+        char.baseMaxHP = toDef.baseMaxHP;
+        char.currentMaxHP = Math.max(1, toDef.baseMaxHP + accumulated);
+
+        // Les compteurs d'usage sont nominatifs (par id de capacité) : gardés tels quels,
+        // une capacité de la forme évoluée qui partagerait un id avec celle de la base
+        // naîtrait déjà épuisée.
+        char.abilityUsesThisTurn = {};
+        char.abilityUsesThisGame = {};
+
+        // Statuts, objets équipés, dégâts subis et position ne sont volontairement pas
+        // touchés : c'est la MÊME instance qui continue de vivre. C'est aussi ce qui fait
+        // que c'est la forme évoluée qui part au cimetière, sans que la base y réapparaisse.
+        api.log(`${cardName(fromCardId)} évolue en ${cardName(toCardId)}`, {
+          kind: 'evolve',
+          characterInstanceId,
+          fromCardId,
+          cardId: toCardId,
+        }, char.ownerId);
+
+        await api.emitEvent({
+          name: 'onCharacterEvolved',
+          playerId: char.ownerId,
+          data: { characterInstanceId, fromCardId, toCardId },
+        });
+
+        // Évoluer vers une carte au plafond plus bas peut tuer sur le coup, exactement
+        // comme un valeur lock qui passe sous les dégâts déjà encaissés.
+        if (hp.isKO(char)) await api.koCharacter(characterInstanceId);
+        return true;
+      },
+
+      async playObjectImmediately(playerId, cardId) {
+        const instanceId = api.createObject(playerId, cardId);
+        await self.resolveObjectInPlay(playerId, instanceId);
+        return instanceId;
       },
 
       createObject(ownerId, cardId) {

@@ -71,6 +71,42 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     Détermination protège bien contre l'exécution. Une esquive l'empêche aussi (pas de
     dégâts = seuil jamais atteint).
 
+### Aki — 240 HP
+
+- **Sabre d'Obsidienne** — 55 ATK, pas de texte. Consomme le bonus de Vision du Futur, qu'il
+  ait touché ou non.
+- **Vision du Futur** (passive) — *« Si l'ennemi utilise un Objet : +40 dégâts sur la
+  prochaine attaque d'Aki.\nS'il utilise un Actif : Aki va stun au prochain tour.\nS'il
+  effectue une Atk : Gagne 20 HP »*
+  → **Une seule passive imprimée pour trois events** : `onObjectPlayed`, `onAbilityUsed`,
+  `onAttackDeclared`, tous filtrés sur le camp adverse. Réagit aussi depuis le banc, et
+  autant de fois que l'adversaire enchaîne d'actions dans un tour.
+  - **Objet** : +40 **cumulables** (2 objets = +80) sur un statut `aki-vision-bonus` sans
+    durée — il tient jusqu'à la prochaine attaque d'Aki, qui le dépense. Passe par un
+    modifier `getEffectiveATK`, donc buffs et malus s'appliquent au total.
+  - **Actif** : Aki **inflige** un stun à l'actif adverse (`remainingTurns: 2`, le +1 des
+    statuts bloquants posés sur l'ennemi). Attention : une capacité adverse qui neutralise
+    Aki au passage (stun, silence passif) l'empêche de riposter — le moteur revérifie
+    l'éligibilité d'une passive juste avant de l'exécuter.
+  - **Atk** : `raiseMaxHP(20, { keepCurrentHP: true })` **puis** `heal(20)`. Les deux
+    moitiés comptent : +20 de plafond **et** +20 PV rendus. Sans `keepCurrentHP`, monter le
+    plafond aurait déjà soigné et Aki aurait gagné 40 PV.
+  → **Ajout moteur** : `AbilityDef.trigger` accepte désormais une **liste** d'events.
+  Sans ça il aurait fallu trois capacités séparées, donc la même ligne imprimée trois fois
+  sur la carte.
+- **Spectre** (active) — *« Vole le dernier Objet utilisé par l'adversaire et l'applique
+  immédiatement »*
+  → Vision du Futur retient au passage le `cardId` du dernier objet adverse posé
+  (`aki-spectre-memoire`, caché). Spectre en joue une **copie** pour le compte d'Aki :
+  l'exemplaire adverse, déjà parti au cimetière, n'est pas touché — Aki vole l'usage, pas
+  la carte. **Un objet volé ne se revole pas** : la mémoire est marquée consommée et
+  Spectre reste grisée jusqu'à ce que l'adversaire pose une **nouvelle** carte objet.
+  → **Ajout moteur** : `ctx.playObjectImmediately(cardId)` — crée l'objet, le met en jeu,
+  résout son effet, puis l'envoie au cimetière (ou le laisse accroché si c'est un
+  équipement), **sans** consommer le budget de 2 objets par tour. Le cycle de vie est
+  partagé avec la pose normale (`Match.resolveObjectInPlay`), pour qu'un objet joué par
+  ricochet ne puisse pas rester coincé en jeu.
+
 ### Bakugo — 250 HP
 
 - **Explosion** (60 ATK) — *« Inflige 60 dégâts à l'actif adverse. »*
@@ -159,6 +195,48 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     bleed posé par Chainsaw ne compte pas : les tics de statuts (poison/burn/bleed)
     n'attribuent pas de tueur (voir `tickStatusesAtTurnStart`, `statuses.ts`).
 
+### Chrollo Lucilfer — 225 HP
+
+- **Dague de Ben** — 45 ATK, pas de texte. **Tant qu'un livre est ouvert, cette entrée
+  d'attaque EST l'attaque volée** : elle délègue à l'`execute` de la victime, qui calcule
+  son propre ATK depuis sa propre base et garde tous ses effets annexes (poison, silence,
+  ciblage du banc…). ⚠️ **Corollaire assumé** : le bouton du panneau continue d'afficher
+  « Dague de Ben — 45 ATK ». Un modifier `getEffectiveATK` qui corrigerait l'affichage
+  fausserait le calcul de l'attaque déléguée (elle repartirait d'une base déjà décalée). Le
+  journal, lui, annonce le vrai nom à chaque coup.
+- **Double Face : Annulation** (active) — *« Condition : L'adversaire doit avoir au moins un
+  autre personnage en vie. […] »*
+  → Un seul livre à la fois : l'ability est grisée tant qu'une carte est scellée (règle
+  confirmée par l'auteur). Grisée aussi sans banc adverse — il faut quelqu'un pour prendre
+  le poste que la victime libère.
+  → **Chrollo choisit ce qu'il vole** quand la carte en offre plusieurs (Levi a 2 attaques,
+  Roi des esprits 3) ; seuls les actifs manuellement activables sont volables. **L'adversaire
+  choisit** qui monte au poste actif : c'est son équipe.
+  → Le sceau (`chrollo-scellement`) est posé **avant** le switch, sinon le garde
+  `canSwitchAny` ne verrait rien et la victime pourrait être remontée dans la foulée.
+- **Actif volé** (active) — entrée supplémentaire, pas sur la carte imprimée : les capacités
+  d'un personnage sont déclarées en dur, il n'y a pas moyen d'en greffer une à chaud sur
+  « Double Face ». Sa description reprend mot pour mot la phrase de la carte qui annonce ce
+  vol, et elle n'est activable que quand un livre est ouvert. Relancée avec **Chrollo pour
+  source** (même principe que le Spell Thief de Zoé).
+- **Contrainte** (passive, `onTurnStart`) — le troisième paragraphe de Double Face, que la
+  carte imprimée intitule elle-même « Contrainte ». Entrée séparée obligatoire : une
+  capacité activable ne peut pas, en plus, réagir à un event.
+  → `Math.floor(25 % des PV actuels)`, **sans plancher à 1 : la saignée ne peut jamais tuer
+  Chrollo** (en dessous de 4 PV elle ne retire plus rien). Payée avec
+  `ignoreShield` + `ignoreDamageReduction` — c'est un coût que Chrollo se paie à lui-même,
+  un bouclier ne doit pas le rendre gratuit.
+- **« il ne peut plus agir »** — trois modifiers sur la victime scellée : `canUseAbility`
+  (aucune capacité, active comme passive à trigger), `canAttack` (au cas où un effet la
+  ramènerait au poste actif) et `canSwitchAny` (elle ne peut pas revenir par un switch,
+  forcé compris). ⚠️ **Le remplacement après un KO reste possible** : si l'adversaire n'a
+  plus que des scellés, l'un d'eux prend quand même le poste — sans quoi la partie se
+  bloquerait.
+- **Fermeture du Livre** (active) — retire le sceau et la marque. La marque est retirée dans
+  tous les cas, même si la victime est morte entre-temps : c'est elle qui porte la saignée et
+  l'attaque volée. Un livre dont la victime part au cimetière se referme d'ailleurs tout
+  seul (les lecteurs vérifient qu'elle est encore sur le plateau).
+
 ### Chopper — 250 HP — incompatible avec Soraka
 
 - Deck : l'incompatibilité avec [Soraka](#soraka--160-hp--incompatible-avec-chopper) est
@@ -174,6 +252,33 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     soi pendant son propre tour), pas un `usesPerGame`. Il porte `ticksOnBench: true` : la
     recharge descend même quand Chopper reste au banc — c'est bien là que la Traque se joue,
     et sans ce champ elle ne revenait jamais.
+
+### Dio Brando — 200 HP
+
+- **Chair Vampirique** (attaque) — 50 ATK, *« 50% d'appliquer Silence Passif 1 tour »* →
+  jet annoncé à 50 %, puis `silence-passive` avec `remainingTurns: 2` (le +1 des statuts
+  bloquants posés sur l'ennemi).
+- **Chair Vampirique** (passive, `afterDamage`) — *« Dio récupère en PV 30% des défâts qu'il
+  inflige avec ses attaques. »*
+  → 30 % de `amount + shieldAbsorbed` : **le bouclier encaissé compte comme des dégâts
+  réellement infligés** (règle confirmée par l'auteur) — Dio se nourrit du coup porté, pas
+  de ce qui a fini par passer les protections. Se déclenche sur chaque instance de dégâts
+  dont il est la source, plusieurs fois par tour si besoin (attaque supplémentaire,
+  partenaire lié), et depuis le banc. Dio n'a aucune capacité qui inflige des dégâts, donc
+  « avec ses attaques » est vrai sans filtrage supplémentaire.
+- **Za Warudo !** (active, 1×/partie) — *« Tu rejoues un second tour complet d'affilée une
+  fois ce tour terminé pendant le tour arrêté, les dégâts de Dio sont réduit de 50%
+  Utilisable 1x »*
+  → **Ajout moteur** : `ctx.grantExtraTurn()` pose `state.pendingExtraTurnFor`, que `endTurn`
+  consomme pour rouvrir un tour au même joueur au lieu de passer la main. Consommée **avant**
+  de relancer `startTurn`, donc une seule pose ne peut jamais donner deux tours bonus.
+  → Le tour bonus est un **vrai** tour : poisons, brûlures, saignements et recharges tiquent
+  une seconde fois (règle confirmée par l'auteur). `turnNumber` ne bouge pas — la manche n'a
+  pas fait le tour des deux joueurs.
+  → Le -50 % pèse sur **toute l'équipe de Dio**, pas seulement sur lui : statut générique
+  `atk-multiplier` (`multiplier: 0.5`) posé sur les six, avec `ticksOnBench` (cinq d'entre
+  eux sont au banc, où les durées seraient sinon suspendues). `remainingTurns: 2` le fait
+  vivre exactement pendant le tour bonus.
 
 ### Guts — 250 HP
 
@@ -265,6 +370,63 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   - Moteur : bascule un drapeau de révélation lu par `view.ts` ; la révélation vaut aussi
     pour les cartes que l'adversaire piochera ensuite.
 
+### Light Yagami — 200 HP
+
+- **Écriture du Nom** — *« Avance l'heure de la mort d'un tour. »*
+  → `baseATK: 0` : l'attaque n'inflige **aucun dégât**, elle avance de 1 le compteur de
+  « Sermet de Vengeance » porté par l'actif adverse. Cumulable (deux Écritures = 2 tours
+  gagnés). Passe par le même point que le décompte automatique, donc si l'avance amène le
+  compteur à 5, la crise cardiaque part **immédiatement** au lieu d'attendre. Termine le
+  tour comme n'importe quelle attaque.
+- **Sermet de Vengeance** (passive, `onTurnStart`) — *« Si le personnage ennemi reste sur
+  le poste actif pendant 5 tours d'affilé, il subit une crise cardiaque (KO instantané). »*
+  → Compteur `data.turns` dans un statut `light-yagami-crise` posé **sur l'actif adverse**,
+  sans `remainingTurns` (compteur tenu par la carte, pas un décompte du moteur). Il monte
+  de 1 à chaque **début de tour adverse**, et **uniquement tant que Light Yagami tient
+  lui-même le poste actif** : mis au banc, il arrête l'horloge là où elle en est (elle ne
+  se remet pas à zéro pour autant). À 5, `koCharacter` — une mort hors du circuit des
+  dégâts, donc ni bouclier, ni réduction, ni `death-ward` ne l'empêchent. Statut
+  volontairement **visible** : l'adversaire doit pouvoir décider de fuir à temps.
+- **Contrainte** (passive, `onSwitch`) — *« Switcher vers le banc annule l'exécution, mais
+  le personnage entrant subit 60 dégâts »*
+  → Se déclenche sur **tout** changement d'actif adverse, volontaire **comme forcé par une
+  carte, mais jamais sur le remplacement d'un mort** : `onSwitch` n'est émis que par
+  `zones.switchActive`, le remplacement après KO passant par `onBecomeActive` seul. Remet
+  le compteur à zéro (retiré des **deux** côtés du switch : sans ça, le fuyard le
+  retrouverait intact en revenant) et inflige 60 dégâts ordinaires à l'entrant —
+  esquivables, absorbables par un bouclier. Les 60 dégâts tombent à **chaque** switch
+  adverse, même si aucune horloge n'était encore lancée. Demande aussi que Light Yagami
+  tienne le poste actif.
+- **Manipulation** (active, recharge 2 tours) — *« Empêche le personnage actif adverse
+  d'effectuer un switch lors de son prochain tour. 2 tours de cooldown »*
+  → Statut `light-yagami-emprise` sur l'actif adverse (`remainingTurns: 2`, le +1 des
+  statuts bloquants). Volontairement **pas** le statut `chained` du moteur : celui-ci
+  bloque *tout* départ du poste actif, y compris les switchs forcés par une carte. Ici seul
+  le **switch de base** du joueur est fermé, via un modifier `canSwitchStandard` — un
+  `forceSwitch` adverse passe toujours. Recharge : `remainingTurns: 3` + `ticksOnBench`,
+  soit un retour au tour N+3.
+- **Combo prévu** : Manipulation ferme la seule sortie (le switch volontaire), donc
+  l'horloge continue de tourner ; Contrainte punit la fuite quand elle finit par arriver.
+
+### Levi — 220 HP
+
+- **Taillade éclair** — 90 ATK, pas de texte. Peut viser le banc affaibli via Traque.
+- **Frappe à la nuque** — 60 ATK, *« Cette attaque peut crit »* → **convention maison : la
+  mention « peut crit » vaut 33 % de chance de critique** (contre 2 % de base pour toute
+  autre attaque). Implémentée avec le statut générique `critical` et son `data.percent`,
+  posé puis retiré autour du coup (même primitive que Godspeed de Killua) — sauf si Levi
+  portait déjà un `critical` venu d'ailleurs, qu'il ne faut ni écraser ni supprimer.
+- **Traque** (passive, purement descriptive) — *« Si au moins un personnage sur le banc
+  adverse a moins de 60 HP actuels, les attaques de Levi peuvent cibler ce personnage du
+  banc, ignorant la restriction de ciblage par défaut. »*
+  → Les **deux** attaques proposent l'actif adverse **plus** chaque personnage du banc
+  adverse sous 60 PV actuels ; au-delà d'une cible, Levi choisit dans une fenêtre de
+  ciblage sur le plateau. Le seuil est relu **à chaque attaque**, jamais mémorisé : un
+  personnage soigné au-dessus de 60 PV redevient hors de portée.
+  → Le banc reste soumis aux protections générales : Traque lève la **restriction de
+  ciblage par défaut**, pas un refus posé par une carte adverse (Bouclier Ultime le protège,
+  Arène l'isole).
+
 ### Locke — 250 HP
 
 - **Purgatoire** (passive, `afterDamage`) — *« Si l'ennemi au poste actif est à 10% de ses
@@ -307,6 +469,52 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   l'`AttackDef`.)
 - **Marque** (passive) — *« Les PV retirés par Mahito ne peuvent plus jamais être récupérés,
   par aucun soin. »* (conséquence directe du valeur lock, rien de plus dans le code.)
+
+### Makima — 190 HP
+
+- **Bang !** — *« Inflige 30 dégâts de plus par compétence alliée scellé (sacrifice) »*
+  → 40 de base **+ 30 par sceau encore debout dans son camp**, via un modifier
+  `getEffectiveATK` (et non une addition dans l'attaque) : buffs et malus d'ATK
+  s'appliquent donc au total, comme pour Guts. Un allié sacrifié qui part au cimetière
+  emporte ses sceaux : Bang ! redescend d'autant.
+- **Sacrifice** (active, 1×/tour) — *« Au début du tour, Makima peut choisir de sceller
+  (désactiver) au choix 1 Passif, 1 Actif ou 1 ATK d'un personnage sur son propre banc
+  durant son tour »*
+  → Le sceau est **permanent** (aucun `remainingTurns`) et **cumulable** : c'est ce qui
+  alimente Bang ! et ce qui rend « 2 sacrifices requis » atteignable. Il vise **une seule
+  compétence nommée**, pas une catégorie : ni `silence-active` ni `silence-passive` ni
+  `disarmed` ne conviennent, ils ferment *tout* l'actif / *tout* le passif / *toute*
+  attaque du personnage. Statut `makima-sceau` porté par le sacrifié, `data.sealedIds`
+  accumulant les ids scellés ; deux modifiers de Makima refusent exactement ces ids
+  (`canUseAbility` pour les compétences, `canAttack` pour les attaques). Grisée quand plus
+  aucun allié du banc n'a quelque chose à sacrifier.
+  → **Ajout moteur** : `canAttack` reçoit désormais un `attackId` optionnel dans son
+  payload, sans quoi il était impossible de fermer une attaque précise sur un personnage
+  qui en a plusieurs (Roi des esprits en a 3). Sans `attackId` — une requête qui jauge le
+  personnage en général — le sceau ne refuse rien.
+- **Manipulation** (active) — *« Pas Utilisable 2 tours de suite| 2 sacrifices requis /
+  Désigne 1 carte du banc adverse. Au prochain tour, l'actif ennemi est forcé de
+  l'attaquer, ce qui mettra fin à son tour. (L'activation de cette compétence met fin au
+  tour de Makima). »*
+  → Les 2 sacrifices sont une **condition d'accès, jamais consommée** : Bang ! garde son
+  bonus après coup. Recharge : `remainingTurns: 2` + `ticksOnBench`, soit « utilisable au
+  tour N, pas au N+1, de retour au N+2 ». Grisée sans actif adverse ou sans banc adverse à
+  désigner. La cible désignée doit **toujours être sur le banc adverse** au moment de la
+  résolution : morte ou promue actif entre-temps, la manipulation est simplement perdue.
+  → **Ce que la résolution fait vraiment** : seuls les **dégâts** de l'attaque adverse sont
+  retournés (ATK effectif de l'attaquant), pas le corps de son `execute()` — celui-ci vise
+  en dur l'actif d'en face (poison, statuts, effets annexes) et le faire tourner sur un
+  allié le ferait mentir. Si l'actif adverse a plusieurs attaques, **son propre joueur**
+  choisit laquelle. C'est de l'amical : ni esquive ni critique (ils ne se jouent qu'entre
+  camps adverses).
+  → **Ajouts moteur** (deux, une carte ne pouvant ni agir pendant le tour d'en face ni
+  fermer le tour d'un autre joueur) : le statut générique **`forced-attack`**
+  (`data.targetInstanceId`), résolu par `turn.ts::resolveForcedAttack` au début du tour de
+  son porteur puis consommé — quoi qu'il arrive ensuite ; et **`AbilityDef.endsTurn`**,
+  jumeau de `AttackDef.endsTurn`, évalué après `execute()` sur le même contexte.
+  → Conséquence de tempo à connaître : le tour de Makima se ferme sur l'activation, celui
+  d'en face s'ouvre puis se referme aussitôt sur l'attaque retournée — **la main revient
+  donc immédiatement à Makima**.
 
 ### Métamorphe — 60 HP
 
@@ -425,6 +633,63 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   l'arrête donc pas). Seul `chained` (Chaînes) bloque encore le départ, dans
   `zones.switchActive`.
 
+### Toji — 250 HP
+
+- **Aiguillon Céleste** — *« Infligé 33% des pv par rapport aux pv maximum de la cible »*
+  → dégâts = `Math.round(currentMaxHP_cible * 0.33)`, indépendant de l'ATK de Toji (pas
+  d'appel à `getEffectiveATK`). Passe par `dealDamage` normal : esquivable, peut critiquer,
+  absorbé par un bouclier, comme n'importe quelle autre attaque.
+- **Traque du Plus Fort** (active, 1×/partie) — *« Force l'adversaire à échanger son
+  personnage actif avec celui de son banc qui possède le plus de HP actuels\nUtilisable
+  1x »* → `forceSwitch` vers le perso du banc adverse avec le plus de PV actuels (calculé
+  via `getCurrentHP`, pas de statut). En cas d'égalité, premier trouvé dans l'ordre du
+  banc. Le banc adverse est filtré par `canTargetBench` (un banc protégé, ex: Bouclier
+  Ultime, n'est pas éligible) ; l'ability est grisée si aucune cible n'est ciblable.
+- **Restriction Céleste** (passive, purement descriptive) — *« Immunisé contre les
+  Silences, les Stuns et l'effet Désarmé. »*
+  → Le moteur n'avait aucun point d'accroche pour bloquer l'application d'un statut avant
+  Toji : ajout d'un nouveau `QueryName` générique `canApplyStatus` (payload
+  `{ targetInstanceId, statusId }`), consulté dans `effect-context.ts`'s `applyStatus`
+  **avant** le jet d'esquive (un porteur immunisé n'a pas besoin de rouler les dés).
+  Réutilisable par toute future carte « immunisé contre X ». Le modifier de Toji vote
+  `deny` uniquement pour lui-même (`targetInstanceId === sourceInstanceId`) et pour
+  `stun` / `disarmed` / `silence-active` / `silence-passive` / `silence-ultimate`.
+
+### Yumeko — 140 HP
+
+- **Mise a Fond** — *« Calculé par rapport à Mise à Mort »*
+  → `baseATK: 0` : **sans pari remporté, l'attaque inflige 0**. Tout le coup vient du gain
+  de « Mise à mort », ajouté par un modifier `getEffectiveATK` (donc buffs et malus d'ATK
+  s'appliquent au total). Le gain est consommé par l'attaque, **même si le coup est
+  esquivé** : il paie une attaque, pas un tour.
+- **Mise à mort** (active) — *« Au début de ton tour, tu peux choisir de parier 40, 60, 70
+  PV de Yumeko. […] »*
+  → Jet à 50 % annoncé (`rollChance`, la roue de pourcentage tourne pour les deux joueurs).
+  Victoire : statut `yumeko-pari-gagne` avec `data.bonus = mise × 2`, valable **le seul
+  tour du pari** (`remainingTurns: 1` + `ticksOnBench`) — un nouveau pari **remplace** le
+  précédent, les gains ne s'empilent pas d'un tour sur l'autre. Défaite : `dealDamage` sur
+  Yumeko elle-même, en **dégâts ordinaires** — choix de design assumé : bouclier et
+  réductions de dégâts ont le droit de les absorber, donc une Yumeko protégée par un
+  bouclier parie gratuitement. Ce n'est **pas** la convention habituelle des coûts en HP
+  (`ignoreShield` + `ignoreDamageReduction`, cf. Adrénaline Ultime), c'est délibéré. Les
+  trois mises restent proposées quels que soient ses PV : **elle peut mourir de son propre
+  pari**.
+- **Bonus** (passive, purement descriptive) — *« Peut utiliser Mise à Mort sur le Banc,
+  Utilisable qu'une seul fois »*
+  → Une seule fois par partie, Yumeko peut mener **tout son pari depuis le banc** : Mise à
+  mort **et** l'attaque qu'elle paie. Le passage se consomme à l'engagement de la mise, pas
+  à l'attaque — une mise perdue depuis le banc a bel et bien brûlé l'unique fois
+  (`yumeko-bonus-utilise`). L'ouverture de l'attaque ne vaut que ce tour-là
+  (`yumeko-bonus-tour`, `remainingTurns: 1` + `ticksOnBench`). Depuis le poste actif, Mise
+  à mort reste gratuite et répétable, 1×/tour.
+  → **Ajout moteur** : nouveau `QueryName` **`canAttackFromBench`**, permission-style qui
+  **refuse par défaut** et n'est ouverte que par la carte qui le dit. `match.ts` remplace
+  son ancien « seul l'actif peut attaquer » par « … sauf si le personnage est bien au banc
+  de ce camp *et* qu'une carte l'y autorise ». Un attaquant du banc reste soumis à tous les
+  refus ordinaires (stun, désarmé, sceau de Makima…), qui vivent dans `canAttack`.
+  Côté client, `attackOptions` liste désormais aussi ces attaquants de banc, avec le nom du
+  personnage en sous-titre.
+
 ### Zoé — 140 HP
 
 - **Sleepy Bubble** (50 ATK) — *« … Si des dégâts passent, 33% de chance d'appliquer Silence
@@ -467,9 +732,13 @@ actuels à 10 HP et multiplie par 2 les dégâts de toutes ses attaques pendant 
 *« Permet d'attaquer deux fois pendant ce tour, la deuxième attaque inflige 50% des dégâts.
 Incapable d'utiliser son actif aux 2 prochains tours. »*
 
-- Moteur : **pas** d'`equipment: true` malgré le « à lier » de la maquette — tout l'effet est
-  porté par des statuts temporaires, plus rien n'a besoin de rester en jeu, et l'objet
-  occuperait sinon un des 2 emplacements du personnage pour rien.
+- Moteur : objet **à lier** (`equipment: true` + `ctx.attachSelfTo`), accroché à l'actif qui
+  attaque. Reste en jeu tant que son effet l'est encore (double-attaque puis silence), puis
+  se détruit tout seul : le statut posé en `onExpire` (le silence) porte
+  `data.objectInstanceId`, et `statuses.ts` détruit l'objet correspondant dès que CE statut
+  expire naturellement — convention réutilisée de `damage-reflect`, mais déclenchée par le
+  temps plutôt que par un coup encaissé. Rien ne reste donc accroché, inerte, une fois
+  l'effet vraiment terminé.
 - Moteur : statut générique `extra-attack` (`data: { remaining, damagePercent, armed }`) posé
   sur l'actif. La carte ne fait que le poser ; le moteur s'occupe du reste :
   - `match.ts::applyAction` : après une attaque, si une charge reste, il la dépense et
@@ -505,6 +774,10 @@ d'exemplaires. »*
 *« Enchaîne le personnage actif ennemi : il ne peut plus être switché TOTALEMENT, jusqu'à sa
 mort. Un exemplaire. »*
 
+- Moteur : objet **à lier** (`equipment: true` + `ctx.attachSelfTo`), accroché à l'actif
+  ennemi visé — sur le personnage de l'AUTRE camp, comme Miroir de Renvoi le permet déjà.
+  Sa durée de vie suit exactement celle du statut : indéfinie, jusqu'à la mort du porteur,
+  où il rejoint le cimetière de son propre propriétaire (`zones.koCharacter`).
 - Moteur : statut `chained` sans `remainingTurns`. Bloque **tout** départ du poste actif, le
   switch standard comme les switchs forcés (Hook, Boogie Woogie, Portail Dimensionnel, Dieu
   du Tonnerre Volant) : le garde vit dans `zones.switchActive`, l'unique point de passage de
@@ -550,6 +823,28 @@ doublés. »*
 
 - Moteur : statut `bench-damage-bonus` (`data.multiplier`) posé sur **tous** vos personnages,
   avec `ticksOnBench: true`.
+
+### Crit + — à lier
+
+*« Si la carte a réussis à crit 2x, Tout ses crit passent à 70 pourcents de chance »*
+
+- Moteur : nouveau statut générique reconnu par le moteur, `crit-streak` (`data: { count,
+  threshold, boostPercent }`), posé une seule fois par la carte sur le personnage équipé
+  (`ctx.applyStatus`, comptage à 0). Le moteur lui-même incrémente `count` à chaque
+  critique **réussi** du porteur (`effect-context.ts::dealDamage`, aussi bien un jet normal
+  qu'un critique forcé par Concentration) — un objet n'ayant aucun trigger pour réagir à un
+  event, il n'y avait pas d'autre point d'accroche possible. Une fois `count` ≥ `threshold`,
+  `queries.ts::getCriticalPercent` garantit `boostPercent`%, exactement comme le statut
+  `critical` déjà intégré au moteur (`Math.max` avec le taux courant, ne descend jamais un
+  taux déjà plus élevé).
+  - Comme Poche de sang : le compteur est un état posé sur le **personnage**, pas un
+    modifier de l'objet. Détruire Crit + (terrain Destruction...) ne fait donc perdre ni la
+    progression ni un taux déjà garanti.
+  - Badge visible sur la carte, avec progression : « Critiques (0/2) » → « (1/2) » → «
+    Critique garanti (70%) » une fois le seuil atteint (label mis à jour par le moteur à
+    chaque incrément, pas par la carte).
+  - À l'aveu du typo d'origine : le texte imprimé garde la faute (« a réussis », « Tout ses
+    crit ») conformément à la règle du texte exact.
 
 ### Déchetterie — exemplaire unique
 
@@ -672,9 +967,9 @@ il en choisi une. »*
 d'attaque supplémentaire. Si il ne vous reste plus qu'un personnage en vie. Cette carte ne
 ferra pas effet. »*
 
-- Moteur : **pas** d'`equipment: true` malgré le « à lier » de la maquette — la carte tue sa
-  cible dans la foulée, ce qui enverrait tout objet équipé au cimetière avec elle
-  (`zones.koCharacter`). Poser le logo 🔗 promettrait un lien durable qui n'existe pas.
+- Moteur : objet **à lier** (`equipment: true` + `ctx.attachSelfTo`) — accroché à sa cible
+  juste avant de la tuer, ce qui envoie l'objet au cimetière avec elle dans la foulée
+  (`zones.koCharacter`), même destination qu'avant l'ajout du lien.
 - Moteur : le compte à rebours ne peut pas être un statut. `applyStatus` refuse toute cible
   déjà au cimetière et `tickStatusesAtTurnStart` ne parcourt que l'actif et le banc — un
   statut sur un cadavre ne tiquerait jamais. Il vit donc sur le joueur
@@ -762,6 +1057,37 @@ au cimetière sans rien donner. »*
   `onTerrainRemoved` obligatoire pour les lever si le terrain part autrement que par son
   décompte. Les trois passives filtrent sur `terrainInstanceId === sourceInstanceId`.
 
+### Arène — 2 tours
+
+⚠️ Le JSON d'origine de cette carte contenait, par accident de l'éditeur, les capacités et
+l'attaque de **Dio Brando** ainsi qu'un `hp: 200` — tout cela est ignoré : un terrain n'a ni
+PV ni attaque. Seuls la description et la durée font foi.
+
+- *« Isole totalement le poste actif des deux joueurs. Les switchs, les soins venant du banc
+  et toutes les compétences (Actifs/Passifs) ciblant ou venant du banc sont totalement
+  bloqués. De plus, les dégâts infligés entre les deux personnages actifs sont augmentés de
+  30 %. »*
+- **Switchs** : modifier `canSwitchAny`, qui refuse **pour les deux camps** — y compris les
+  switchs **forcés** par une carte (Portail Dimensionnel, Hook, Boogie Woogie, Double Face
+  de Chrollo…). ⚠️ **Le remplacement d'un personnage KO passe toujours** : ce n'est pas un
+  switch (voir `zones.koCharacter`), et sans cette porte un camp dont l'actif meurt sous
+  Arène n'aurait plus d'actif du tout et la partie se bloquerait sans vainqueur.
+- **Compétences venant du banc** : modifier `canUseAbility` refusant tout personnage de
+  banc, quel que soit son `usableFromBench`. Coupe donc aussi les passives à trigger des
+  bancs (Berserk de Guts, la mémoire de Zoé…) tant qu'Arène est en jeu.
+- **Compétences ciblant le banc** : modifier `canTargetBench` refusant les deux bancs.
+  ⚠️ Cette requête n'est consultée que par les cartes qui **demandent** avant de désigner
+  une cible de banc. Le passage a été généralisé pour Arène (voir la note transverse en fin
+  de fichier), mais une carte future qui frapperait le banc sans rien demander passerait au
+  travers.
+- **Soins du banc** : modifier `getIncomingHealAmount` ramenant à 0 tout soin **reçu par**
+  un personnage de banc. Le moteur ne transmet pas la *source* d'un soin, seulement sa
+  cible ; l'isolement est donc appliqué côté receveur — ce qui couvre aussi les objets et
+  terrains qui soigneraient le banc, pas seulement les capacités lancées depuis celui-ci.
+- **+30 % entre actifs** : modifier `getIncomingDamageAmount`, appliqué seulement quand
+  l'attaquant **et** la cible tiennent chacun un poste actif. Vaut dans les deux sens,
+  attaques comme capacités. Un coup venant du banc ou dirigé vers lui n'est pas ce duel-là.
+
 ### Autel Démoniaque — 3 tours
 
 *« Pendant 3 tours, au début du tour du joueur actif, inflige 30 dégâts au personnage actif
@@ -847,3 +1173,20 @@ soigne de 50 HP à la place. »*
 - Moteur : modifier `getIncomingDamageAmount` filtré sur `source === 'burn'` et sur vos
   propres personnages. Le soin passe par `getIncomingHealAmount`, donc Hôpital le double.
   La durée de la brûlure, elle, continue de s'écouler normalement.
+
+---
+
+## Note transverse — le passage obligé par `canTargetBench`
+
+L'arrivée d'**Arène** (« toutes les compétences ciblant […] le banc sont totalement
+bloquées ») a demandé que les cartes qui désignent un personnage de banc **demandent la
+permission** au lieu de le faire directement. Sont passées par `canTargetBench` à cette
+occasion : **Autel Démoniaque** (n'arrose plus un banc injoignable), **Locke** (le banc
+adverse ne figure dans sa fenêtre de ciblage que s'il est atteignable) et **Crit +** (un
+banc isolé n'est plus équipable, même par son propre camp).
+
+Dans la foulée, **Bouclier Ultime** ne refuse plus que le ciblage **adverse** de son banc,
+alors qu'il refusait celui de tout le monde. C'est déjà la règle de son immunité aux dégâts
+juste en dessous (« immunisé contre tous les dégâts **adverses** »), et sans cette
+distinction le passage généralisé ci-dessus aurait empêché son possesseur de soigner,
+équiper ou buffer son propre banc.

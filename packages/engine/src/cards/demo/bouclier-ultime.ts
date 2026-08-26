@@ -1,4 +1,5 @@
 import type { ModifierEvalContext, TerrainCardDef } from '../types.js';
+import { findInstanceOwner } from '../../queries.js';
 
 const SOURCE = 'terrain:bouclier-ultime';
 const DURATION_TURNS = 3;
@@ -30,6 +31,13 @@ export const bouclierUltime: TerrainCardDef = {
         const player = ctx.state.players[ctx.sourceOwnerId];
         const targetInstanceId = ctx.query['targetInstanceId'] as string;
         if (!player.benchCharacterInstanceIds.includes(targetInstanceId)) return undefined;
+        // Seul le ciblage ADVERSE est refusé, comme pour l'immunité aux dégâts juste en
+        // dessous (« immunisé contre tous les dégâts adverses ») : le possesseur doit
+        // pouvoir continuer à soigner, équiper et buffer son propre banc. Sans cette
+        // distinction, les cartes de soutien qui consultent `canTargetBench` depuis que
+        // « Arène » impose ce passage se verraient refuser leur propre camp.
+        const sourceOwner = findInstanceOwner(ctx.state, ctx.query['sourceInstanceId'] as string);
+        if (sourceOwner === ctx.sourceOwnerId) return undefined;
         return { allow: false, source: SOURCE };
       },
     },

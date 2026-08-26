@@ -23,8 +23,23 @@ import type { CoinResult } from '../rng.js';
 // ---------------------------------------------------------------------------
 
 export type QueryName =
+  /** Payload: { characterInstanceId, attackId? }. `attackId` is present whenever the
+   * engine is gating ONE named attack, which is what lets a card seal a single attack
+   * rather than disarming the whole character ("Sacrifice" de Makima). */
   | 'canAttack'
+  /** Permission-style, defaults to DENY: may this character attack while on the bench?
+   * Payload: { characterInstanceId }. Only a card that says so may open it ("Bonus" de Yumeko). */
+  | 'canAttackFromBench'
   | 'canSwitchStandard'
+  /**
+   * Permission-style: may this switch happen AT ALL? Payload:
+   * `{ playerId, outgoingInstanceId, incomingInstanceId }`. Unlike `canSwitchStandard`,
+   * which only gates the player's own switch action, this one is consulted inside
+   * `zones.switchActive` -- the single choke point every switch goes through, forced ones
+   * included ("Arène", le scellement de Chrollo). Le remplacement d'un personnage KO ne
+   * passe PAS par là : ce n'est pas un switch (voir zones.koCharacter).
+   */
+  | 'canSwitchAny'
   | 'canUseAbility'
   | 'doesActionEndTurn'
   | 'getMaxAttachedObjects'
@@ -48,7 +63,9 @@ export type QueryName =
   | 'getMaxTerrainsPerTurn'
   /** Percent chance (0-100) that an incoming attack/ability is redirected onto one of the target's own benched allies, chosen by the target's owner. */
   | 'getDamageRedirectPercent'
-  | 'poisonTicksAsValeurLock';
+  | 'poisonTicksAsValeurLock'
+  /** Permission-style: can `statusId` be applied to `targetInstanceId` at all? Payload: { targetInstanceId, statusId }. Used for innate status immunities (e.g. Toji vs stun/silence/disarmed). */
+  | 'canApplyStatus';
 
 export interface ModifierEvalContext {
   state: GameState;
@@ -221,6 +238,32 @@ export interface EffectContext {
 
   /** Creates a brand-new object instance of `cardId`, added straight to that player's unplayed pool. `forPlayerId` defaults to the effect's own owner -- pass the opponent for a card that hands THEM something. Returns the new instance id. */
   createObject(cardId: string, forPlayerId?: PlayerId): string;
+  /**
+   * Joue gratuitement une carte objet (créée à la volée) : effet résolu tout de suite,
+   * puis cimetière -- ou accrochée au personnage si l'objet est un équipement. Ne consomme
+   * pas le budget d'objets du tour. Ex : "Spectre" d'Aki, qui rejoue l'objet adverse.
+   */
+  playObjectImmediately(cardId: string, forPlayerId?: PlayerId): Promise<string>;
+  /**
+   * "Za Warudo !" : à la fin du tour en cours, ce camp en rouvre un second au lieu de
+   * passer la main. Un seul tour bonus par pose (la marque est consommée par `endTurn`).
+   * La rotation des tours appartient au moteur : une carte ne peut que la demander.
+   */
+  grantExtraTurn(forPlayerId?: PlayerId): void;
+  /**
+   * Fait évoluer un personnage EN PLACE (Gon -> Gon Adulte). La carte évoluée prend la
+   * place de la base là où elle est, poste actif comme banc.
+   *
+   * `toCardId` est obligatoire dès que la base déclare plusieurs formes ; il doit faire
+   * partie de son `evolvesTo`. Ce qui est conservé, sans rien à faire côté carte : les
+   * dégâts déjà subis, les statuts (buffs comme malus), les objets équipés, la position.
+   * Les compteurs d'usage des capacités sont remis à zéro. Le plafond de PV suit la
+   * nouvelle carte **en gardant les modifications accumulées** (un +100 PV max encaissé
+   * avant l'évolution n'est pas perdu).
+   *
+   * Renvoie false si l'évolution n'a pas eu lieu (cible absente, forme non déclarée).
+   */
+  evolveCharacter(characterInstanceId: string, toCardId?: string): Promise<boolean>;
 
   /**
    * Builds a fresh context sourced from a DIFFERENT character than this effect's own
@@ -258,8 +301,13 @@ export interface AbilityDef {
   name: string;
   kind: 'active' | 'passive';
   description: string;
-  /** Passive abilities are normally triggered by an engine event. */
-  trigger?: EventName;
+  /**
+    * Passive abilities are normally triggered by an engine event. A list means "any of
+    * these", for a single printed passive that watches several kinds of enemy action
+    * ("Vision du Futur" d'Aki) -- splitting it into one ability per event would print the
+    * same line three times on the card.
+    */
+  trigger?: EventName | EventName[];
   /** Extra gating beyond the generic canUseAbility query. */
   condition?(ctx: EffectContext): boolean;
   /** Defaults to false (usable only by the active character). */
@@ -268,6 +316,12 @@ export interface AbilityDef {
   usesPerTurn?: number;
   /** Defaults to unlimited. */
   usesPerGame?: number;
+  /**
+   * Defaults to false: using an ability is normally a free action. Set it (or a function)
+   * for an ability whose own text closes the turn -- "Manipulation" de Makima. Evaluated
+   * AFTER `execute()`, on the same context, exactly like `AttackDef.endsTurn`.
+   */
+  endsTurn?: boolean | ((ctx: EffectContext) => boolean);
   execute(ctx: EffectContext): Promise<void>;
 }
 
@@ -279,6 +333,20 @@ export interface CharacterCardDef {
   attacks: AttackDef[];
   abilities: AbilityDef[];
   modifiers?: ModifierDef[];
+  /**
+   * Forme(s) évoluée(s) de cette carte (Gon -> Gon Adulte ; Kayn -> Kayn Assassin OU
+   * Rhaast). Purement déclaratif : c'est ce lien qui sort les formes évoluées du
+   * deck-builder et du quota de deck, et qui autorise `ctx.evolveCharacter`.
+   *
+   * La **condition** d'évolution, elle, n'est pas ici : elle vit dans une passive de la
+   * carte de base, qui appelle `ctx.evolveCharacter()` le moment venu. Idem pour le choix
+   * de la branche quand il y en a plusieurs.
+   *
+   * Une carte citée ici devient « forme évoluée » et n'est plus sélectionnable en deck.
+   * Une forme évoluée qui ne déclare rien est terminale ; déclarer à son tour un
+   * `evolvesTo` fait une chaîne (forme 1 -> 2 -> 3).
+   */
+  evolvesTo?: string | string[];
   /** Card family for cross-card synergies (e.g. "NEN"). Absent = basic card, no family. */
   family?: string;
   /** Overrides the general per-card copy limit of DECK_LIMITS for this specific card. Absent = use the general limit. */
