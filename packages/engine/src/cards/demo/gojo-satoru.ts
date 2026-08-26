@@ -65,7 +65,10 @@ export const gojoSatoru: CharacterCardDef = {
   modifiers: [
     {
       // "L'Infini" : esquive innée permanente, actif ou au banc.
+      // `silencedByPassive` parce que c'est bien une passive imprimée : un Silence Ultime
+      // (ou un Silence Passif) doit la couper comme n'importe quelle autre.
       query: 'getEvasionPercent',
+      silencedByPassive: true,
       transform(ctx, current) {
         if (ctx.query['characterInstanceId'] !== ctx.sourceInstanceId) return current;
         return Math.max(current as number, INFINI_EVASION_PERCENT);

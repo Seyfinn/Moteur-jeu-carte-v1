@@ -2,7 +2,6 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import {
   canAttack,
   canAttackFromBench,
-  canSwitchStandard,
   registerCard,
   type Match,
   type PendingChoice,
@@ -13,6 +12,7 @@ import { makima } from '../src/cards/demo/makima.js';
 import { yumeko } from '../src/cards/demo/yumeko.js';
 import { lightYagami } from '../src/cards/demo/light-yagami.js';
 import { getEffectiveATK } from '../src/queries.js';
+import { applyStatus as applyStatusDirect } from '../src/statuses.js';
 import { registerTestFixtures } from './fixtures.js';
 import { createReadyMatch, defaultAnswer, drive, findInstance } from './test-utils.js';
 
@@ -153,10 +153,10 @@ describe('Yumeko -- "Bonus" ouvre l\'attaque depuis le banc, une seule fois', ()
   });
 });
 
-describe('Light Yagami -- horloge de la crise cardiaque', () => {
+describe('Light Yagami -- marques "Nom" et crise cardiaque', () => {
   const ROSTER: RosterConfig = { characterCardIds: [lightYagami.id, 'fx-tank'], objectCardIds: [], terrainCardIds: [] };
 
-  it('tue l\'actif adverse resté 5 tours d\'affilée au poste actif', async () => {
+  it('pose une marque à la fin de chaque tour de Light, et tue à la 8e', async () => {
     const match = await createReadyMatch(
       { p1Name: 'A', p2Name: 'B', p1Roster: ROSTER, p2Roster: P2_ROSTER, seed: 5 },
       { p1ActiveCardId: lightYagami.id, p2ActiveCardId: 'fx-tank' }
@@ -164,19 +164,59 @@ describe('Light Yagami -- horloge de la crise cardiaque', () => {
     await ensureTurn(match, 'p1');
     const victimId = findInstance(match, 'p2', 'fx-tank');
 
-    // Quatre tours adverses passent : l'horloge tourne sans tuer.
-    for (let i = 0; i < 4; i++) {
-      await drive(match, 'p1', { kind: 'pass' });
-      await drive(match, 'p2', { kind: 'pass' });
-    }
+    await drive(match, 'p1', { kind: 'pass' });
+    await drive(match, 'p2', { kind: 'pass' });
+    const mark = match.state.players.p2.characters[victimId]!.statuses.find(
+      (s) => s.statusId === 'light-yagami-marque-nom'
+    );
+    expect(mark?.data?.['count']).toBe(1);
+
+    // Monte directement à 7 marques (bypass des jets d'esquive, déjà couverts par ailleurs) :
+    // seul le comportement au seuil nous intéresse ici. Remplace l'instance existante --
+    // `applyStatus` n'a pas d'API "update", la reposer sans retirer l'ancienne en empilerait
+    // une deuxième.
+    const victim = match.state.players.p2.characters[victimId]!;
+    victim.statuses = victim.statuses.filter((s) => s.statusId !== 'light-yagami-marque-nom');
+    applyStatusDirect(victim, {
+      statusId: 'light-yagami-marque-nom',
+      label: 'Marque du Nom (7/8)',
+      data: { count: 7 },
+    });
     expect(match.state.players.p2.graveyardCharacterInstanceIds).not.toContain(victimId);
 
-    // Le 5e début de tour adverse déclenche la crise cardiaque.
+    // La 8e marque, posée à la fin du tour suivant de Light, déclenche la crise cardiaque.
     await drive(match, 'p1', { kind: 'pass' });
     expect(match.state.players.p2.graveyardCharacterInstanceIds).toContain(victimId);
   });
 
-  it('remet le compteur à zéro sur un switch et inflige 60 à l\'entrant ("Contrainte")', async () => {
+  it('Écriture du Nom pose une marque et protège Light au tour adverse suivant', async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: ROSTER, p2Roster: P2_ROSTER, seed: 5 },
+      { p1ActiveCardId: lightYagami.id, p2ActiveCardId: 'fx-tank' }
+    );
+    await ensureTurn(match, 'p1');
+    const lightId = findInstance(match, 'p1', lightYagami.id);
+    const foeId = match.state.players.p2.activeCharacterInstanceId!;
+
+    // L'attaque ferme le tour : "Serment de Vengeance" tique donc aussi à la même fin de
+    // tour et ajoute sa propre marque -- les deux sources ne s'excluent pas, d'où 2 et non 1.
+    await drive(match, 'p1', { kind: 'attack', characterInstanceId: lightId, attackId: 'ecriture-du-nom' });
+    expect(match.state.players.p2.characters[foeId]!.damage).toBe(0); // aucun dégât
+    const mark = match.state.players.p2.characters[foeId]!.statuses.find(
+      (s) => s.statusId === 'light-yagami-marque-nom'
+    );
+    expect(mark?.data?.['count']).toBe(2);
+    expect(match.state.players.p1.characters[lightId]!.statuses.some((s) => s.statusId === 'evasive')).toBe(true);
+
+    // L'esquive tient tant que le tour adverse n'est pas terminé -- elle n'est décomptée
+    // qu'au tick d'ouverture du tour SUIVANT de Light, qui s'enchaîne dans le même appel
+    // que la fin du tour de p2 (le moteur passe la main de façon synchrone). Elle disparaît
+    // donc exactement quand p2 rend la main, jamais avant.
+    await drive(match, 'p2', { kind: 'pass' });
+    expect(match.state.players.p1.characters[lightId]!.statuses.some((s) => s.statusId === 'evasive')).toBe(false);
+  });
+
+  it('"Contrainte" efface les marques du fuyard et le punit, sans toucher à l\'entrant', async () => {
     const match = await createReadyMatch(
       { p1Name: 'A', p2Name: 'B', p1Roster: ROSTER, p2Roster: P2_ROSTER, seed: 5 },
       { p1ActiveCardId: lightYagami.id, p2ActiveCardId: 'fx-tank' }
@@ -185,20 +225,48 @@ describe('Light Yagami -- horloge de la crise cardiaque', () => {
     const fleeingId = findInstance(match, 'p2', 'fx-tank');
     const incomingId = findInstance(match, 'p2', 'fx-stunner');
 
+    // p1 passe d'abord pour rendre la main à p2 -- "Serment de Vengeance" tique au passage
+    // (fin du tour de Light) et pose déjà 1 marque ; on remplace l'instance pour repartir
+    // d'un compte de 3 exact au moment du switch (`applyStatus` n'a pas d'API "update").
     await drive(match, 'p1', { kind: 'pass' });
-    await drive(match, 'p2', { kind: 'pass' });
-    await drive(match, 'p1', { kind: 'pass' });
-    // Deux débuts de tour adverses : l'horloge est lancée.
-    expect(match.state.players.p2.characters[fleeingId]!.statuses.some((s) => s.statusId === 'light-yagami-crise')).toBe(true);
+    const fleeing = match.state.players.p2.characters[fleeingId]!;
+    fleeing.statuses = fleeing.statuses.filter((s) => s.statusId !== 'light-yagami-marque-nom');
+    applyStatusDirect(fleeing, {
+      statusId: 'light-yagami-marque-nom',
+      label: 'Marque du Nom (3/8)',
+      data: { count: 3 },
+    });
 
     await drive(match, 'p2', { kind: 'switch', newActiveInstanceId: incomingId });
 
-    expect(match.state.players.p2.characters[incomingId]!.damage).toBe(60);
-    expect(match.state.players.p2.characters[fleeingId]!.statuses.some((s) => s.statusId === 'light-yagami-crise')).toBe(false);
-    expect(match.state.players.p2.characters[incomingId]!.statuses.some((s) => s.statusId === 'light-yagami-crise')).toBe(false);
+    // 50 dégâts par marque effacée (3), sur le fuyard -- pas sur l'entrant.
+    expect(match.state.players.p2.characters[fleeingId]!.damage).toBe(150);
+    expect(match.state.players.p2.characters[incomingId]!.damage).toBe(0);
+    expect(
+      match.state.players.p2.characters[fleeingId]!.statuses.some((s) => s.statusId === 'light-yagami-marque-nom')
+    ).toBe(false);
   });
 
-  it('"Manipulation" ferme le switch de base sans enchaîner la cible', async () => {
+  it('"Contrainte" ne fait rien si le fuyard ne portait aucune marque', async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: ROSTER, p2Roster: P2_ROSTER, seed: 5 },
+      { p1ActiveCardId: lightYagami.id, p2ActiveCardId: 'fx-tank' }
+    );
+    await ensureTurn(match, 'p1');
+    const fleeingId = findInstance(match, 'p2', 'fx-tank');
+    const incomingId = findInstance(match, 'p2', 'fx-stunner');
+
+    // p1 passe pour rendre la main à p2 -- "Serment de Vengeance" tique au passage et pose
+    // sa propre marque, donc on la retire explicitement pour tester le cas "aucune marque".
+    await drive(match, 'p1', { kind: 'pass' });
+    const fleeing = match.state.players.p2.characters[fleeingId]!;
+    fleeing.statuses = fleeing.statuses.filter((s) => s.statusId !== 'light-yagami-marque-nom');
+
+    await drive(match, 'p2', { kind: 'switch', newActiveInstanceId: incomingId });
+    expect(match.state.players.p2.characters[fleeingId]!.damage).toBe(0);
+  });
+
+  it('"Manipulation" force le switch et laisse l\'adversaire choisir son remplaçant, 1x/partie', async () => {
     const match = await createReadyMatch(
       { p1Name: 'A', p2Name: 'B', p1Roster: ROSTER, p2Roster: P2_ROSTER, seed: 5 },
       { p1ActiveCardId: lightYagami.id, p2ActiveCardId: 'fx-tank' }
@@ -206,12 +274,37 @@ describe('Light Yagami -- horloge de la crise cardiaque', () => {
     await ensureTurn(match, 'p1');
     const lightId = findInstance(match, 'p1', lightYagami.id);
     const foeActiveId = match.state.players.p2.activeCharacterInstanceId!;
+    const foeBenchId = match.state.players.p2.benchCharacterInstanceIds[0]!;
 
-    await drive(match, 'p1', { kind: 'use-ability', characterInstanceId: lightId, abilityId: 'manipulation' });
+    await drive(
+      match,
+      'p1',
+      { kind: 'use-ability', characterInstanceId: lightId, abilityId: 'manipulation' },
+      answerOption(foeBenchId)
+    );
+
+    expect(match.state.players.p2.activeCharacterInstanceId).toBe(foeBenchId);
+    expect(match.state.players.p2.benchCharacterInstanceIds).toContain(foeActiveId);
+
+    // Utilisation unique PAR PARTIE : Manipulation ne ferme pas le tour (gratuite), donc on
+    // avance explicitement jusqu'au tour SUIVANT de Light pour prouver que ce n'est pas
+    // juste le quota par tour (remis à zéro à chaque tour) qui referme la porte.
     await drive(match, 'p1', { kind: 'pass' });
+    await drive(match, 'p2', { kind: 'pass' });
+    const secondTry = match.applyAction('p1', { kind: 'use-ability', characterInstanceId: lightId, abilityId: 'manipulation' });
+    expect(secondTry.ok).toBe(false);
+  });
 
-    expect(canSwitchStandard(match.state, foeActiveId).allow).toBe(false);
-    // Pas 'chained' : un switch forcé par une carte doit toujours pouvoir passer.
-    expect(match.state.players.p2.characters[foeActiveId]!.statuses.some((s) => s.statusId === 'chained')).toBe(false);
+  it('"Manipulation" est indisponible si l\'adversaire n\'a personne sur le banc', async () => {
+    const soloRoster: RosterConfig = { characterCardIds: ['fx-tank'], objectCardIds: [], terrainCardIds: [] };
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: ROSTER, p2Roster: soloRoster, seed: 5 },
+      { p1ActiveCardId: lightYagami.id, p2ActiveCardId: 'fx-tank' }
+    );
+    await ensureTurn(match, 'p1');
+    const lightId = findInstance(match, 'p1', lightYagami.id);
+
+    const attempt = match.applyAction('p1', { kind: 'use-ability', characterInstanceId: lightId, abilityId: 'manipulation' });
+    expect(attempt.ok).toBe(false);
   });
 });

@@ -49,6 +49,11 @@ export const locke: CharacterCardDef = {
         });
         if (!targetId) return;
 
+        const targetChar = ctx.getCharacter(targetId);
+        const existing = targetChar.statuses.find((s) => s.statusId === CLOU_STATUS_ID);
+        const newCount = Number(existing?.data?.['count'] ?? 0) + 1;
+        const triggersExplosion = newCount >= CLOU_THRESHOLD;
+
         // Un seul jet d'esquive pour toute l'attaque (le clou ET la chance de Silence
         // Ultime qui en découle) : Marteau ne fait pas de dégâts, donc il n'y a pas de
         // "coup" séparé sur lequel l'esquive du clou pourrait porter indépendamment de
@@ -56,24 +61,26 @@ export const locke: CharacterCardDef = {
         // sur coup sont deux jets distincts. Fait via rollEvasion (pas dealDamage/
         // applyStatus) pour décider AVANT de toucher au compteur de clous : sinon un
         // remove+reapply raté à l'esquive effacerait les clous déjà plantés.
-        const evaded = ctx.rollEvasion(targetId);
-        if (evaded) return;
+        //
+        // Exception : "Cloué" est INESQUIVABLE. Le coup qui plante le 3e clou ne roule
+        // donc aucune esquive (sans quoi le clou ne serait pas planté et l'explosion
+        // n'aurait jamais lieu), et l'explosion elle-même part en `skipEvasionRoll` --
+        // sinon la cible aurait deux occasions d'échapper au même effet.
+        if (!triggersExplosion && ctx.rollEvasion(targetId)) return;
 
-        const targetChar = ctx.getCharacter(targetId);
-        const existing = targetChar.statuses.find((s) => s.statusId === CLOU_STATUS_ID);
-        const newCount = Number(existing?.data?.['count'] ?? 0) + 1;
         if (existing) ctx.removeStatus(targetId, CLOU_STATUS_ID);
 
-        if (newCount >= CLOU_THRESHOLD) {
+        if (triggersExplosion) {
           // Cloué : le 3e clou fait exploser la cible et le compteur repart de zéro (pas
-          // de statut à réappliquer). L'explosion est une vraie instance de dégâts
-          // (bouclier, réductions, esquive/critique) créditée à Locke.
+          // de statut à réappliquer). L'explosion reste une vraie instance de dégâts
+          // (bouclier, réductions, critique) créditée à Locke -- seule l'esquive est
+          // court-circuitée.
           ctx.log(`Cloué : les clous de ${cardName(targetChar.cardId)} explosent`, {
             characterInstanceId: targetId,
           });
           const explosionAmount =
             EXPLOSION_BASE_DAMAGE + Math.round(targetChar.currentMaxHP * (EXPLOSION_PERCENT_OF_TARGET_MAX_HP / 100));
-          await ctx.dealDamage(targetId, explosionAmount);
+          await ctx.dealDamage(targetId, explosionAmount, { skipEvasionRoll: true });
         } else {
           ctx.applyStatus(
             targetId,

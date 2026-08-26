@@ -1,16 +1,12 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { registerCard, type Match, type PlayerId, type RosterConfig } from '../src/index.js';
+import { registerDemoCards, type Match, type PlayerId, type RosterConfig } from '../src/index.js';
 import { attaqueClone } from '../src/cards/demo/attaque-clone.js';
 import { registerTestFixtures, FX_ROSTER } from './fixtures.js';
 import { createReadyMatch, drive } from './test-utils.js';
 
-let registered = false;
 beforeAll(() => {
   registerTestFixtures();
-  if (!registered) {
-    registered = true;
-    registerCard(attaqueClone);
-  }
+  registerDemoCards();
 });
 
 const CLONE_ROSTER: RosterConfig = {
@@ -85,6 +81,36 @@ describe('"Attaque cloné" -- the generic `extra-attack` grant the engine spends
     await drive(match, 'p1', { kind: 'pass' });
     await drive(match, 'p2', { kind: 'pass' });
     expect(silenced()).toBe(false);
+  });
+
+  it("refuse d'etre jouee si Locke, Light Yagami ou Yumeko est au poste actif", async () => {
+    const { describeObjectUnplayable } = await import('../src/index.js');
+    const roster: RosterConfig = {
+      characterCardIds: ['locke', 'light-yagami', 'yumeko', 'fx-tank'],
+      objectCardIds: [attaqueClone.id],
+      terrainCardIds: [],
+    };
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: roster, p2Roster: FX_ROSTER, seed: 5 },
+      { p1ActiveCardId: 'locke', p2ActiveCardId: 'fx-tank' }
+    );
+    const me = match.state.players.p1;
+    await ensureTurn(match, 'p1');
+    const objectId = Object.values(me.objects).find((o) => o.cardId === attaqueClone.id)!.instanceId;
+
+    expect(describeObjectUnplayable(match.state, 'p1', objectId)).toBe('Interaction trop puissante.');
+    const refused = match.applyAction('p1', { kind: 'play-object', objectInstanceId: objectId });
+    expect(refused.ok).toBe(false);
+
+    // Meme refus avec Light Yagami ou Yumeko actifs, aucun avec un autre personnage.
+    for (const bannedCardId of ['light-yagami', 'yumeko']) {
+      const bannedId = Object.entries(me.characters).find(([, c]) => c.cardId === bannedCardId)![0];
+      me.activeCharacterInstanceId = bannedId;
+      expect(describeObjectUnplayable(match.state, 'p1', objectId)).toBe('Interaction trop puissante.');
+    }
+    const tankId = Object.entries(me.characters).find(([, c]) => c.cardId === 'fx-tank')![0];
+    me.activeCharacterInstanceId = tankId;
+    expect(describeObjectUnplayable(match.state, 'p1', objectId)).toBeNull();
   });
 
   it('still charges the silence when the extra attack was never taken', async () => {

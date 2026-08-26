@@ -297,6 +297,63 @@ describe('bench immunity scoping (Bouclier Ultime)', () => {
   });
 });
 
+describe('modifiers portant une passive imprimee (silencedByPassive)', () => {
+  const ROSTER = {
+    characterCardIds: ['gojo-satoru', 'kakashi', 'guts'],
+    objectCardIds: [],
+    terrainCardIds: [],
+  };
+
+  it("coupe l'esquive innee sous silence passif comme sous silence ultime", async () => {
+    const { registerDemoCards, BASE_EVASION_CHANCE_PERCENT } = await import('../src/index.js');
+    const { getEvasionPercent } = await import('../src/queries.js');
+    const { applyStatus, removeStatus } = await import('../src/statuses.js');
+    registerDemoCards();
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: ROSTER, p2Roster: ROSTER, seed: 63 },
+      { p1ActiveCardId: 'gojo-satoru', p2ActiveCardId: 'gojo-satoru' }
+    );
+
+    const gojoId = findInstance(match, 'p1', 'gojo-satoru');
+    const kakashiId = findInstance(match, 'p1', 'kakashi');
+    const gojo = match.state.players.p1.characters[gojoId]!;
+    const kakashi = match.state.players.p1.characters[kakashiId]!;
+
+    expect(getEvasionPercent(match.state, gojo)).toBe(33);
+
+    // Silence Ultime (celui de Marteau) : la passive tombe, il ne reste que les 5 % de base.
+    applyStatus(gojo, { statusId: 'silence-ultimate', label: 'Silence Ultime' });
+    expect(getEvasionPercent(match.state, gojo)).toBe(BASE_EVASION_CHANCE_PERCENT);
+    // Et seulement pour le porteur : Kakashi garde le sien.
+    expect(getEvasionPercent(match.state, kakashi)).toBe(33);
+
+    removeStatus(gojo, 'silence-ultimate');
+    applyStatus(gojo, { statusId: 'silence-passive', label: 'Silence Passif' });
+    expect(getEvasionPercent(match.state, gojo)).toBe(BASE_EVASION_CHANCE_PERCENT);
+
+    removeStatus(gojo, 'silence-passive');
+    expect(getEvasionPercent(match.state, gojo)).toBe(33);
+  });
+
+  it("laisse intact un modifier qui porte le texte d'une attaque", async () => {
+    const { registerDemoCards } = await import('../src/index.js');
+    const { getCriticalPercent } = await import('../src/queries.js');
+    const { applyStatus } = await import('../src/statuses.js');
+    registerDemoCards();
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: ROSTER, p2Roster: ROSTER, seed: 64 },
+      { p1ActiveCardId: 'gojo-satoru', p2ActiveCardId: 'gojo-satoru' }
+    );
+
+    const gojoId = findInstance(match, 'p1', 'gojo-satoru');
+    const gojo = match.state.players.p1.characters[gojoId]!;
+    // Le 33 % de critique appartient a Blackflash, une ATTAQUE : le silence passif
+    // n'a rien a y voir.
+    applyStatus(gojo, { statusId: 'silence-ultimate', label: 'Silence Ultime' });
+    expect(getCriticalPercent(match.state, gojo)).toBe(33);
+  });
+});
+
 describe('event resolution', () => {
   it('rejects a malformed ordering answer and still fires each reacting passive exactly once', async () => {
     const match = await createReadyMatch(

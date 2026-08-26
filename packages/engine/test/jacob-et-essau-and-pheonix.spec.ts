@@ -133,10 +133,10 @@ describe('"Pheonix" -- the delayed revive the engine ticks from the graveyard', 
     expect(owner.pendingRevives).toHaveLength(0);
     expect(owner.graveyardCharacterInstanceIds).not.toContain(sacrificedId);
     const revived = owner.characters[sacrificedId]!;
-    expect(revived.currentMaxHP).toBe(maxHPBefore + 100);
+    expect(revived.currentMaxHP).toBe(maxHPBefore + 80);
     expect(revived.damage).toBe(0); // back at full HP
     const atkBoost = revived.statuses.find((s) => s.statusId === 'atk-boost');
-    expect(atkBoost?.data?.['amount']).toBe(50);
+    expect(atkBoost?.data?.['amount']).toBe(30);
     expect(atkBoost?.remainingTurns).toBeUndefined(); // permanent, never ticks away
   });
 

@@ -56,9 +56,8 @@ export const aki: CharacterCardDef = {
         "Si l'ennemi utilise un Objet : +40 dégâts sur la prochaine attaque d'Aki.\nS'il utilise un Actif : Aki va stun au prochain tour.\nS'il effectue une Atk : Gagne 20 HP ",
       // Une seule passive imprimée, trois sortes d'action adverse à surveiller.
       trigger: ['onObjectPlayed', 'onAbilityUsed', 'onAttackDeclared'],
-      // Aki lit le jeu où qu'elle soit, et l'adversaire peut enchaîner plusieurs actions
-      // dans le même tour : chacune doit compter.
-      usableFromBench: true,
+      // Pas de `usableFromBench` : Aki ne lit le jeu que depuis le poste actif. L'adversaire
+      // peut en revanche enchaîner plusieurs actions dans le même tour, et chacune compte.
       usesPerTurn: Infinity,
       condition(ctx) {
         return ctx.event?.playerId === ctx.opponentId;
@@ -108,10 +107,8 @@ export const aki: CharacterCardDef = {
           return;
         }
 
-        // onAttackDeclared : les 20 HP sont à la fois un soin ET du plafond en plus. Le
-        // `keepCurrentHP` est indispensable -- sans lui, monter le plafond soignerait déjà
-        // d'autant et Aki gagnerait 40 PV au lieu de 20.
-        ctx.raiseMaxHP(ctx.sourceInstanceId, ATTACK_HP_GAIN, { keepCurrentHP: true });
+        // onAttackDeclared : un simple soin, sans toucher au plafond de PV. Aki à pleine
+        // vie ne gagne donc rien.
         ctx.heal(ctx.sourceInstanceId, ATTACK_HP_GAIN);
       },
     },

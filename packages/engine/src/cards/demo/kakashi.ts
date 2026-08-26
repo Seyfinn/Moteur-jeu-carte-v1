@@ -91,7 +91,9 @@ export const kakashi: CharacterCardDef = {
   modifiers: [
     {
       // "Sharingan" : esquive innée permanente, actif ou au banc.
+      // Passive imprimée, donc coupée par le silence passif / ultime (cf. L'Infini).
       query: 'getEvasionPercent',
+      silencedByPassive: true,
       transform(ctx, current) {
         if (ctx.query['characterInstanceId'] !== ctx.sourceInstanceId) return current;
         return Math.max(current as number, SHARINGAN_EVASION_PERCENT);
