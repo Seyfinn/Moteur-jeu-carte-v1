@@ -72,6 +72,11 @@ import { aki } from './aki.js';
 import { dioBrando } from './dio-brando.js';
 import { levi } from './levi.js';
 import { arene } from './arene.js';
+import { kayn } from './kayn.js';
+import { kaynAssassin } from './kayn-assassin.js';
+import { rhaast } from './rhaast.js';
+import { gon } from './gon.js';
+import { gonAdulte } from './gon-adulte.js';
 
 export {
   aizen,
@@ -146,6 +151,11 @@ export {
   dioBrando,
   levi,
   arene,
+  kayn,
+  kaynAssassin,
+  rhaast,
+  gon,
+  gonAdulte,
 };
 
 let registered = false;
@@ -226,6 +236,13 @@ export function registerDemoCards(): void {
   registerCard(dioBrando);
   registerCard(levi);
   registerCard(arene);
+  registerCard(kayn);
+  // Les deux formes évoluées doivent être enregistrées pour que `evolveCharacter` les
+  // trouve, mais elles n'entrent pas dans DEMO_ROSTER : `evolvesTo` les sort du pool.
+  registerCard(kaynAssassin);
+  registerCard(rhaast);
+  registerCard(gon);
+  registerCard(gonAdulte);
 }
 
 /**
@@ -296,6 +313,8 @@ export const DEMO_ROSTER: RosterConfig = {
     aki.id,
     dioBrando.id,
     levi.id,
+    kayn.id,
+    gon.id,
   ],
   objectCardIds: [
     potionForce.id,

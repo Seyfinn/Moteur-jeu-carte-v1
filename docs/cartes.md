@@ -79,8 +79,9 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   prochaine attaque d'Aki.\nS'il utilise un Actif : Aki va stun au prochain tour.\nS'il
   effectue une Atk : Gagne 20 HP »*
   → **Une seule passive imprimée pour trois events** : `onObjectPlayed`, `onAbilityUsed`,
-  `onAttackDeclared`, tous filtrés sur le camp adverse. Réagit aussi depuis le banc, et
-  autant de fois que l'adversaire enchaîne d'actions dans un tour.
+  `onAttackDeclared`, tous filtrés sur le camp adverse. **Uniquement depuis le poste actif**
+  (pas de `usableFromBench`) : Aki au banc ne lit plus le jeu. En revanche elle réagit autant
+  de fois que l'adversaire enchaîne d'actions dans un tour.
   - **Objet** : +40 **cumulables** (2 objets = +80) sur un statut `aki-vision-bonus` sans
     durée — il tient jusqu'à la prochaine attaque d'Aki, qui le dépense. Passe par un
     modifier `getEffectiveATK`, donc buffs et malus s'appliquent au total.
@@ -88,9 +89,10 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     statuts bloquants posés sur l'ennemi). Attention : une capacité adverse qui neutralise
     Aki au passage (stun, silence passif) l'empêche de riposter — le moteur revérifie
     l'éligibilité d'une passive juste avant de l'exécuter.
-  - **Atk** : `raiseMaxHP(20, { keepCurrentHP: true })` **puis** `heal(20)`. Les deux
-    moitiés comptent : +20 de plafond **et** +20 PV rendus. Sans `keepCurrentHP`, monter le
-    plafond aurait déjà soigné et Aki aurait gagné 40 PV.
+  - **Atk** : un simple `heal(20)`. Le plafond de PV **ne bouge pas** : Aki déjà à pleine
+    vie ne gagne rien, et le soin est plafonné aux dégâts réellement subis. `onAttackDeclared`
+    part avant que le coup ne soit résolu, donc le soin arrive avant les dégâts de l'attaque
+    adverse.
   → **Ajout moteur** : `AbilityDef.trigger` accepte désormais une **liste** d'events.
   Sans ça il aurait fallu trois capacités séparées, donc la même ligne imprimée trois fois
   sur la carte.
@@ -275,10 +277,28 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   → Le tour bonus est un **vrai** tour : poisons, brûlures, saignements et recharges tiquent
   une seconde fois (règle confirmée par l'auteur). `turnNumber` ne bouge pas — la manche n'a
   pas fait le tour des deux joueurs.
+  → Concrètement : **le joueur de Dio joue deux tours d'affilée et l'adversaire saute le
+  sien**. Le premier (celui où la capacité est lancée) est un tour **normal, à 100 % des
+  dégâts** ; c'est le **second**, le « tour arrêté », qui porte les contreparties.
   → Le -50 % pèse sur **toute l'équipe de Dio**, pas seulement sur lui : statut générique
-  `atk-multiplier` (`multiplier: 0.5`) posé sur les six, avec `ticksOnBench` (cinq d'entre
-  eux sont au banc, où les durées seraient sinon suspendues). `remainingTurns: 2` le fait
-  vivre exactement pendant le tour bonus.
+  `atk-multiplier` (`multiplier: 0.5`), avec `ticksOnBench` (cinq des six porteurs sont au
+  banc, où les durées seraient sinon suspendues).
+  → Le **décalage d'un tour** passe par un `onExpire` : la capacité pose un marqueur caché
+  (`dio-za-warudo-imminent`, `remainingTurns: 1`) qui expire au tout début du tour bonus et
+  pose le malus à ce moment-là. Comme `onExpire` s'applique **après** la passe de décompte,
+  le malus n'est pas décompté à son arrivée : il vit exactement le tour arrêté et disparaît
+  au tick d'ouverture du tour suivant de Dio. Un `atk-multiplier` posé directement pénalisait
+  au contraire la **fin du tour de lancement** (bug corrigé).
+  → **Aucun switch pendant le tour arrêté**, dans aucun camp et switchs forcés compris :
+  marqueur `dio-temps-arrete` sur Dio (même décalage d'un tour, même `ticksOnBench`) lu par
+  un modifier **`canSwitchAny`** — la seule portée évaluée dans `zones.switchActive`, donc
+  la seule qui ferme aussi un `forceSwitch` de carte. Porté par Dio seul et pas par les
+  douze personnages : les statuts de l'adversaire ne tiquent que pendant SES tours, or il
+  n'en joue aucun entre les deux tours de Dio — un marqueur posé sur lui expirerait pendant
+  son tour normal d'après. Le **remplacement d'un personnage KO** reste ouvert (ce n'est pas
+  un switch), sans quoi un camp pourrait se retrouver sans actif et bloquer la partie. Si
+  Dio meurt pendant le tour arrêté, le verrou tombe avec lui (le modifier ne vit que tant
+  que la carte est en jeu) ; le -50 %, lui, est porté par chaque personnage et tient.
 
 ### Guts — 250 HP
 
@@ -298,9 +318,76 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   - Moteur : modifier `getEvasionPercent` à 33 %, pas un statut `evasive`. Donc il tient dès
     le premier coup de la partie, survit à une résurrection, et ne peut être ni dissipé ni
     volé.
+  - Le modifier porte `silencedByPassive: true` : c'est une **passive imprimée**, donc un
+    `silence-passive` ou un `silence-ultimate` sur Gojo la coupe et le ramène aux 5 %
+    d'esquive de base. Sans ce champ, un modifier ne passe jamais par `canUseAbility` et la
+    passive survivait au silence (bug corrigé). Le modifier `getCriticalPercent`, lui, porte
+    le texte d'une **attaque** (Blackflash) : le silence passif ne le touche pas.
 - **Extension du Territoire** (active, 1×/partie) — *« Inflige Stun au personnage actif
   adverse pendant son prochain tour. Utilisable une seule fois par partie. »*
   - Moteur : statut `stun` à `remainingTurns = 2` (le `+1` des statuts bloquants).
+
+### Gon — 80 HP — carte évolutive (Gon Adulte)
+
+- **La Pierre** (40 ATK, pas de texte) — description implicite.
+- **Sermet de Vengance** (passive, `['onGameStart', 'onTurnStart', 'onCharacterKO']`) —
+  *« Au début de la partie, une carte adverse est secrètement désignée comme Cible (révélée
+  au Tour 10 à l'adversaire). Si la Cible est éliminée, Gon évolue en Gon Adulte et soigne
+  tous ses PV. »*
+  - Moteur : **une seule** capacité imprimée qui surveille trois moments, avec un `switch`
+    sur `ctx.event.name` — une capacité par event afficherait trois fois la même ligne sur
+    la carte. `usableFromBench: true` et `usesPerTurn: Infinity` : Gon peut très bien être
+    au banc à la désignation, au tour 10, ou quand la Cible meurt.
+  - **Désignation** (`onGameStart`) : c'est le **joueur de Gon** qui choisit, dans une
+    fenêtre de ciblage sur le plateau, parmi les personnages adverses (actif + banc soumis
+    à `canTargetBench`). Première carte du jeu à poser une question depuis `onGameStart` —
+    d'où le test dédié, qui vérifie que la mise en place ne se bloque pas dessus.
+  - **Le secret.** ⚠️ Le journal de partie n'est **pas** filtré par joueur
+    (`getPlayerView` n'y touche pas) : la moindre ligne de journal nommant la Cible la
+    révélerait aux deux camps. La désignation n'écrit donc **rien** dans le journal, et la
+    mémoire est un statut `hidden` — ni badge, ni ligne — porté par **Gon lui-même**
+    (`gon-cible-record`, `data.targetInstanceId`). Sur la victime, il aurait disparu avec
+    elle au cimetière, exactement au moment où il faut le relire.
+  - **Révélation** (`onTurnStart`, `state.turnNumber >= 10`) : pose alors un statut bien
+    visible `gon-cible` (« Cible de Gon ») sur la victime, avec `skipEvasionRoll` — une
+    désignation ne s'esquive pas — plus une ligne de journal. `>=` et pas `===`, pour qu'un
+    Gon arrivé plus tard (Mode Pioche) ne rate pas définitivement la manche 10. Sautée si
+    la Cible est déjà morte.
+  - **Élimination** (`onCharacterKO`) : **n'importe quelle** mort de la Cible déclenche
+    l'évolution — Gon, un allié, un poison, un tic de brûlure, ou même une carte de
+    l'adversaire. Le tueur n'est jamais consulté.
+  - *« soigne tous ses PV »* : le plafond est déjà celui de Gon Adulte (300) quand le soin
+    part, donc Gon ressort systématiquement à 300/300 — 80 PV de base plus 220 gagnés au
+    passage. C'est un vrai `heal`, il retire donc `bleed`.
+  - Après l'évolution la carte est `gon-adulte`, qui ne déclare plus cette passive : les
+    branches « révélation » et « élimination » s'éteignent d'elles-mêmes, sans garde à
+    écrire. La mémoire cachée est quand même nettoyée avant l'appel.
+- Deck : seul `gon` est dans `DEMO_ROSTER`. `gon-adulte` est enregistrée pour que
+  `evolveCharacter` la trouve, mais `evolvesTo` la sort du pool et du quota.
+
+### Gon Adulte — 300 HP — forme évoluée de Gon (jamais en deck)
+
+- **Jajanken Ultime** (115 ATK, pas de texte) — description implicite. La plus grosse
+  attaque du pool.
+- **Sermet de Vengance** (passive, `onTurnEnd`) — *« Contrat de Mort : Gon Adulte subit 30
+  dégâts auto-infligés à la fin de chacun de ses tours »*
+  - Moteur : `ctx.event?.playerId === ctx.ownerId` (fin de **son** tour, pas de celui d'en
+    face), et **`usableFromBench` volontairement absent** — `canUseAbility` exige alors le
+    poste actif, donc **le contrat cesse de saigner dès qu'il se replie au banc**. Le repli
+    est la vraie échappatoire de la carte.
+  - Les 30 dégâts passent avec `{ ignoreShield: true, ignoreDamageReduction: true }` : coût
+    que le camp se paie à lui-même, un bouclier ne doit pas le rendre gratuit. Ils peuvent
+    le tuer.
+  - Même nom imprimé que la passive de la carte de base, mais un id distinct
+    (`contrat-de-mort`) — de toute façon `evolveCharacter` remet les compteurs d'usage à
+    zéro, donc un id partagé n'aurait pas été un piège ici.
+- **Téléportation** (active, 1×/partie, depuis le banc) — *« Peut passer du banc au terrain
+  (utilisable 1x) depuis le banc »*
+  - Moteur : `usableFromBench: true`, `usesPerGame: 1`, `forceSwitch(ownerId, soi-même)`.
+    La `condition` refuse l'activation s'il tient déjà le poste actif.
+  - `endsTurn` laissé au défaut des capacités (**false**) : il monte gratuitement et peut
+    enchaîner Jajanken Ultime dans le même tour. En contrepartie, monter au front rallume
+    le Contrat de Mort dès la fin de ce tour-là.
 
 ### Hulk — 500 HP
 
@@ -334,7 +421,8 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
 
 - **Raikiri** (60 ATK) — *« Inflige 60 dégâts à l'actif adverse. »*
 - **Sharingan** (passive) — *« Kakashi bénéficie en permanence de l'effet Esquive, qu'il
-  soit actif ou au banc. »* → même montage que L'Infini (modifier `getEvasionPercent`).
+  soit actif ou au banc. »* → même montage que L'Infini (modifier `getEvasionPercent` +
+  `silencedByPassive: true`, donc coupé par un silence passif / ultime).
 - **Copie de Technique (mémoire)** (passive, `onAttackDeclared`, banc) — mémorise la dernière
   attaque adverse dans un statut caché. Purement interne, aucune action pour le joueur.
 - **Copie de Technique** (active, 1×/partie) — *« Rejoue immédiatement la dernière attaque
@@ -350,6 +438,95 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   immédiatement attaquer de nouveau ce tour. »*
   - Moteur : pas un vrai passive déclenché — c'est l'`AttackDef` qui écrit dans `ctx.scratch`
     et `endsTurn(ctx)` qui relit ce drapeau. Vaut pour une relance, pas une chaîne infinie.
+
+### Kayn — 240 HP — carte évolutive (Rhaast / Kayn assassin)
+
+- **Faux** (40 ATK, pas de texte) — description implicite.
+- **Faux du Darkin** (passive, purement descriptive) — *« Après 3 attaques, kayn de
+  transforme immédiatement, selon la voie qu'il a choisi. Double ses hp actuels lors de la
+  transformation. »*
+  - Moteur : le compteur et la transformation vivent dans l'`AttackDef`, pas dans un
+    trigger. Il n'existe pas d'event « après attaque », et le 3ᵉ coup doit être porté par
+    Kayn (40 ATK) avant que la forme évoluée n'arrive — un `onAttackDeclared` aurait fait
+    frapper la forme évoluée dès le 3ᵉ coup.
+  - Le compteur est un statut caché `kayn-faux-count` (`data.count`) **sans**
+    `remainingTurns` : jamais retiré par la passe de décompte, il survit aux allers-retours
+    au banc. Les 3 attaques n'ont pas à être consécutives, et une attaque esquivée compte
+    quand même (c'est le coup porté qui est compté, pas le coup qui touche).
+  - **« Double ses hp actuels » = un soin, plafonné aux PV max.** Les trois formes sont à
+    240 PV max, donc la transformation soigne exactement les PV restants : un Kayn à 200 PV
+    ressort à 240/240, un Kayn à 80 PV à 160/240. Le plafond ne monte jamais au-dessus de
+    240 (au-delà de ce que d'autres cartes lui auraient déjà ajouté, cf. la conservation
+    de l'écart de PV max par `evolveCharacter`).
+  - Ce soin est un vrai `heal` : il retire donc `bleed`, comme n'importe quel soin.
+- **Eveil du Darkin** (passive, `onBecomeActive`) — *« Dès que Kayn est posé, le joueur
+  décide si Kayn choisi la voie de Rhaast ou la voie de l'assassin. »*
+  - Moteur : il n'existe pas d'event « personnage posé » (tout le monde est en jeu dès le
+    départ), donc la question part à l'**arrivée au poste actif**, actif de départ compris
+    (`reason: 'setup'`). Elle est posée **une seule fois** : la réponse est rangée dans le
+    statut caché `kayn-darkin-path` (`data.cardId`), et la `condition` de la passive refuse
+    de la reposer tant que ce statut est là. Kayn ne peut donc pas changer d'avis en
+    repassant par le banc.
+  - Le choix est annoncé dans le journal (les deux camps le voient) ; le statut, lui, est
+    `hidden` — un badge en plus n'apprendrait rien.
+  - La modale affiche les **illustrations** de Rhaast et de Kayn assassin (`card` sur chaque
+    `ChoiceOption`), pas deux boutons de texte.
+  - Filet de sécurité : si Kayn arrivait sous `silence-passive` / `silence-ultimate`, la
+    question n'est pas posée à ce moment-là — elle l'est alors au 3ᵉ coup, juste avant la
+    transformation, plutôt que de bloquer l'évolution pour le reste de la partie.
+- Deck : seul `kayn` est dans `DEMO_ROSTER`. Les deux formes sont enregistrées
+  (`registerCard`) pour que `evolveCharacter` les trouve, mais `evolvesTo` les sort du pool
+  et du quota — le deck-builder les montre en vignettes non sélectionnables sous Kayn.
+
+### Kayn assassin — 240 HP — forme évoluée de Kayn (jamais en deck)
+
+- **Faux Bleu** (60 ATK, pas de texte) — description implicite.
+- **Disciple de l'ombre** (passive, purement descriptive) — *« Les attaques de kayn
+  infligent 25% des hp max en dégâts bonus. »*
+  - Moteur : **25 % des PV max de la CIBLE** (`currentMaxHP`, donc après un éventuel valeur
+    lock), pas de Kayn. Contre un 240 PV, Faux Bleu tape 60 + 60 = 120.
+  - Le bonus est **fondu dans la même instance de dégâts** que l'attaque : un bouclier
+    l'absorbe d'un bloc, une esquive annule le tout, un critique multiplie l'ensemble.
+  - Pas de modifier `getEffectiveATK` : cette requête ne connaît que l'attaquant, jamais la
+    cible. Le bonus est donc calculé dans l'`AttackDef`, avec un garde explicite
+    `isSilencedPassive()` — sans lui, une passive imprimée aurait survécu au silence passif
+    (c'est exactement ce que `silencedByPassive` fait pour un modifier).
+- **Ruée de l'ombre** (active, 1×/partie) — *« Kayn assassin échange sa place avec une carte
+  du banc, et se soigne de 60hp. Utilisable une fois »*
+  - Moteur : `usesPerGame: 1`, `endsTurn` laissé au défaut des capacités (**false**) — le
+    repli est gratuit, le personnage qui monte peut encore agir dans le même tour.
+  - Le joueur choisit la carte du banc sur le plateau (`select-characters`), puis
+    `forceSwitch(ownerId, …)`. La `condition` refuse l'activation si le banc est vide.
+  - Le soin de 60 PV va à **Kayn**, pas à la carte qui monte, et il est appliqué **avant**
+    le switch : si le switch est refusé (Arène, `chained`, `canSwitchAny`), l'unique
+    utilisation a quand même été payée, elle ne doit pas être perdue pour rien.
+
+### Rhaast — 240 HP — forme évoluée de Kayn (jamais en deck)
+
+- **Faux Rouge** (60 ATK, pas de texte) — description implicite.
+- **Buveur de sang** (passive, `afterDamage`) — *« Heal de la moitié de ses dégâts
+  infligés. »*
+  - Moteur : se déclenche sur chaque instance de dégâts dont Rhaast est la source
+    (`usesPerTurn: Infinity`, `usableFromBench: true`), et rend `floor(amount / 2)`.
+    `amount` = les dégâts **réellement encaissés**, après bouclier et réductions : un coup
+    entièrement absorbé ne soigne rien.
+  - Garde explicite : le coût en PV de « Soif de sang » frappe un **allié**, il ne doit pas
+    soigner Rhaast. La condition exige donc que la victime appartienne au camp adverse.
+- **Soif de sang** (active) — *« Sacrifie la moitié des hp actuels d'une carte allié sur le
+  banc pour infliger 50 dégâts supplémentaires à la prochaine attaque. »*
+  - Moteur : coût = `floor(PV actuels / 2)` de l'allié choisi, infligé avec
+    `{ ignoreShield: true, ignoreDamageReduction: true }` (coût que le camp se paie à
+    lui-même : ni bouclier ni réduction ne doivent l'absorber). Arrondi vers le bas, donc le
+    sacrifice **ne tue jamais** l'allié.
+  - Les alliés proposés passent par `canTargetBench` (Bouclier Ultime, Arène peuvent les
+    mettre hors de portée) et doivent avoir au moins 2 PV actuels — en dessous, la moitié
+    arrondie vaut 0 et la capacité serait gaspillée.
+  - Le bonus est un statut visible `rhaast-soif-de-sang` (`data.amount: 50`) **sans durée** :
+    il attend la prochaine « Faux Rouge », même à un tour ultérieur.
+  - **Non cumulable** : la `condition` refuse l'activation tant que le bonus n'a pas été
+    consommé, plutôt que de laisser gaspiller les PV d'un second allié.
+  - Le bonus est consommé par l'attaque **qu'elle touche ou soit esquivée** — les PV de
+    l'allié ont déjà été payés (même parti pris que Godspeed de Killua).
 
 ### Killua — 240 HP
 
@@ -370,43 +547,75 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   - Moteur : bascule un drapeau de révélation lu par `view.ts` ; la révélation vaut aussi
     pour les cartes que l'adversaire piochera ensuite.
 
-### Light Yagami — 200 HP
+### Light Yagami — 290 HP
 
-- **Écriture du Nom** — *« Avance l'heure de la mort d'un tour. »*
-  → `baseATK: 0` : l'attaque n'inflige **aucun dégât**, elle avance de 1 le compteur de
-  « Sermet de Vengeance » porté par l'actif adverse. Cumulable (deux Écritures = 2 tours
-  gagnés). Passe par le même point que le décompte automatique, donc si l'avance amène le
-  compteur à 5, la crise cardiaque part **immédiatement** au lieu d'attendre. Termine le
-  tour comme n'importe quelle attaque.
-- **Sermet de Vengeance** (passive, `onTurnStart`) — *« Si le personnage ennemi reste sur
-  le poste actif pendant 5 tours d'affilé, il subit une crise cardiaque (KO instantané). »*
-  → Compteur `data.turns` dans un statut `light-yagami-crise` posé **sur l'actif adverse**,
-  sans `remainingTurns` (compteur tenu par la carte, pas un décompte du moteur). Il monte
-  de 1 à chaque **début de tour adverse**, et **uniquement tant que Light Yagami tient
-  lui-même le poste actif** : mis au banc, il arrête l'horloge là où elle en est (elle ne
-  se remet pas à zéro pour autant). À 5, `koCharacter` — une mort hors du circuit des
-  dégâts, donc ni bouclier, ni réduction, ni `death-ward` ne l'empêchent. Statut
-  volontairement **visible** : l'adversaire doit pouvoir décider de fuir à temps.
-- **Contrainte** (passive, `onSwitch`) — *« Switcher vers le banc annule l'exécution, mais
-  le personnage entrant subit 60 dégâts »*
+- **Écriture du Nom** (0 ATK) — *« Pose une marque "Nom" sur le personnage actif adverse.
+  Octroi au prochain tour esquive à light »*
+  → `baseATK: 0` : aucun dégât, seulement une marque "Nom" de plus sur l'actif adverse (via
+  `addNameMark`, le même point de passage que "Serment de Vengeance" ci-dessous). Esquivable
+  (`ctx.rollEvasion` roulé **avant** de toucher au compteur — voir plus bas pourquoi).
+  → Pose aussi le statut générique `evasive` sur **Light lui-même**, `remainingTurns: 1`,
+  **sans** le `+1` des statuts bloquants : ce n'est pas un débuff posé sur l'ennemi, c'est un
+  buff sur soi qui doit couvrir exactement le tour adverse qui suit. Un statut d'un
+  personnage n'est décompté qu'au tick d'ouverture du tour de SON propre camp — donc posé
+  pendant le tour de Light, il traverse tout le tour adverse intact et n'est retiré qu'au
+  tick d'ouverture du tour SUIVANT de Light, avant même qu'il rejoue. `ticksOnBench: true`
+  au cas où Light se retrouve benché entre-temps (sans quoi le décompte gèlerait).
+  → Termine le tour comme n'importe quelle attaque, donc "Serment de Vengeance" (qui tique à
+  la fin du tour de Light) pose souvent une **deuxième** marque dans la foulée — les deux
+  sources ne s'excluent pas, une Écriture peut ajouter 2 marques d'un coup.
+- **Serment de Vengeance** (passive, `onTurnEnd`) — *« À la fin de ton tour, pose 1 marque
+  "Nom" sur le personnage actif adverse. À 8 marques, il subit une crise cardiaque et la
+  carte Meurt »* *(le nom de la capacité, "Sermet", reprend une coquille de la carte
+  d'origine — volontairement conservée)*
+  → Tique à la fin de **chaque tour de Light lui-même** (`ctx.event.playerId ===
+  ctx.ownerId`), et seulement s'il tient le poste actif à ce moment-là — pas de
+  `usableFromBench`, donc `canUseAbility` l'exige déjà, la `condition` ne fait que le
+  documenter. Passe par `addNameMark`, comme Écriture du Nom.
+  → Marques dans un statut custom `light-yagami-marque-nom` (`data.count`), **sans**
+  `remainingTurns` (compteur tenu par la carte, pas un décompte du moteur, cf. le pattern du
+  compteur persistant dans CLAUDE.md) et volontairement **visible** : l'adversaire doit
+  pouvoir décider de fuir à temps. À 8, `koCharacter` — une mort hors du circuit des dégâts,
+  donc ni bouclier, ni réduction, ni `death-ward` ne l'empêchent (même convention que
+  l'ancienne "horloge").
+  → **L'esquive se roule AVANT de toucher au compteur** (`ctx.rollEvasion`, puis
+  `applyStatus(..., {skipEvasionRoll:true})` pour la repose) : sans ça, `applyStatus` aurait
+  roulé sa propre esquive lors de la repose, et un jet perdu à ce moment-là (après le
+  `removeStatus` de l'ancienne instance, faute d'API "update") aurait effacé les marques déjà
+  posées au lieu de simplement ne pas en ajouter une nouvelle. Même pattern que Marteau de
+  Locke.
+  → Ne se remet **jamais** à zéro tant qu'aucun switch n'a lieu, y compris si l'actif
+  adverse change de personnage d'un côté puis revient (les marques suivent l'**instance de
+  personnage**, pas "l'actif adverse" en général) : seul "Contrainte" les efface.
+- **Contrainte** (passive, `onSwitch`) — *« Switcher vers le banc efface les marques du
+  personnage qui fuit. En contrepartie, le personnage qui fuit subit 50 dégâts par marque
+  effacée »*
   → Se déclenche sur **tout** changement d'actif adverse, volontaire **comme forcé par une
   carte, mais jamais sur le remplacement d'un mort** : `onSwitch` n'est émis que par
-  `zones.switchActive`, le remplacement après KO passant par `onBecomeActive` seul. Remet
-  le compteur à zéro (retiré des **deux** côtés du switch : sans ça, le fuyard le
-  retrouverait intact en revenant) et inflige 60 dégâts ordinaires à l'entrant —
-  esquivables, absorbables par un bouclier. Les 60 dégâts tombent à **chaque** switch
-  adverse, même si aucune horloge n'était encore lancée. Demande aussi que Light Yagami
-  tienne le poste actif.
-- **Manipulation** (active, recharge 2 tours) — *« Empêche le personnage actif adverse
-  d'effectuer un switch lors de son prochain tour. 2 tours de cooldown »*
-  → Statut `light-yagami-emprise` sur l'actif adverse (`remainingTurns: 2`, le +1 des
-  statuts bloquants). Volontairement **pas** le statut `chained` du moteur : celui-ci
-  bloque *tout* départ du poste actif, y compris les switchs forcés par une carte. Ici seul
-  le **switch de base** du joueur est fermé, via un modifier `canSwitchStandard` — un
-  `forceSwitch` adverse passe toujours. Recharge : `remainingTurns: 3` + `ticksOnBench`,
-  soit un retour au tour N+3.
-- **Combo prévu** : Manipulation ferme la seule sortie (le switch volontaire), donc
-  l'horloge continue de tourner ; Contrainte punit la fuite quand elle finit par arriver.
+  `zones.switchActive`, le remplacement après KO passant par `onBecomeActive` seul. Demande
+  aussi que Light Yagami tienne le poste actif.
+  → Vise uniquement **le personnage qui fuit** (`previousActiveInstanceId`) : ses marques
+  sont retirées et il encaisse `50 × marques effacées` en dégâts **ordinaires** (esquivables,
+  absorbables par un bouclier — contrairement à la mort par crise cardiaque, ce n'est pas un
+  KO hors-circuit). Rien ne touche l'entrant : contrairement à l'ancienne version de la
+  carte, ses propres marques (s'il en avait déjà) ne sont **pas** effacées. Sans marque sur
+  le fuyard, la passive ne fait rigoureusement rien (pas de dégâts à 0, pas de log).
+- **Manipulation** (active, 1×/partie) — *« Force le personnage actif ennemi à retourner sur
+  le banc. L'adversaire doit envoyer un nouveau personnage de son choix sur le terrain
+  Utilisable une fois »*
+  → Complètement réécrite : ce n'est plus un blocage de switch (l'ancienne version posait un
+  statut d'emprise via `canSwitchStandard`), c'est un **switch forcé** de l'actif adverse.
+  `ctx.forceSwitch(ctx.opponentId, ...)` passe par `zones.switchActive`, qui referme
+  lui-même la porte sur un actif enchaîné ou explicitement bloqué -- rien à revérifier ici.
+  → **C'est l'adversaire qui choisit son remplaçant**, pas Light : `ctx.chooseOptionFor`
+  adresse la question à `ctx.opponentId` avec les illustrations des personnages du banc
+  (`card` sur chaque option, même pattern qu'Offrande du Dieu de la Mort). `ctx.choose`
+  (`kind: 'select-characters'`) ne sait interroger que le propriétaire de l'effet, donc pas
+  utilisable pour une carte qui demande à l'ADVERSAIRE de choisir.
+  → `usesPerGame: 1`, sans recharge : refermée pour le reste de la partie dès la première
+  utilisation, plutôt que revenir après un cooldown. Indisponible si l'adversaire n'a
+  personne sur le banc (`condition`) — sans ça, `forceSwitch` n'aurait personne à faire
+  entrer.
 
 ### Levi — 220 HP
 
@@ -444,6 +653,11 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     qui décide de l'explosion). "50% hp max" = 50% des HP max **de la cible**, pas de
     Locke. Les clous sont consommés par l'explosion (compteur remis à 0, pas de statut à
     réappliquer) ; il faut donc replanter 3 clous pour refaire exploser la même cible.
+  - **Inesquivable** : le coup de Marteau qui plante le **3e** clou ne roule aucune esquive
+    (sinon le clou ne serait pas planté et l'explosion n'aurait jamais lieu), et l'explosion
+    elle-même part en `skipEvasionRoll`. La cible avait sinon **deux** occasions d'échapper
+    au même effet. Le reste de l'instance de dégâts est inchangé : bouclier, réductions et
+    critique s'appliquent normalement, et le KO est crédité à Locke.
 - **Marteau** (0 ATK) — *« Locke enfonce un clou sur n'importe quel ennemi, même sur le
   banc. Cette attaque inflige a 65% de chance d'infliger silence ultime si Locke attaque
   l'ennemi actif. »*
@@ -452,11 +666,12 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     label `Clou (n/3)`). Un seul jet d'esquive pour toute la résolution (clou + éventuel
     Silence Ultime), via `ctx.rollEvasion` avant de toucher au compteur -- contrairement à
     Zoé/Chopper/Sion qui roulent séparément dégâts puis effet sur coup, Marteau ne fait
-    aucun dégât et n'a donc qu'un seul "coup" à esquiver. Le Silence Ultime (1 tour,
+    aucun dégât et n'a donc qu'un seul "coup" à esquiver. **Sauf sur le 3e clou**, où il
+    n'y a aucun jet du tout : "Cloué" est inesquivable (voir ci-dessus), ce qui rend du même
+    coup le Silence Ultime de cette frappe-là garanti à toucher. Le Silence Ultime (1 tour,
     `remainingTurns: 2`) ne peut se déclencher que si la cible est l'actif adverse au
     moment du clou, et se roule même sur le tour où la cible explose (les deux effets ne
-    s'excluent pas). L'explosion, elle, passe par `dealDamage` et roule sa propre esquive/
-    critique indépendamment (c'est une vraie deuxième instance de dégâts).
+    s'excluent pas).
 
 ### Mahito — 270 HP
 
@@ -759,6 +974,12 @@ Incapable d'utiliser son actif aux 2 prochains tours. »*
   reste libre — ce que dit « aux 2 prochains tours ».
 - Moteur : la contrepartie est due même si le joueur n'attaque pas deux fois (ou pas du tout)
   — `extra-attack` expire de toute façon au tour suivant et arme son silence.
+- **Refusée si Locke, Light Yagami ou Yumeko est au poste actif** (`unplayableReason`,
+  message « Interaction trop puissante. ») : liste en dur des trois `cardId` sur la carte,
+  vérifiée sur `state.players[ownerId].characters[activeId].cardId`. Le serveur rejette
+  l'action avec cette phrase et la main grise la carte avec la même. Choix délibéré de ne
+  PAS passer par un modifier générique (`canPlayObject` n'existe pas côté objet) : rien
+  d'autre dans le moteur n'a besoin de refuser « par personnage nommé ».
 
 ### Caméléon
 
@@ -963,7 +1184,7 @@ il en choisi une. »*
 
 ### Pheonix
 
-*« Tue ce personnage, au bout de 20 tours, le réanime avec 100pv max supplémentaire et 50
+*« Tue ce personnage, au bout de 10 tours, le réanime avec 80pv max supplémentaire et 30
 d'attaque supplémentaire. Si il ne vous reste plus qu'un personnage en vie. Cette carte ne
 ferra pas effet. »*
 
@@ -980,7 +1201,7 @@ ferra pas effet. »*
   statut bloquant. Le joueur suit le compte à rebours dans le journal à chaque tour.
 - Moteur : au retour, les HP max montent **avant** la résurrection (`reviveCharacter`
   plafonne les PV rendus à `currentMaxHP`), donc le personnage revient à fond avec son
-  nouveau maximum. Les +50 ATK sont un `atk-boost` sans `remainingTurns` (donc permanent)
+  nouveau maximum. Les +30 ATK sont un `atk-boost` sans `remainingTurns` (donc permanent)
   appliqué **après** la résurrection, qui vide les statuts.
 - Moteur : `placement: 'active'` retombe sur le banc si le poste actif est déjà occupé
   (`reviveCharacter`), donc le retour ne dégage jamais l'actif en place de force.
