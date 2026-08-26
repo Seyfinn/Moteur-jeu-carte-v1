@@ -5,6 +5,7 @@ import { getCharacterCard, getTerrainCard } from './cards/registry.js';
 import { getLinkedPartnerId, hasStatus } from './statuses.js';
 // Pas de cycle : queries.ts n'importe pas zones.ts (il ne dépend que de types/registry/statuses).
 import { canSwitchAny, describeDenials } from './queries.js';
+import { hasReachedEliminationGoal, refillBenchFromHand, rescueDraw } from './draw-mode.js';
 import { cardName, playerName } from './names.js';
 
 export function findCharacterOwner(state: GameState, instanceId: string): PlayerId {
@@ -41,6 +42,26 @@ function countOnBoard(state: GameState, playerId: PlayerId): number {
 /** Section 5: KO all 6 of a side -> that side loses; both sides simultaneously -> perfect draw. */
 export function checkWinCondition(state: GameState): void {
   if (state.result) return;
+
+  // Mode Pioche : l'unique condition de victoire est le compteur d'éliminations. La
+  // défaite par plateau vide y est DÉSACTIVÉE -- un camp sans personne repioche en
+  // secours (voir zones.koCharacter), il n'est jamais éliminé pour autant.
+  if (state.mode === 'draw') {
+    const p1Done = hasReachedEliminationGoal(state.players.p2); // p1 gagne si p2 a tout perdu
+    const p2Done = hasReachedEliminationGoal(state.players.p1);
+    if (p1Done && p2Done) {
+      state.result = { kind: 'draw' };
+      state.phase = 'ended';
+    } else if (p1Done) {
+      state.result = { kind: 'win', winner: 'p1' };
+      state.phase = 'ended';
+    } else if (p2Done) {
+      state.result = { kind: 'win', winner: 'p2' };
+      state.phase = 'ended';
+    }
+    return;
+  }
+
   const p1Alive = countOnBoard(state, 'p1') > 0;
   const p2Alive = countOnBoard(state, 'p2') > 0;
   if (!p1Alive && !p2Alive) {
@@ -75,6 +96,9 @@ export async function koCharacter(
   if (wasActive) player.activeCharacterInstanceId = null;
   else player.benchCharacterInstanceIds.splice(benchIndex, 1);
   player.graveyardCharacterInstanceIds.push(characterInstanceId);
+  // Compteur monotone : c'est lui qui décide de la victoire en Mode Pioche, et une
+  // résurrection ne doit pas faire reculer la course aux 7 éliminations.
+  player.charactersLost += 1;
 
   const char = player.characters[characterInstanceId]!;
   for (const objectInstanceId of [...char.attachedObjectInstanceIds]) {
@@ -130,6 +154,18 @@ export async function koCharacter(
   // `onSwitch` (seulement `onBecomeActive` avec `reason: 'ko-replacement'`). Aucune carte
   // ne doit pouvoir empêcher un camp de remettre quelqu'un au poste actif -- sinon il n'a
   // plus d'actif, ne peut plus rien faire, et la partie se bloque sans que personne ne gagne.
+  // Mode Pioche : le banc doit repasser à 2 dès que possible, et un camp qui n'a plus
+  // personne est secouru au lieu d'être éliminé.
+  if (state.mode === 'draw') {
+    if (wasActive && player.activeCharacterInstanceId === null) {
+      if (player.benchCharacterInstanceIds.length === 0) await refillBenchFromHand(state, ownerId, api);
+      if (player.benchCharacterInstanceIds.length === 0) {
+        await rescueDraw(state, ownerId, api);
+        return;
+      }
+    }
+  }
+
   if (wasActive && player.activeCharacterInstanceId === null && player.benchCharacterInstanceIds.length > 0) {
     const answer = await api.chooseFor(ownerId, {
       kind: 'select-characters',
@@ -153,6 +189,10 @@ export async function koCharacter(
       data: { characterInstanceId: newActiveId, reason: 'ko-replacement' },
     });
   }
+
+  // La promotion (ou la mort d'un personnage du banc) vient de libérer une place : la Main
+  // Personnage la comble immédiatement.
+  await refillBenchFromHand(state, ownerId, api);
 
   // Deliberately not checking the win condition here: a single effect can KO
   // several characters in a row (e.g. an AOE, or a chain of triggers), and

@@ -234,6 +234,23 @@ export interface PendingRevive {
   sourceCardId: string;
 }
 
+/**
+ * Les règles que suit une partie. 'standard' couvre le jeu de base (deck construit ou
+ * tirage du Mode Aléatoire : dans les deux cas on joue un deck fixé d'avance). 'draw' est
+ * le **Mode Pioche**, qui change la mise en place, la boucle de tour et la victoire.
+ */
+export type MatchMode = 'standard' | 'draw';
+
+/** Mode Pioche : les piles personnelles d'un joueur, en ids de carte, sommet en fin de liste. */
+export interface DrawPiles {
+  characterCardIds: string[];
+  objectCardIds: string[];
+}
+
+/** Mode Pioche : ce que le joueur pioche à la fin de son tour, dans cet ordre. */
+export const DRAW_CYCLE = ['object', 'terrain', 'character'] as const;
+export type DrawKind = (typeof DRAW_CYCLE)[number];
+
 export interface PlayerState {
   id: PlayerId;
   displayName: string;
@@ -242,6 +259,11 @@ export interface PlayerState {
   activeCharacterInstanceId: string | null;
   benchCharacterInstanceIds: string[];
   graveyardCharacterInstanceIds: string[];
+  /**
+   * Mode Pioche : les personnages piochés alors que le banc était déjà plein. Secrète,
+   * comme la main d'objets. Dès qu'une place se libère au banc, une de ces cartes la prend.
+   */
+  handCharacterInstanceIds: string[];
 
   objects: Record<string, ObjectInstance>;
   /** Hidden from the opponent until played (section 1). */
@@ -253,6 +275,17 @@ export interface PlayerState {
   unplayedTerrainInstanceIds: string[];
   activeTerrainInstanceId: string | null;
   graveyardTerrainInstanceIds: string[];
+
+  /**
+   * Mode Pioche : combien de personnages de ce camp sont morts depuis le début de la
+   * partie. Compteur **monotone** -- une résurrection ne le fait pas redescendre, sans
+   * quoi la course aux 7 éliminations pourrait reculer. L'adversaire gagne à 7.
+   */
+  charactersLost: number;
+  /** Mode Pioche : les piles personnelles (personnages et objets). Les terrains sont communs. */
+  drawPiles: DrawPiles;
+  /** Mode Pioche : où en est ce joueur dans le cycle objet -> terrain -> personnage. */
+  drawCycleIndex: number;
 
   objectsPlayedThisTurn: number;
   terrainsPlayedThisTurn: number;
@@ -414,6 +447,13 @@ export interface GameState {
    */
   turnNumber: number;
   phase: GamePhase;
+  /** Les règles suivies par cette partie. Absent = 'standard' (parties d'avant le Mode Pioche). */
+  mode: MatchMode;
+  /**
+   * Mode Pioche : la pile de terrains, **commune aux deux joueurs** (un terrain tiré par
+   * l'un ne pourra plus l'être par l'autre). Sommet en fin de liste.
+   */
+  sharedTerrainPile: string[];
   rng: RngState;
   log: LogEntry[];
   result?: GameResult;

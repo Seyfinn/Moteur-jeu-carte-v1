@@ -2,8 +2,8 @@ import type { CSSProperties } from 'react';
 import type { GameState, PlayerId, PlayerState } from 'engine';
 import { CardFrame, FaceDownCard } from './CardFrame';
 import { useCardInspect, useHoverCard, type HoverPayload } from './HoverCard';
-import { hiddenCardDetailBody, objectDetailBody, terrainDetailBody } from './cardDetails';
-import { objectCardDenial, objectName, terrainName } from './boardActions';
+import { characterDetailBody, hiddenCardDetailBody, objectDetailBody, terrainDetailBody } from './cardDetails';
+import { characterName, objectCardDenial, objectName, terrainName } from './boardActions';
 import { usePointerCoarse } from '../hooks/usePointerCoarse';
 
 export type HandSlot =
@@ -168,14 +168,21 @@ export function PlayerHand({
   );
 }
 
-function RevealedHandTile({ cardId, kind }: { cardId: string; kind: 'object' | 'terrain' }) {
-  const name = kind === 'object' ? objectName(cardId) : terrainName(cardId);
-  const inspect = useCardInspect({
-    title: name,
-    subtitle: 'Révélée dans la main adverse',
-    card: { cardId, kind, name },
-    body: kind === 'object' ? objectDetailBody(cardId) : terrainDetailBody(cardId),
-  });
+function RevealedHandTile({
+  cardId,
+  kind,
+  subtitle = 'Révélée dans la main adverse',
+}: {
+  cardId: string;
+  kind: 'object' | 'terrain' | 'character';
+  subtitle?: string;
+}) {
+  // Les trois types ont chacun leur lecteur : passer un personnage au lecteur de terrain
+  // faisait planter l'interface entière ("Card X is not a terrain card").
+  const name = kind === 'object' ? objectName(cardId) : kind === 'terrain' ? terrainName(cardId) : characterName(cardId);
+  const body =
+    kind === 'object' ? objectDetailBody(cardId) : kind === 'terrain' ? terrainDetailBody(cardId) : characterDetailBody(cardId);
+  const inspect = useCardInspect({ title: name, subtitle, card: { cardId, kind, name }, body });
   return <CardFrame cardId={cardId} kind={kind} name={name} size="small" {...inspect} />;
 }
 
@@ -193,6 +200,50 @@ function HiddenHandTile() {
  * l'instance nous parvient (un passif ou une capacité qui révèle le jeu adverse) est
  * simplement affichée face visible.
  */
+/**
+ * Mode Pioche : la **Main Personnage**, les personnages piochés banc plein. Ce n'est pas une
+ * main jouable -- on n'en pose rien soi-même, ils descendent au banc dès qu'une place se
+ * libère -- d'où une bande à part, en lecture seule, et non des slots de la main d'objets.
+ *
+ * Chez l'adversaire, les identités sont caviardées par `getPlayerView` : on ne voit que le
+ * nombre, comme pour les objets non joués.
+ */
+export function CharacterHand({
+  player,
+  isSelf,
+  max,
+}: {
+  player: PlayerState;
+  isSelf: boolean;
+  max: number;
+}) {
+  const ids = player.handCharacterInstanceIds;
+  if (ids.length === 0 && !isSelf) return null;
+
+  return (
+    <div className="character-hand" role="group" aria-label="Main Personnage">
+      <span className="character-hand-label">
+        Main perso <strong>{ids.length}/{max}</strong>
+      </span>
+      <div className="character-hand-row">
+        {ids.length === 0 && <span className="hand-strip-empty">vide</span>}
+        {ids.map((id) => {
+          const char = player.characters[id];
+          return (
+            <div className="hand-strip-slot" key={id}>
+              {char ? (
+                <RevealedHandTile cardId={char.cardId} kind="character" subtitle="En attente d'une place au banc" />
+              ) : (
+                <HiddenHandTile />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function OpponentHand({ player }: { player: PlayerState }) {
   const slots = handSlots(player);
 

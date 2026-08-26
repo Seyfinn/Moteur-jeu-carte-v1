@@ -99,6 +99,8 @@ export class Room {
     this.rematchVotes.delete(playerId);
 
     if (this.isFull && !this.match) {
+      // Le Mode Pioche n'a pas de phase de sélection : tout sort des piles, la partie
+      // démarre directement.
       if (this.mode === 'random') this.startDraft();
       else this.startMatch();
     } else if (this.match) {
@@ -207,8 +209,11 @@ export class Room {
     this.match = Match.create({
       p1Name: this.playerNames.p1 ?? 'Joueur 1',
       p2Name: this.playerNames.p2 ?? 'Joueur 2',
+      // En Mode Pioche les rosters ne servent à rien -- Match.create les remplace par les
+      // piles -- mais il en faut un valide pour construire l'état initial.
       p1Roster: this.playerRosters.p1 ?? DEMO_STARTER_DECK,
       p2Roster: this.playerRosters.p2 ?? DEMO_STARTER_DECK,
+      mode: this.mode === 'draw' ? 'draw' : 'standard',
     });
     this.unsubscribe = this.match.onChange(() => {
       this.syncChoiceTimer();

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  DRAW_MODE_ELIMINATIONS_TO_WIN,
+  DRAW_MODE_MAX_CHARACTER_HAND,
   DEFAULT_MAX_OBJECTS_PER_TURN,
   DEFAULT_MAX_TERRAINS_PER_TURN,
   getMaxObjectsPerTurn,
@@ -22,7 +24,7 @@ import { InitiativeWheel } from './InitiativeWheel';
 import { MatchOverModal } from './MatchOverModal';
 import { ProcWheels } from './ProcWheel';
 import { CardSpotlights } from './CardSpotlight';
-import { OpponentHand, PlayerHand } from './HandFan';
+import { CharacterHand, OpponentHand, PlayerHand } from './HandFan';
 import { COMBAT_PREVIEW_DELAY_MS, DECK_PREVIEW_DELAY_MS, useCardInspect, useHoverCard } from './HoverCard';
 import { characterDetailBody, terrainDetailBody } from './cardDetails';
 import {
@@ -142,12 +144,15 @@ function Nameplate({
   label,
   alive,
   total,
+  lost,
   isSelf,
   isTheirTurn,
 }: {
   label: string;
   alive: number;
   total: number;
+  /** Mode Pioche : éliminations subies par ce camp. À DRAW_MODE_ELIMINATIONS_TO_WIN, il perd. */
+  lost: number | null;
   isSelf: boolean;
   isTheirTurn: boolean;
 }) {
@@ -155,6 +160,14 @@ function Nameplate({
     <div className={`nameplate${isSelf ? ' self' : ' opponent'}${isTheirTurn ? ' active-turn' : ''}`}>
       <span className="nameplate-name">{label}</span>
       <span className="nameplate-meta">
+        {lost !== null && (
+          <span
+            className={`nameplate-eliminations${lost >= DRAW_MODE_ELIMINATIONS_TO_WIN - 2 ? ' critical' : ''}`}
+            title={`Personnages perdus. À ${DRAW_MODE_ELIMINATIONS_TO_WIN}, ce camp perd la partie.`}
+          >
+            ☠ {lost}/{DRAW_MODE_ELIMINATIONS_TO_WIN}
+          </span>
+        )}
         <span title="Personnages encore en jeu">
           {alive}/{total} perso
         </span>
@@ -501,6 +514,7 @@ export function Board({ conn }: { conn: GameConnection }) {
   const aliveOf = (player: PlayerState) =>
     player.benchCharacterInstanceIds.length + (player.activeCharacterInstanceId ? 1 : 0);
 
+  const drawMode = state.mode === 'draw';
   const errorMessage = conn.error ?? localError;
   const showInitiativeWheel = !wheelDone && state.phase === 'setup';
 
@@ -515,6 +529,15 @@ export function Board({ conn }: { conn: GameConnection }) {
         <span className="board-header-turn">
           Tour {state.turnNumber} · <strong>{myTurn ? 'à vous de jouer' : `${opponentName} joue`}</strong>
         </span>
+        {drawMode && (
+          <span
+            className="board-header-piles"
+            title="Cartes restantes dans les piles. Celle des terrains est commune aux deux joueurs."
+          >
+            🂠 {me.drawPiles.characterCardIds.length} · 🎒 {me.drawPiles.objectCardIds.length} · 🗺️{' '}
+            {state.sharedTerrainPile.length}
+          </span>
+        )}
         <span className="board-header-budget" title="Cartes encore jouables pendant votre tour">
           🎒 {Math.max(0, maxObjects - me.objectsPlayedThisTurn)} · 🗺️{' '}
           {Math.max(0, maxTerrains - me.terrainsPlayedThisTurn)}
@@ -548,6 +571,7 @@ export function Board({ conn }: { conn: GameConnection }) {
 
         <div className="battlefield">
           <div className="rail rail-self">
+            {drawMode && <CharacterHand player={me} isSelf max={DRAW_MODE_MAX_CHARACTER_HAND} />}
             <GraveyardPile player={me} title="Votre cimetière" orientation="landscape" />
             <div className="rail-row">
               <BenchRow
@@ -567,6 +591,7 @@ export function Board({ conn }: { conn: GameConnection }) {
           <div className="zone zone-plate-self">
             <Nameplate
               label={`${me.displayName || 'Vous'} (vous)`}
+              lost={drawMode ? me.charactersLost : null}
               alive={aliveOf(me)}
               // Dénominateur pris sur le roster complet, pas sur vivants+cimetière : pendant
               // la mise en place personne n'est encore sur le plateau et le compteur
@@ -604,6 +629,7 @@ export function Board({ conn }: { conn: GameConnection }) {
           <div className="zone zone-plate-opp">
             <Nameplate
               label={opponentName}
+              lost={drawMode ? opponent.charactersLost : null}
               alive={aliveOf(opponent)}
               total={Object.keys(opponent.characters).length}
               isSelf={false}
@@ -612,6 +638,7 @@ export function Board({ conn }: { conn: GameConnection }) {
           </div>
 
           <div className="rail rail-opp">
+            {drawMode && <CharacterHand player={opponent} isSelf={false} max={DRAW_MODE_MAX_CHARACTER_HAND} />}
             <GraveyardPile player={opponent} title="Cimetière adverse" orientation="landscape" />
             <div className="rail-row">
               <BenchRow

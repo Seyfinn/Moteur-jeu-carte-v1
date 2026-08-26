@@ -7,6 +7,7 @@ import type {
   ChoiceSpec,
   CharacterInstance,
   GameState,
+  MatchMode,
   ObjectInstance,
   PlayerId,
   PlayerState,
@@ -14,6 +15,13 @@ import type {
 } from './types.js';
 import type { EngineApi } from './engine-api.js';
 import { evolutionFormsOf, getCharacterCard, getObjectCard, getTerrainCard } from './cards/registry.js';
+import {
+  DRAW_MODE_STARTING_CHARACTERS,
+  buildCharacterPile,
+  buildObjectPile,
+  buildSharedTerrainPile,
+  instantiateCharacter,
+} from './draw-mode.js';
 import { buildEffectContext } from './effect-context.js';
 import { emitEvent } from './events.js';
 import { recordAbilityUse } from './abilities.js';
@@ -51,6 +59,11 @@ export interface MatchConfig {
   p1Roster: RosterConfig;
   p2Roster: RosterConfig;
   seed?: number;
+  /**
+   * Règles suivies par la partie. 'draw' = Mode Pioche : les rosters sont alors ignorés,
+   * tout sort des piles (voir draw-mode.ts).
+   */
+  mode?: MatchMode;
 }
 
 export type PlayerAction =
@@ -108,6 +121,7 @@ function createPlayerState(id: PlayerId, displayName: string, roster: RosterConf
     activeCharacterInstanceId: null,
     benchCharacterInstanceIds: [],
     graveyardCharacterInstanceIds: [],
+    handCharacterInstanceIds: [],
     objects,
     unplayedObjectInstanceIds,
     inPlayObjectInstanceIds: [],
@@ -116,12 +130,45 @@ function createPlayerState(id: PlayerId, displayName: string, roster: RosterConf
     unplayedTerrainInstanceIds,
     activeTerrainInstanceId: null,
     graveyardTerrainInstanceIds: [],
+    charactersLost: 0,
+    // Remplies par `dealDrawModeOpening` quand la partie est en Mode Pioche ; inertes sinon.
+    drawPiles: { characterCardIds: [], objectCardIds: [] },
+    drawCycleIndex: 0,
     objectsPlayedThisTurn: 0,
     terrainsPlayedThisTurn: 0,
     hasHadFirstTurn: false,
     pendingRevives: [],
     revealsOpponentUnplayedCards: false,
   };
+}
+
+/**
+ * Mode Pioche : bâtit les piles et distribue la main de départ -- 3 personnages tirés de la
+ * pile personnelle du joueur (ils comptent donc dans le « tous tirés avant un doublon »), et
+ * AUCUNE carte objet ou terrain. Le roster éventuellement fourni est ignoré : dans ce mode,
+ * rien ne vient d'un deck.
+ */
+function dealDrawModeOpening(state: GameState): void {
+  state.sharedTerrainPile = buildSharedTerrainPile(state.rng);
+  for (const playerId of ['p1', 'p2'] as PlayerId[]) {
+    const player = state.players[playerId];
+    player.characters = {};
+    player.objects = {};
+    player.terrains = {};
+    player.unplayedObjectInstanceIds = [];
+    player.unplayedTerrainInstanceIds = [];
+    player.drawPiles = {
+      characterCardIds: buildCharacterPile(state.rng),
+      objectCardIds: buildObjectPile(state.rng),
+    };
+
+    for (let i = 0; i < DRAW_MODE_STARTING_CHARACTERS; i++) {
+      const cardId = player.drawPiles.characterCardIds.pop();
+      if (!cardId) break;
+      const char = instantiateCharacter(playerId, cardId);
+      player.characters[char.instanceId] = char;
+    }
+  }
 }
 
 /**
@@ -199,9 +246,14 @@ export class Match {
       activePlayerId: 'p1',
       turnNumber: 0,
       phase: 'setup',
+      mode: config.mode ?? 'standard',
+      sharedTerrainPile: [],
       rng: createRng(seed),
       log: [],
     };
+    // Le Mode Pioche rebâtit entièrement les deux camps depuis ses piles : il doit passer
+    // APRÈS createPlayerState, qui a monté les zones à partir des rosters.
+    if (state.mode === 'draw') dealDrawModeOpening(state);
     const match = new Match(state);
 
     const startingPlayerId: PlayerId = rngFlipCoin(state.rng) === 'heads' ? 'p1' : 'p2';
