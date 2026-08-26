@@ -8,10 +8,12 @@ export const pheonix: ObjectCardDef = {
   type: 'object',
   id: 'pheonix',
   name: 'Pheonix',
-  // Pas d'`equipment: true` : rien ne reste attaché. La carte tue sa cible dans la
-  // foulée, ce qui envoie tout objet équipé au cimetière avec elle (zones.koCharacter),
-  // donc afficher le logo 🔗 promettrait un lien durable qui n'existe pas. Le compte à
-  // rebours vit sur le joueur (PlayerState.pendingRevives), pas sur la carte.
+  // À lier (maquette) : s'accroche à sa cible (ctx.attachSelfTo ci-dessous) avant de la
+  // tuer, ce qui envoie l'objet au cimetière avec elle dans la foulée (zones.koCharacter) --
+  // même destination qu'avant, mais désormais affichée comme un vrai lien le temps du coup.
+  // Le compte à rebours, lui, vit toujours sur le joueur (PlayerState.pendingRevives), pas
+  // sur la carte : un objet au cimetière ne peut porter aucun statut/minuteur.
+  equipment: true,
   description:
     `Tue ce personnage, au bout de ${REVIVE_DELAY_TURNS} tours, le réanime avec ${BONUS_MAX_HP}pv max supplémentaire et ` +
     `${BONUS_ATK} d'attaque supplémentaire. Si il ne vous reste plus qu'un personnage en vie. Cette carte ne ferra pas effet.`,
@@ -40,6 +42,8 @@ export const pheonix: ObjectCardDef = {
       max: 1,
     });
     if (!targetId) return;
+
+    ctx.attachSelfTo(targetId);
 
     // Tuer d'abord, programmer ensuite : scheduleRevive n'accepte qu'une cible déjà au
     // cimetière (c'est ce qui garantit qu'on ne planifie pas le retour d'un vivant).

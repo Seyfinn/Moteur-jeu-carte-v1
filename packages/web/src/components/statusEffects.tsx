@@ -72,6 +72,9 @@ const STATUS_VISUALS: Record<string, StatusVisual> = {
   // « Attaque cloné » : une frappe de plus ce tour-ci. Un bonus offensif, donc le visuel
   // de l'ATK en hausse -- sa contrepartie (le silence) arrive plus tard, avec son propre badge.
   'extra-attack': { className: 'fx-atk-boost', particles: 'arrow-up', tone: 'buff' },
+  // « Crit + » : compteur de critiques réussis vers un taux garanti -- même symbole que
+  // `critical`/`concentration`, la mécanique qu'il finit par déclencher.
+  'crit-streak': { className: 'fx-critical', particles: 'target', tone: 'buff' },
   // Card-specific statuses whose semantics (shield / ability lock) match an existing
   // built-in visual closely enough to reuse it, rather than falling back to the generic one.
   'blitzcrank-mana-barrier-shield': { className: 'fx-shield', particles: 'shield', tone: 'buff' },
@@ -79,6 +82,25 @@ const STATUS_VISUALS: Record<string, StatusVisual> = {
   // ci-dessus, en bleu acier et immobile -- « repérée, mais pas encore dangereuse ».
   'coeur-acier-mark': { className: 'fx-mark', particles: 'mark', tone: 'debuff' },
   'blitzcrank-hook-locked': { className: 'fx-locked', particles: 'lock', tone: 'debuff' },
+  // « Manipulation » de Makima : le porteur est visé pour frapper son propre camp.
+  'forced-attack': { className: 'fx-vulnerable', particles: 'target', tone: 'debuff' },
+  // « Sacrifice » de Makima : une compétence fermée, comme un silence -- mais ciblée.
+  'makima-sceau': { className: 'fx-silence', particles: 'mute', tone: 'debuff' },
+  // « Sermet de Vengeance » de Light Yagami : le compte à rebours avant la crise cardiaque.
+  // Le symbole de la marque, celui qui dit « repéré » sans annoncer de dégâts immédiats.
+  'light-yagami-crise': { className: 'fx-mark', particles: 'mark', tone: 'debuff' },
+  // « Manipulation » de Light Yagami : un switch fermé à clé, pas une chaîne (les switchs
+  // forcés passent toujours) -- d'où le cadenas plutôt que le visuel de `chained`.
+  'light-yagami-emprise': { className: 'fx-locked', particles: 'lock', tone: 'debuff' },
+  // « Mise à mort » de Yumeko : un pari remporté, des dégâts en réserve pour son attaque.
+  'yumeko-pari-gagne': { className: 'fx-atk-boost', particles: 'arrow-up', tone: 'buff' },
+  // « Double Face » de Chrollo : la carte est fermée -- ni capacité, ni attaque, ni retour
+  // au poste actif. Le visuel du silence, la mécanique dont elle se rapproche le plus.
+  'chrollo-scellement': { className: 'fx-silence', particles: 'mute', tone: 'debuff' },
+  // Le pendant porté par Chrollo : un livre ouvert lui coûte 25 % de ses PV par tour.
+  'chrollo-livre-ouvert': { className: 'fx-mark', particles: 'mark', tone: 'debuff' },
+  // « Vision du Futur » d'Aki : des dégâts en réserve pour sa prochaine attaque.
+  'aki-vision-bonus': { className: 'fx-atk-boost', particles: 'arrow-up', tone: 'buff' },
 };
 
 const DEFAULT_VISUAL: StatusVisual = { className: 'fx-generic', particles: 'sparkle', tone: 'neutral' };

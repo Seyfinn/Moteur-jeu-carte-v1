@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { listDeckPool, type DeckPoolEntry } from 'engine';
+import { listDeckPool, RANDOM_POOL_SIZE, type DeckPoolEntry, type GameMode } from 'engine';
 import type { GameConnection } from '../net/useGameConnection';
 import { deckIssue, deckToRoster, loadDecks, type Deck } from '../decks';
 import { DeckContentsPanel, type CardKind } from './DeckContentsPanel';
@@ -20,6 +20,8 @@ export function Lobby({
   const [joinCode, setJoinCode] = useState('');
   const [decks, setDecks] = useState<Deck[]>([]);
   const [selectedDeckId, setSelectedDeckId] = useState<string | null>(null);
+  /** Le mode ne concerne que la CRÉATION : celui qui rejoint hérite du mode du salon. */
+  const [mode, setMode] = useState<GameMode>('normal');
   const pool = useMemo(() => listDeckPool(), []);
   const poolByType = useMemo<Record<CardKind, DeckPoolEntry[]>>(
     () => ({
@@ -38,7 +40,10 @@ export function Lobby({
 
   const selectedDeck = decks.find((d) => d.id === selectedDeckId) ?? null;
   const issue = selectedDeck ? deckIssue(selectedDeck) : null;
-  const canPlay = Boolean(selectedDeck) && issue === null;
+  // En Mode Aléatoire, le deck sélectionné n'est pas joué : chacun compose le sien dans le
+  // tirage que le serveur lui donne. Inutile donc d'exiger un deck valide pour créer.
+  const randomMode = mode === 'random';
+  const canPlay = randomMode || (Boolean(selectedDeck) && issue === null);
   const busy = conn.status === 'connecting' || conn.resuming;
   const deckSize = selectedDeck
     ? selectedDeck.characterCardIds.length + selectedDeck.objectCardIds.length + selectedDeck.terrainCardIds.length
@@ -82,6 +87,34 @@ export function Lobby({
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Joueur" />
             </label>
 
+            <fieldset className="field lobby-mode">
+              <legend>Mode de jeu</legend>
+              <label>
+                <input
+                  type="radio"
+                  name="game-mode"
+                  checked={mode === 'normal'}
+                  onChange={() => setMode('normal')}
+                />
+                Mode Normal — vous jouez le deck choisi ci-dessous
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="game-mode"
+                  checked={randomMode}
+                  onChange={() => setMode('random')}
+                />
+                Mode Aléatoire — chacun compose son équipe dans un tirage de{' '}
+                {RANDOM_POOL_SIZE.character}/{RANDOM_POOL_SIZE.object}/{RANDOM_POOL_SIZE.terrain}
+              </label>
+              {randomMode && (
+                <p className="subtitle">
+                  Le mode s'applique au salon entier. Votre deck n'est pas utilisé.
+                </p>
+              )}
+            </fieldset>
+
             <label className="field">
               Votre deck
               {decks.length > 0 ? (
@@ -105,11 +138,19 @@ export function Lobby({
                 type="button"
                 className="lobby-cta"
                 aria-label="Créer un salon"
-                onClick={() => selectedDeck && conn.createRoom(name || 'Joueur', deckToRoster(selectedDeck))}
+                onClick={() =>
+                  conn.createRoom(
+                    name || 'Joueur',
+                    selectedDeck ? deckToRoster(selectedDeck) : { characterCardIds: [], objectCardIds: [], terrainCardIds: [] },
+                    mode
+                  )
+                }
                 disabled={busy || !canPlay}
               >
                 <span className="lobby-cta-label">Créer un salon</span>
-                <span className="lobby-cta-sub">{canPlay ? `${deckSize} cartes prêtes` : 'Deck injouable'}</span>
+                <span className="lobby-cta-sub">
+                  {randomMode ? 'Tirage à la connexion' : canPlay ? `${deckSize} cartes prêtes` : 'Deck injouable'}
+                </span>
               </button>
 
               <div className="lobby-or">

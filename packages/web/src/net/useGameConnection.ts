@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ChoiceAnswer, ClientMessage, GameState, PlayerAction, PlayerId, RosterConfig, ServerMessage } from 'engine';
+import type {
+  ChoiceAnswer,
+  ClientMessage,
+  DraftPool,
+  GameMode,
+  GameState,
+  PlayerAction,
+  PlayerId,
+  RosterConfig,
+  ServerMessage,
+} from 'engine';
 
 const WS_URL =
   (import.meta.env.VITE_WS_URL as string | undefined) ??
@@ -41,7 +51,8 @@ function writeSessionToken(token: string | null): void {
   }
 }
 
-export type ConnectionStatus = 'idle' | 'connecting' | 'waiting' | 'playing' | 'error';
+/** 'drafting' : Mode Aléatoire, entre l'arrivée des deux joueurs et le début du match. */
+export type ConnectionStatus = 'idle' | 'connecting' | 'waiting' | 'drafting' | 'playing' | 'error';
 
 export interface GameConnection {
   status: ConnectionStatus;
@@ -54,8 +65,19 @@ export interface GameConnection {
   choiceDeadline: number | null;
   /** True while an interrupted session is being reclaimed on page load. */
   resuming: boolean;
-  createRoom(playerName: string, roster: RosterConfig): void;
+  createRoom(playerName: string, roster: RosterConfig, mode?: GameMode): void;
   joinRoom(roomCode: string, playerName: string, roster: RosterConfig): void;
+  /** Mode Aléatoire : la réserve tirée pour ce joueur, `null` hors phase de draft. */
+  draftPool: DraftPool | null;
+  /** Camps ayant déjà validé leur équipe -- pour afficher « en attente de l'adversaire ». */
+  draftSubmittedBy: PlayerId[];
+  submitDraft(roster: RosterConfig): void;
+  /**
+   * La dernière équipe composée en Mode Aléatoire. Conservée ici plutôt que dans l'écran
+   * de draft, qui est démonté dès que le match démarre -- c'est elle qu'on enregistre
+   * dans les decks du joueur une fois la partie finie.
+   */
+  lastDraftRoster: RosterConfig | null;
   applyAction(action: PlayerAction): void;
   answerChoice(choiceId: string, answer: ChoiceAnswer): void;
   clearError(): void;
@@ -81,6 +103,9 @@ export function useGameConnection(): GameConnection {
   const [opponentDisconnected, setOpponentDisconnected] = useState(false);
   const [choiceDeadline, setChoiceDeadline] = useState<number | null>(null);
   const [rematchVotes, setRematchVotes] = useState<PlayerId[]>([]);
+  const [draftPool, setDraftPool] = useState<DraftPool | null>(null);
+  const [draftSubmittedBy, setDraftSubmittedBy] = useState<PlayerId[]>([]);
+  const [lastDraftRoster, setLastDraftRoster] = useState<RosterConfig | null>(null);
   const [resuming, setResuming] = useState(() => readSessionToken() !== null);
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -135,9 +160,22 @@ export function useGameConnection(): GameConnection {
             setStatus('waiting');
             setResuming(false);
             break;
+          case 'draft-pool':
+            setDraftPool(message.pool);
+            setYou(message.you);
+            setStatus('drafting');
+            setResuming(false);
+            break;
+          case 'draft-submitted':
+            setDraftSubmittedBy((sent) => (sent.includes(message.by) ? sent : [...sent, message.by]));
+            break;
           case 'state':
             setState(message.state);
             setYou(message.you);
+            // Le match a démarré : la phase de draft est derrière nous. Une revanche en
+            // Mode Aléatoire renverra un nouveau 'draft-pool' et rouvrira l'écran.
+            setDraftPool(null);
+            setDraftSubmittedBy([]);
             setChoiceDeadline(message.choiceDeadline ?? null);
             setStatus('playing');
             setResuming(false);
@@ -204,8 +242,8 @@ export function useGameConnection(): GameConnection {
   }, []);
 
   const createRoom = useCallback(
-    (playerName: string, roster: RosterConfig) => {
-      ensureSocket(() => send({ type: 'create-room', playerName, roster }));
+    (playerName: string, roster: RosterConfig, mode?: GameMode) => {
+      ensureSocket(() => send({ type: 'create-room', playerName, roster, mode }));
     },
     [ensureSocket, send]
   );
@@ -240,6 +278,13 @@ export function useGameConnection(): GameConnection {
   // Comme l'abandon, la revanche garde le salon ouvert : le serveur remet une partie en
   // place dès que les deux camps l'ont demandée et la diffuse comme n'importe quel état.
   const requestRematch = useCallback(() => send({ type: 'rematch' }), [send]);
+  const submitDraft = useCallback(
+    (roster: RosterConfig) => {
+      setLastDraftRoster(roster);
+      send({ type: 'submit-draft', roster });
+    },
+    [send]
+  );
 
   const leave = useCallback(() => {
     writeSessionToken(null);
@@ -253,6 +298,9 @@ export function useGameConnection(): GameConnection {
     setRoomCode(null);
     setOpponentDisconnected(false);
     setRematchVotes([]);
+    setDraftPool(null);
+    setDraftSubmittedBy([]);
+    setLastDraftRoster(null);
     setError(null);
     setStatus('idle');
   }, []);
@@ -266,6 +314,10 @@ export function useGameConnection(): GameConnection {
     opponentDisconnected,
     createRoom,
     joinRoom,
+    draftPool,
+    draftSubmittedBy,
+    submitDraft,
+    lastDraftRoster,
     applyAction,
     answerChoice,
     clearError,

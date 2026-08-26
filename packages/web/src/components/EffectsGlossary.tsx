@@ -137,6 +137,15 @@ const ENTRIES: GlossaryEntry[] = [
       "Les deux personnages liés attaquent ensemble, subissent chaque instance de dégâts ensemble, " +
       'et meurent ensemble. Seul celui des deux qui tient le poste actif peut utiliser ses abilities.',
   },
+  {
+    id: 'forced-attack',
+    name: 'Manipulé',
+    icon: '🎯',
+    tone: 'debuff',
+    text:
+      "Au début de son prochain tour, le personnage retourne son attaque contre un allié désigné " +
+      'de son propre banc, puis son tour se termine aussitôt.',
+  },
 ];
 
 const BASE_RULES = [

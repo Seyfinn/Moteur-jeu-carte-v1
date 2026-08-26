@@ -62,6 +62,16 @@ import { izukuDeLAcademie } from './izuku-de-l-academie.js';
 import { blackPanther } from './black-panther.js';
 import { attaqueClone } from './attaque-clone.js';
 import { offrandeDuDieuDeLaMort } from './offrande-du-dieu-de-la-mort.js';
+import { toji } from './toji.js';
+import { critPlus } from './crit-plus.js';
+import { makima } from './makima.js';
+import { yumeko } from './yumeko.js';
+import { lightYagami } from './light-yagami.js';
+import { chrolloLucilfer } from './chrollo-lucilfer.js';
+import { aki } from './aki.js';
+import { dioBrando } from './dio-brando.js';
+import { levi } from './levi.js';
+import { arene } from './arene.js';
 
 export {
   aizen,
@@ -126,6 +136,16 @@ export {
   blackPanther,
   attaqueClone,
   offrandeDuDieuDeLaMort,
+  toji,
+  critPlus,
+  makima,
+  yumeko,
+  lightYagami,
+  chrolloLucilfer,
+  aki,
+  dioBrando,
+  levi,
+  arene,
 };
 
 let registered = false;
@@ -196,6 +216,16 @@ export function registerDemoCards(): void {
   registerCard(blackPanther);
   registerCard(attaqueClone);
   registerCard(offrandeDuDieuDeLaMort);
+  registerCard(toji);
+  registerCard(critPlus);
+  registerCard(makima);
+  registerCard(yumeko);
+  registerCard(lightYagami);
+  registerCard(chrolloLucilfer);
+  registerCard(aki);
+  registerCard(dioBrando);
+  registerCard(levi);
+  registerCard(arene);
 }
 
 /**
@@ -258,6 +288,14 @@ export const DEMO_ROSTER: RosterConfig = {
     chainsawMan.id,
     izukuDeLAcademie.id,
     blackPanther.id,
+    toji.id,
+    makima.id,
+    yumeko.id,
+    lightYagami.id,
+    chrolloLucilfer.id,
+    aki.id,
+    dioBrando.id,
+    levi.id,
   ],
   objectCardIds: [
     potionForce.id,
@@ -283,6 +321,7 @@ export const DEMO_ROSTER: RosterConfig = {
     pheonix.id,
     attaqueClone.id,
     offrandeDuDieuDeLaMort.id,
+    critPlus.id,
   ],
   terrainCardIds: [
     hopital.id,
@@ -295,5 +334,6 @@ export const DEMO_ROSTER: RosterConfig = {
     pointFaible.id,
     protectionDivine.id,
     absorptionVitale.id,
+    arene.id,
   ],
 };

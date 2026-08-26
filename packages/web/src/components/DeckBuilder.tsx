@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { listDeckPool, validateRoster, type DeckPoolEntry } from 'engine';
+import { listDeckPool, validateRoster, type DeckPoolEntry, type EvolutionFormEntry } from 'engine';
 import { CardFrame } from './CardFrame';
 import {
   CardPreviewProvider,
@@ -13,31 +13,39 @@ import {
 import { createEmptyDeck, decodeDeckCode, deckToRoster, encodeDeckCode, loadDecks, saveDecks, type Deck } from '../decks';
 import { usePointerCoarse } from '../hooks/usePointerCoarse';
 
-type SortValue = 'default' | 'hp-desc' | 'hp-asc' | 'name-asc' | 'name-desc' | 'duration-desc' | 'duration-asc';
+type SortValue = 'hp-desc' | 'hp-asc' | 'name-asc' | 'name-desc' | 'duration-desc' | 'duration-asc';
 
+/**
+ * Le tri alphabétique ouvre chaque liste et sert de tri par défaut (DEFAULT_SORT ci-dessous)
+ * pour les trois sections. L'ancien « Par défaut » a été retiré : il n'ordonnait rien, il
+ * laissait l'ordre d'enregistrement des cartes dans le registre du moteur -- arbitraire, et
+ * il bougeait à chaque carte ajoutée au jeu.
+ */
 const SORT_OPTIONS: Record<DeckSectionKey, Array<{ value: SortValue; label: string }>> = {
   characterCardIds: [
-    { value: 'default', label: 'Par défaut' },
+    { value: 'name-asc', label: 'Nom (A → Z)' },
+    { value: 'name-desc', label: 'Nom (Z → A)' },
     { value: 'hp-desc', label: 'PV : le plus haut d’abord' },
     { value: 'hp-asc', label: 'PV : le plus bas d’abord' },
   ],
   objectCardIds: [
-    { value: 'default', label: 'Par défaut' },
     { value: 'name-asc', label: 'Nom (A → Z)' },
     { value: 'name-desc', label: 'Nom (Z → A)' },
   ],
   terrainCardIds: [
-    { value: 'default', label: 'Par défaut' },
+    { value: 'name-asc', label: 'Nom (A → Z)' },
+    { value: 'name-desc', label: 'Nom (Z → A)' },
     { value: 'duration-desc', label: 'Durée : la plus longue d’abord' },
     { value: 'duration-asc', label: 'Durée : la plus courte d’abord' },
   ],
 };
 
+const DEFAULT_SORT: SortValue = 'name-asc';
+
 /** Terrains without `durationTurns` last indefinitely -- treated as longer than any timed terrain. */
 const INDEFINITE_DURATION = Number.MAX_SAFE_INTEGER;
 
 function sortEntries(entries: DeckPoolEntry[], sort: SortValue): DeckPoolEntry[] {
-  if (sort === 'default') return entries;
   const sorted = [...entries];
   switch (sort) {
     case 'hp-desc':
@@ -47,10 +55,10 @@ function sortEntries(entries: DeckPoolEntry[], sort: SortValue): DeckPoolEntry[]
       sorted.sort((a, b) => (a.baseMaxHP ?? 0) - (b.baseMaxHP ?? 0));
       break;
     case 'name-asc':
-      sorted.sort((a, b) => a.name.localeCompare(b.name));
+      sorted.sort((a, b) => compareNames(a, b));
       break;
     case 'name-desc':
-      sorted.sort((a, b) => b.name.localeCompare(a.name));
+      sorted.sort((a, b) => compareNames(b, a));
       break;
     case 'duration-desc':
       sorted.sort((a, b) => (b.durationTurns ?? INDEFINITE_DURATION) - (a.durationTurns ?? INDEFINITE_DURATION));
@@ -62,8 +70,68 @@ function sortEntries(entries: DeckPoolEntry[], sort: SortValue): DeckPoolEntry[]
   return sorted;
 }
 
+/**
+ * Comparaison de noms en français, accents et casse ignorés pour le classement : « Épée »
+ * doit se ranger avec les E, et l'ordre ne doit pas dépendre de la locale du navigateur du
+ * joueur (`localeCompare` sans locale explicite la suit).
+ */
+function compareNames(a: DeckPoolEntry, b: DeckPoolEntry): number {
+  return a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' });
+}
+
 function countOf(ids: string[], id: string): number {
   return ids.filter((x) => x === id).length;
+}
+
+/**
+ * Les formes évoluées d'une carte, montrées SOUS elle et jamais sélectionnables : elles
+ * n'entrent pas dans le quota du deck et arrivent en jeu par l'évolution de leur base.
+ * Sans ce bandeau, un joueur qui découvre Kayn n'aurait aucun moyen de savoir qu'il mène
+ * à Rhaast ou à Kayn Assassin, puisque ces deux cartes sont absentes du pool.
+ */
+function EvolutionStrip({ forms }: { forms: EvolutionFormEntry[] }) {
+  const preview = useCardPreview();
+  const coarse = usePointerCoarse();
+  if (forms.length === 0) return null;
+
+  return (
+    <div className="deck-card-evolutions">
+      <span className="deck-card-evolutions-label">{forms.length > 1 ? 'Évolue en (au choix)' : 'Évolue en'}</span>
+      <div className="deck-card-evolutions-row">
+        {forms.map((form) => {
+          // La fiche de survol attend une entrée de pool : les formes évoluées n'en ont
+          // pas (elles sont exclues du pool), on en fabrique une minimale pour l'aperçu.
+          const asEntry: DeckPoolEntry = {
+            id: form.id,
+            type: 'character',
+            name: form.name,
+            baseMaxHP: form.baseMaxHP,
+            maxCopies: 1,
+            incompatibleWith: [],
+          };
+          return (
+            <CardFrame
+              key={form.id}
+              cardId={form.id}
+              kind="character"
+              name={form.name}
+              size="small"
+              title={`${form.name} — forme évoluée, non sélectionnable`}
+              onClick={coarse ? () => preview.showCentered(asEntry) : undefined}
+              hoverProps={
+                coarse
+                  ? undefined
+                  : {
+                      onMouseEnter: (e) => preview.requestShow(asEntry, e.currentTarget),
+                      onMouseLeave: preview.cancel,
+                    }
+              }
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function PoolCardTile({
@@ -106,6 +174,7 @@ function PoolCardTile({
       footer={
         <>
           {blockedReason && <span className="deck-card-blocked">{blockedReason}</span>}
+          <EvolutionStrip forms={entry.evolutions ?? []} />
           <div className="deck-card-stepper">
             <button
               type="button"
@@ -263,7 +332,7 @@ function DeckEditor({
 
           {SECTIONS.map((section) => {
             const ids = deck[section.key];
-            const sortBy = sortBySections[section.key] ?? 'default';
+            const sortBy = sortBySections[section.key] ?? DEFAULT_SORT;
             const entries = sortEntries(pool[section.type], sortBy);
             const collapsed = !!collapsedSections[section.key];
             return (

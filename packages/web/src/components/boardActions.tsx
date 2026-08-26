@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
 import {
   canAttack,
+  canAttackFromBench,
   canPlayObject,
   canPlayTerrain,
+  canSwitchAny,
   canSwitchStandard,
   canUseAbility,
   describeDenials,
@@ -137,29 +139,46 @@ export function denialOf(evaluate: () => { allow: boolean; votes: Vote[] }): str
   }
 }
 
+/** Un personnage du banc à qui une carte ouvre l'attaque ("Bonus" de Yumeko). */
+function canAttackFromBenchSafe(state: GameState, characterInstanceId: string): boolean {
+  try {
+    return canAttackFromBench(state, characterInstanceId).allow;
+  } catch {
+    return false; // vue caviardée : on n'invente pas une action que le serveur refuserait
+  }
+}
+
 export function attackOptions(state: GameState, you: PlayerId, conn: GameConnection): ActionOption[] {
   const player = state.players[you];
-  const activeId = player.activeCharacterInstanceId;
-  if (!activeId) return [];
-  const char = player.characters[activeId];
-  if (!char) return [];
-  const def = getCharacterCard(char.cardId);
-  const denial = denialOf(() => canAttack(state, activeId));
+  const attackerIds = [
+    ...(player.activeCharacterInstanceId ? [player.activeCharacterInstanceId] : []),
+    ...player.benchCharacterInstanceIds.filter((id) => canAttackFromBenchSafe(state, id)),
+  ];
 
-  return def.attacks.map((attack) => {
-    // ATK effectif, pas la valeur imprimée : buffs, debuffs et passives cumulatives
-    // atterrissent ici, et le joueur n'avait aucun moyen de voir le nombre qu'il allait
-    // réellement infliger.
-    const effective = effectiveATK(state, activeId, attack.baseATK);
-    const suffix = effective === attack.baseATK ? '' : ` (base ${attack.baseATK})`;
-    return {
-      key: attack.id,
-      label: attack.name,
-      detail: `${effective} ATK`,
-      disabledReason: denial,
-      hover: { title: attack.name, subtitle: `${effective} ATK${suffix}`, body: <p>{attack.description}</p> },
-      run: () => conn.applyAction({ kind: 'attack', characterInstanceId: activeId, attackId: attack.id }),
-    };
+  return attackerIds.flatMap((attackerId) => {
+    const char = player.characters[attackerId];
+    if (!char) return [];
+    const def = getCharacterCard(char.cardId);
+    const benched = player.activeCharacterInstanceId !== attackerId;
+
+    return def.attacks.map((attack) => {
+      // ATK effectif, pas la valeur imprimée : buffs, debuffs et passives cumulatives
+      // atterrissent ici, et le joueur n'avait aucun moyen de voir le nombre qu'il allait
+      // réellement infliger.
+      const effective = effectiveATK(state, attackerId, attack.baseATK);
+      const suffix = effective === attack.baseATK ? '' : ` (base ${attack.baseATK})`;
+      return {
+        key: `${attackerId}:${attack.id}`,
+        label: attack.name,
+        detail: `${effective} ATK`,
+        // Refus évalué attaque par attaque : un sceau ("Sacrifice" de Makima) n'en ferme
+        // qu'une, les autres doivent rester jouables.
+        disabledReason: denialOf(() => canAttack(state, attackerId, attack.id)),
+        sub: benched ? def.name : undefined,
+        hover: { title: attack.name, subtitle: `${effective} ATK${suffix}`, body: <p>{attack.description}</p> },
+        run: () => conn.applyAction({ kind: 'attack', characterInstanceId: attackerId, attackId: attack.id }),
+      };
+    });
   });
 }
 
@@ -210,11 +229,14 @@ export function switchOptions(state: GameState, you: PlayerId, conn: GameConnect
   return player.benchCharacterInstanceIds.map((id) => {
     const char = player.characters[id]!;
     const hp = Math.max(0, char.currentMaxHP - char.damage);
+    // Le refus global (`canSwitchStandard`) d'abord, puis celui qui dépend de la cible
+    // (`canSwitchAny` : Arène ferme tout, le scellement de Chrollo ferme UNE carte).
+    const targetDenial = denial ?? denialOf(() => canSwitchAny(state, you, activeId, id));
     return {
       key: id,
       label: characterName(char.cardId),
       detail: `${hp} PV`,
-      disabledReason: denial,
+      disabledReason: targetDenial,
       run: () => conn.applyAction({ kind: 'switch', newActiveInstanceId: id }),
     };
   });

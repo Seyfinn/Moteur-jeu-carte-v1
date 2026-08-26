@@ -1,4 +1,5 @@
 import type { EffectContext, TerrainCardDef } from '../types.js';
+import { canTargetBench } from '../../queries.js';
 
 const DURATION_TURNS = 3;
 const ACTIVE_DAMAGE = 30;
@@ -9,7 +10,10 @@ async function strikeOpponentBoard(ctx: EffectContext): Promise<void> {
   if (active) {
     await ctx.dealDamage(active.instanceId, ACTIVE_DAMAGE, { skipEvasionRoll: true });
   }
+  // Le banc n'est arrosé que s'il est réellement atteignable : un banc protégé (Bouclier
+  // Ultime) ou isolé (Arène) n'a pas à encaisser un effet qui ne lui demande rien.
   for (const bench of ctx.getBench(ctx.opponentId)) {
+    if (!canTargetBench(ctx.state, ctx.sourceInstanceId, bench.instanceId, true).allow) continue;
     await ctx.dealDamage(bench.instanceId, BENCH_DAMAGE, { skipEvasionRoll: true });
   }
 }

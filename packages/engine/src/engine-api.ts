@@ -49,6 +49,16 @@ export interface EngineApi {
 
   emitEvent(event: EngineEvent): Promise<void>;
   chooseFor(playerId: PlayerId, spec: ChoiceSpec): Promise<ChoiceAnswer>;
+  /**
+   * Joue immédiatement et gratuitement une carte objet pour `playerId` : elle est créée,
+   * mise en jeu, son effet résolu, puis elle part au cimetière (ou reste accrochée si elle
+   * s'est liée à un personnage) -- exactement le cycle de vie d'un objet posé normalement,
+   * mais SANS consommer le budget de 2 objets par tour et sans pouvoir fermer le tour.
+   * Utilisé par "Spectre" d'Aki. Renvoie l'instanceId créé.
+   */
+  playObjectImmediately(playerId: PlayerId, cardId: string): Promise<string>;
+  /** Évolution en place d'un personnage (Gon -> Gon Adulte). Voir EffectContext.evolveCharacter. */
+  evolveCharacter(characterInstanceId: string, toCardId: string): Promise<boolean>;
   log(message: string, data?: Record<string, unknown>, playerId?: PlayerId): void;
   flipCoin(): CoinResult;
 

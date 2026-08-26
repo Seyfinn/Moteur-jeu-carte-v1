@@ -2,8 +2,13 @@ import type { WebSocket } from 'ws';
 import {
   DEMO_STARTER_DECK,
   Match,
+  createRng,
   defaultChoiceAnswer,
+  drawRandomPools,
   getPlayerView,
+  validateDraftedRoster,
+  type DraftPool,
+  type GameMode,
   type PlayerId,
   type RosterConfig,
   type ServerMessage,
@@ -40,6 +45,15 @@ export class Room {
   private sockets: Partial<Record<PlayerId, WebSocket>> = {};
   private playerNames: Partial<Record<PlayerId, string>> = {};
   private playerRosters: Partial<Record<PlayerId, RosterConfig>> = {};
+  /**
+   * Mode du salon, fixé par celui qui le crée. En 'random', les decks envoyés à la
+   * connexion sont ignorés : chacun compose le sien depuis le tirage que le serveur lui
+   * attribue, dans une phase de draft qui s'intercale avant le début du match.
+   */
+  private mode: GameMode = 'normal';
+  /** Mode Aléatoire : la réserve tirée pour chaque joueur, et l'équipe qu'il en a tirée. */
+  private draftPools: Partial<Record<PlayerId, DraftPool>> = {};
+  private draftSubmissions: Partial<Record<PlayerId, RosterConfig>> = {};
   private match?: Match;
   private unsubscribe?: () => void;
   /**
@@ -71,8 +85,11 @@ export class Room {
     return !this.sockets.p1 || !this.sockets.p2;
   }
 
-  addPlayer(socket: WebSocket, playerName: string, roster?: RosterConfig): PlayerId {
+  addPlayer(socket: WebSocket, playerName: string, roster?: RosterConfig, mode?: GameMode): PlayerId {
     const playerId: PlayerId = this.sockets.p1 ? 'p2' : 'p1';
+    // Seul le créateur du salon fixe le mode ; celui qui rejoint le subit (il ne peut pas
+    // le connaître avant d'entrer, et son deck sera simplement ignoré en Aléatoire).
+    if (playerId === 'p1' && mode) this.mode = mode;
     this.sockets[playerId] = socket;
     this.playerNames[playerId] = playerName || playerId;
     this.playerRosters[playerId] = roster;
@@ -82,13 +99,67 @@ export class Room {
     this.rematchVotes.delete(playerId);
 
     if (this.isFull && !this.match) {
-      this.startMatch();
+      if (this.mode === 'random') this.startDraft();
+      else this.startMatch();
     } else if (this.match) {
       this.sendStateTo(playerId);
+    } else if (this.draftPools[playerId]) {
+      // Le siège est repris pendant un draft déjà lancé : on lui rend sa réserve.
+      this.sendDraftTo(playerId);
     } else {
       send(socket, { type: 'waiting-for-opponent' });
     }
     return playerId;
+  }
+
+  /**
+   * Mode Aléatoire : deux réserves tirées **indépendamment**, une par joueur. Une même carte
+   * peut donc sortir des deux côtés -- ce qui compte est que chacun pioche dans son propre
+   * tirage, pas que les tirages soient disjoints (ils ne peuvent pas l'être : 6 + 6 terrains
+   * pour 11 terrains dans le jeu).
+   */
+  private startDraft(): void {
+    this.draftSubmissions = {};
+    const pools = drawRandomPools(createRng(Date.now() ^ Math.floor(Math.random() * 0xffffffff)));
+    this.draftPools = { p1: pools.p1, p2: pools.p2 };
+    for (const playerId of ['p1', 'p2'] as PlayerId[]) this.sendDraftTo(playerId);
+  }
+
+  private sendDraftTo(playerId: PlayerId): void {
+    const socket = this.sockets[playerId];
+    const pool = this.draftPools[playerId];
+    if (!socket || !pool) return;
+    // La réserve d'en face n'est jamais envoyée : chacun ne voit que la sienne.
+    send(socket, { type: 'draft-pool', pool, you: playerId });
+    // Un joueur qui revient après avoir déjà validé doit retrouver son écran d'attente.
+    for (const id of ['p1', 'p2'] as PlayerId[]) {
+      if (this.draftSubmissions[id]) send(socket, { type: 'draft-submitted', by: id });
+    }
+  }
+
+  /**
+   * Équipe composée depuis le tirage. Revalidée intégralement côté serveur : le client
+   * pourrait très bien annoncer un deck qu'il n'a pas tiré.
+   */
+  handleSubmitDraft(playerId: PlayerId, roster: RosterConfig): void {
+    const socket = this.sockets[playerId];
+    const pool = this.draftPools[playerId];
+    if (!pool || this.match) {
+      if (socket) send(socket, { type: 'error', message: "Aucune sélection en cours." });
+      return;
+    }
+    const validation = validateDraftedRoster(roster, pool);
+    if (!validation.ok) {
+      if (socket) send(socket, { type: 'error', message: validation.error });
+      return;
+    }
+
+    this.draftSubmissions[playerId] = roster;
+    this.playerRosters[playerId] = roster;
+    this.lastActivityAt = Date.now();
+    this.broadcast({ type: 'draft-submitted', by: playerId });
+
+    if (this.draftSubmissions.p1 && this.draftSubmissions.p2) this.startMatch();
   }
 
   /**
@@ -220,7 +291,20 @@ export class Room {
     this.rematchVotes.add(playerId);
     this.lastActivityAt = Date.now();
     this.broadcast({ type: 'rematch-requested', by: playerId });
-    if (this.rematchVotes.has('p1') && this.rematchVotes.has('p2')) this.startMatch();
+    if (!this.rematchVotes.has('p1') || !this.rematchVotes.has('p2')) return;
+
+    // En Mode Aléatoire, une revanche rejoue tout depuis le début : nouveau tirage et
+    // nouveau draft, pas une reprise des équipes précédentes.
+    if (this.mode === 'random') {
+      this.match = undefined;
+      this.unsubscribe?.();
+      this.unsubscribe = undefined;
+      this.clearChoiceTimer();
+      this.rematchVotes.clear();
+      this.startDraft();
+      return;
+    }
+    this.startMatch();
   }
 
   private broadcast(message: ServerMessage): void {

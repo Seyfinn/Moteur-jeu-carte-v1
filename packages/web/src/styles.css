@@ -3262,6 +3262,66 @@ textarea {
   text-transform: uppercase;
   color: var(--danger);
 }
+/* Choix du mode de jeu, à la création du salon. */
+.lobby-mode {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.lobby-mode legend {
+  padding: 0 6px;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+.lobby-mode label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 3px 0;
+  font-weight: normal;
+  cursor: pointer;
+}
+.lobby-mode input {
+  margin-top: 3px;
+}
+/* Le bouton de validation du draft reste à portée de main en haut de la grille. */
+.draft-submit-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 8px 0 12px;
+}
+
+/* Formes évoluées rattachées à une carte de base (Gon -> Gon Adulte, Kayn -> Rhaast /
+   Kayn Assassin). Purement informatif : ces vignettes ne sont pas sélectionnables, elles
+   disent seulement où la carte peut mener. */
+.deck-card-evolutions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.deck-card-evolutions-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.deck-card-evolutions-row {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+/* Vignettes réduites : elles accompagnent la carte, elles ne rivalisent pas avec elle. */
+.deck-card-evolutions-row .card-frame {
+  width: 54px;
+  cursor: help;
+}
+
 .deck-card-stepper {
   display: flex;
   align-items: center;

@@ -59,7 +59,24 @@ export type BuiltinStatusId =
    * and arms `data.armed`, which makes the follow-up land at `data.damagePercent`% of its
    * normal number (queries.ts::getEffectiveATK). Spent once the follow-up resolves.
    */
-  | 'extra-attack';
+  | 'extra-attack'
+  /**
+   * "Crit +": counts the bearer's own successful critical hits in `data.count`, incremented
+   * by the engine itself (effect-context.ts::dealDamage) every time one lands, regardless of
+   * source. Once `data.count` reaches `data.threshold`, `getCriticalPercent` guarantees
+   * `data.boostPercent`% (queries.ts), the same treatment as the 'critical' status. Never
+   * consumed -- a permanent milestone once earned, independent of the granting object's
+   * continued presence (no engine hook ties a status to its source object's lifecycle).
+   */
+  | 'crit-streak'
+  /**
+   * "Manipulation" de Makima : le porteur est l'actif adverse, manipulé pour frapper un
+   * personnage de SON PROPRE banc, `data.targetInstanceId`. Résolu par le moteur au début
+   * du tour du porteur (turn.ts::resolveForcedAttack), une seule fois : son attaque part
+   * sur l'allié désigné au lieu de l'ennemi, puis son tour se termine aussitôt. Le statut
+   * est consommé dans tous les cas, y compris quand la cible n'est plus là pour l'encaisser.
+   */
+  | 'forced-attack';
 
 export interface RaiseMaxHPOptions {
   /**
@@ -317,6 +334,7 @@ export type EventName =
   | 'onCharacterKO'
   | 'onCharacterRevived'
   | 'onCoinFlip'
+  | 'onCharacterEvolved'
   | 'onObjectPlayed'
   | 'onTerrainPlayed'
   | 'onTerrainRemoved'
@@ -352,6 +370,8 @@ export interface EventPayloads {
     killerOwnerId?: PlayerId;
   };
   onCharacterRevived: { characterInstanceId: string };
+  /** `fromCardId` est la carte quittée, `characterInstanceId` reste le même (évolution en place). */
+  onCharacterEvolved: { characterInstanceId: string; fromCardId: string; toCardId: string };
   onObjectPlayed: { objectInstanceId: string };
   onTerrainPlayed: { terrainInstanceId: string };
   onTerrainRemoved: { terrainInstanceId: string; reason: 'expired' | 'replaced' | 'destroyed' };
@@ -398,4 +418,10 @@ export interface GameState {
   log: LogEntry[];
   result?: GameResult;
   pendingChoice?: PendingChoice;
+  /**
+   * "Za Warudo !" de Dio Brando : ce joueur rouvre un tour complet au lieu de passer la
+   * main. Consommé par `endTurn` avant de relancer `startTurn`, donc jamais deux tours
+   * bonus d'affilée sur une seule pose.
+   */
+  pendingExtraTurnFor?: PlayerId;
 }
