@@ -54,14 +54,20 @@ export const critPlus: ObjectCardDef = {
     // une fois `threshold` atteint. L'objet ne fait que poser le compteur à 0 -- un objet
     // n'a de toute façon aucun trigger pour réagir lui-même à un critique.
     //
-    // Comme Poche de sang : le compteur, une fois posé, est un état permanent du porteur,
-    // pas un modifier de l'objet -- détruire Crit + (terrain Destruction...) ne lui retire
-    // donc pas sa progression ni un taux déjà garanti.
+    // `data.objectInstanceId` : le compteur est l'effet de CET objet-là, pas un acquis du
+    // porteur. Détruire Crit + (terrain Destruction...) emporte donc le compteur et le taux
+    // garanti avec lui (zones.destroyObject) -- sans quoi le porteur gardait ses 70 % de
+    // critique alors que la carte était déjà au cimetière.
     ctx.applyStatus(targetId, {
       statusId: 'crit-streak',
       label: `Critiques (0/${CRIT_THRESHOLD})`,
       sourceCardInstanceId: ctx.sourceInstanceId,
-      data: { count: 0, threshold: CRIT_THRESHOLD, boostPercent: GUARANTEED_CRIT_PERCENT },
+      data: {
+        count: 0,
+        threshold: CRIT_THRESHOLD,
+        boostPercent: GUARANTEED_CRIT_PERCENT,
+        objectInstanceId: ctx.sourceInstanceId,
+      },
     });
   },
 };

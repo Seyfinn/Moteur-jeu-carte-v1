@@ -38,6 +38,8 @@ export interface EngineApi {
   reviveCharacter(characterInstanceId: string, hp: number, placement: 'active' | 'bench'): Promise<void>;
   swapBenchCharacters(forPlayer: PlayerId, ownBenchInstanceId: string, enemyBenchInstanceId: string): void;
   attachObject(objectInstanceId: string, targetCharacterInstanceId: string): void;
+  /** Renvoie un objet en jeu dans la main non jouée de son propriétaire. Voir EffectContext.returnSelfToHand. */
+  returnObjectToHand(objectInstanceId: string): void;
   destroyObject(objectInstanceId: string): void;
   extendTerrain(terrainInstanceId: string, turns: number): void;
   shortenTerrain(terrainInstanceId: string, turns: number): Promise<void>;

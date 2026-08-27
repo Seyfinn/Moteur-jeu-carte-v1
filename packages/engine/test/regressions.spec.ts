@@ -5,6 +5,10 @@ import { aizen } from '../src/cards/demo/aizen.js';
 import { autelDemoniaque } from '../src/cards/demo/autel-demoniaque.js';
 import { hopital } from '../src/cards/demo/hopital.js';
 import { killua } from '../src/cards/demo/killua.js';
+import { critPlus } from '../src/cards/demo/crit-plus.js';
+import { destruction } from '../src/cards/demo/destruction.js';
+import { getCriticalPercent } from '../src/queries.js';
+import { BASE_CRITICAL_CHANCE_PERCENT, BURN_DAMAGE, POISON_FLAT_DAMAGE, POISON_PERCENT_OF_MAX_HP } from '../src/statuses.js';
 import { registerTestFixtures, FX_ROSTER, TINY_ROSTER } from './fixtures.js';
 import { createReadyMatch, defaultAnswer, drive, findInstance, settle } from './test-utils.js';
 
@@ -13,7 +17,7 @@ beforeAll(() => {
   registerTestFixtures();
   if (demoRegistered) return;
   demoRegistered = true;
-  for (const def of [absorptionVitale, aizen, autelDemoniaque, hopital, killua]) {
+  for (const def of [absorptionVitale, aizen, autelDemoniaque, hopital, killua, critPlus, destruction]) {
     try {
       registerCard(def);
     } catch {
@@ -319,5 +323,62 @@ describe('Absorption Vitale revive pool', () => {
     // ...and the sacrifice actually stuck.
     expect(match.state.players[owner].graveyardCharacterInstanceIds).toContain(sacrificedId);
     expect(match.state.players[owner].benchCharacterInstanceIds).toContain(spareId);
+  });
+});
+
+describe("détruire un objet emporte l'effet qu'il portait", () => {
+  const ROSTER: RosterConfig = {
+    characterCardIds: FX_ROSTER.characterCardIds,
+    objectCardIds: ['crit-plus'],
+    terrainCardIds: ['destruction'],
+  };
+
+  it('le terrain Destruction retire aussi le compteur de critiques de "Crit +"', async () => {
+    const match = await createReadyMatch({ p1Name: 'A', p2Name: 'B', p1Roster: ROSTER, p2Roster: FX_ROSTER, seed: 77 });
+    const owner: PlayerId = 'p1';
+    if (match.state.activePlayerId !== owner) await drive(match, 'p2', { kind: 'pass' });
+    const player = match.state.players[owner];
+
+    const critId = Object.values(player.objects).find((o) => o.cardId === 'crit-plus')!.instanceId;
+    await drive(match, owner, { kind: 'play-object', objectInstanceId: critId }, defaultAnswer);
+    const bearerId = player.objects[critId]!.attachedToCharacterInstanceId!;
+    expect(bearerId).toBeDefined();
+    // Le porteur a déjà décroché ses deux critiques : son taux est garanti.
+    const streak = player.characters[bearerId]!.statuses.find((s) => s.statusId === 'crit-streak')!;
+    streak.data = { ...streak.data, count: 2 };
+    expect(getCriticalPercent(match.state, player.characters[bearerId]!)).toBe(70);
+
+    const terrainId = Object.values(player.terrains).find((t) => t.cardId === 'destruction')!.instanceId;
+    await drive(match, owner, { kind: 'play-terrain', terrainInstanceId: terrainId }, defaultAnswer);
+
+    expect(player.graveyardObjectInstanceIds).toContain(critId);
+    // L'objet détruit, son compteur s'en va avec lui : plus de 70 % garantis sur une carte
+    // qui n'est plus en jeu.
+    expect(player.characters[bearerId]!.statuses.some((s) => s.statusId === 'crit-streak')).toBe(false);
+    expect(getCriticalPercent(match.state, player.characters[bearerId]!)).toBe(BASE_CRITICAL_CHANCE_PERCENT);
+  });
+});
+
+describe('le poison traverse le bouclier', () => {
+  it('un bouclier absorbe la brûlure mais pas le tic de poison', async () => {
+    const match = await createReadyMatch({ p1Name: 'A', p2Name: 'B', p1Roster: FX_ROSTER, p2Roster: FX_ROSTER, seed: 88 });
+    const owner: PlayerId = 'p1';
+    if (match.state.activePlayerId !== owner) await drive(match, 'p2', { kind: 'pass' });
+    const api = apiOf(match);
+    const targetId = match.state.players[owner].activeCharacterInstanceId!;
+    const target = match.state.players[owner].characters[targetId]!;
+
+    api.addShield(targetId, 1000);
+    api.applyStatus(targetId, { statusId: 'poison', label: 'Poison', remainingTurns: 1 });
+    api.applyStatus(targetId, { statusId: 'burn', label: 'Brûlure', remainingTurns: 1 });
+    const shieldBefore = target.shield;
+
+    await drive(match, owner, { kind: 'pass' });
+    await drive(match, 'p2', { kind: 'pass' });
+
+    const poisonTick = POISON_FLAT_DAMAGE + Math.round(target.currentMaxHP * POISON_PERCENT_OF_MAX_HP);
+    // Le poison mord dans les PV malgré le bouclier ; la brûlure, elle, y est absorbée.
+    expect(target.damage).toBe(poisonTick);
+    expect(shieldBefore - target.shield).toBe(BURN_DAMAGE);
   });
 });

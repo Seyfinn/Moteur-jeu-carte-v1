@@ -23,8 +23,8 @@ const OWNER_ROSTER: RosterConfig = {
   terrainCardIds: [],
 };
 
-describe('Caméléon -- transforms in place into a card from hand and immediately resolves its effect', () => {
-  it('becomes the chosen card and plays it, refusing a target already at its copy limit', async () => {
+describe('Caméléon -- transforms in place into a card from hand and goes back to the hand as it', () => {
+  it('becomes the chosen card and returns to hand, refusing a target already at its copy limit', async () => {
     const match = await createReadyMatch(
       { p1Name: 'A', p2Name: 'B', p1Roster: OWNER_ROSTER, p2Roster: FX_ROSTER, seed: 110 },
       { p2ActiveCardId: 'fx-tank' }
@@ -44,8 +44,6 @@ describe('Caméléon -- transforms in place into a card from hand and immediatel
         expect(choice.spec.options.some((o) => o.key === 'potion-force')).toBe(true);
         return { kind: 'select-option', key: 'potion-force' };
       }
-      // The nested "select-characters" prompt from potion-force's own execute (which
-      // character to equip) is left to the default answer (first legal candidate).
       return defaultAnswer(choice);
     });
 
@@ -53,14 +51,46 @@ describe('Caméléon -- transforms in place into a card from hand and immediatel
     const transformed = player.objects[cameleonId]!;
     expect(transformed.cardId).toBe('potion-force');
 
-    // potion-force's effect actually resolved: some character got equipped and boosted.
-    expect(transformed.attachedToCharacterInstanceId).toBeDefined();
-    const equipped = player.characters[transformed.attachedToCharacterInstanceId!]!;
-    expect(equipped.attachedObjectInstanceIds).toContain(cameleonId);
-    expect(equipped.statuses.some((s) => s.statusId === 'atk-boost')).toBe(true);
+    // "devient celle-ci" and nothing more: the new card is back in hand, unplayed and
+    // unresolved -- nobody got equipped or boosted by it yet.
+    expect(player.unplayedObjectInstanceIds).toContain(cameleonId);
+    expect(player.inPlayObjectInstanceIds).not.toContain(cameleonId);
+    expect(player.graveyardObjectInstanceIds).not.toContain(cameleonId);
+    expect(transformed.attachedToCharacterInstanceId).toBeUndefined();
+    for (const char of Object.values(player.characters)) {
+      expect(char.attachedObjectInstanceIds).not.toContain(cameleonId);
+      expect(char.statuses.some((s) => s.statusId === 'atk-boost')).toBe(false);
+    }
+    // Playing Caméléon still spent one of the turn's two object slots.
+    expect(player.objectsPlayedThisTurn).toBe(1);
 
     // "chaines" was never touched by any of this -- still sitting untouched in hand.
     expect(player.objects[chainesId]!.cardId).toBe('chaines');
     expect(player.unplayedObjectInstanceIds).toContain(chainesId);
+  });
+
+  it('la carte devenue se joue ensuite normalement, avec son propre effet', async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: OWNER_ROSTER, p2Roster: FX_ROSTER, seed: 111 },
+      { p2ActiveCardId: 'fx-tank' }
+    );
+    const ownerSide: PlayerId = 'p1';
+    if (match.state.activePlayerId !== ownerSide) await drive(match, 'p2', { kind: 'pass' });
+    const player = match.state.players[ownerSide];
+    const cameleonId = Object.values(player.objects).find((o) => o.cardId === 'cameleon')!.instanceId;
+
+    await drive(match, ownerSide, { kind: 'play-object', objectInstanceId: cameleonId }, (choice) => {
+      if (choice.spec.kind === 'select-option') return { kind: 'select-option', key: 'potion-force' };
+      return defaultAnswer(choice);
+    });
+
+    // Deuxième pose du tour : c'est la Potion force que Caméléon est devenue.
+    await drive(match, ownerSide, { kind: 'play-object', objectInstanceId: cameleonId }, defaultAnswer);
+
+    const played = player.objects[cameleonId]!;
+    expect(played.attachedToCharacterInstanceId).toBeDefined();
+    const equipped = player.characters[played.attachedToCharacterInstanceId!]!;
+    expect(equipped.attachedObjectInstanceIds).toContain(cameleonId);
+    expect(equipped.statuses.some((s) => s.statusId === 'atk-boost')).toBe(true);
   });
 });

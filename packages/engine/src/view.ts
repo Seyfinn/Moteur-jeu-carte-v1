@@ -37,6 +37,15 @@ export function getPlayerView(state: GameState, forPlayerId: PlayerId): GameStat
   // quand "Ultimate Détective" a ouvert la main adverse.
   const base: GameState = {
     ...state,
+    // Journal privé : une carte qui doit informer UN seul camp (la Cible secrète du
+    // "Sermet de Vengance" de Gon) pose `data.privateTo` sur sa ligne, et cette ligne
+    // n'existe tout simplement pas dans la vue de l'autre. Le client se contente de
+    // compter les entrées reçues (`state.log.length`), donc une vue plus courte que
+    // l'autre ne le gêne pas.
+    log: state.log.filter((entry) => {
+      const privateTo = entry.data?.['privateTo'];
+      return privateTo === undefined || privateTo === forPlayerId;
+    }),
     sharedTerrainPile: state.sharedTerrainPile.map((_, i) => `hidden-pile-terrain-${i}`),
     players: {
       ...state.players,

@@ -203,6 +203,7 @@ ctx.removeStatus(targetId, statusId); ctx.rollEvasion(targetId): boolean
 ctx.getEffectiveATK(characterInstanceId, baseATK): number
 ctx.swapBenchCharacters(forPlayer, ownBenchId, enemyBenchId)
 ctx.attachSelfTo(targetCharacterInstanceId)            // pour un ObjectCardDef
+ctx.returnSelfToHand()                                 // l'objet source repart en main
 ctx.destroyObject(objectInstanceId)
 ctx.extendTerrain(id, turns); ctx.shortenTerrain(id, turns); ctx.destroyTerrain(id)
 ctx.forceSwitch(playerId, newActiveInstanceId): Promise<void>
@@ -456,6 +457,8 @@ autour de l'appel à `evolveCharacter` -- il n'y a volontairement pas de champ d
     le statut, donc ça couvre aussi bien une attaque/capacité qu'un effet de terrain ou
     d'objet du même camp. Ex : Couteau dans le dos (posé sur tous ses personnages),
     Autel Démoniaque (terrain) en profite déjà sans rien coder de plus.
+  - `poison` : son tic est infligé avec `ignoreShield` — le poison ronge le porteur, un
+    bouclier ne l'arrête pas. Brûlure et saignement, eux, sont absorbés normalement.
   - `unhealable` : plus aucun `heal()` n'a d'effet sur le porteur, définitivement — y
     compris le nettoyage de bleed qu'un soin fait normalement. Jamais consommé (seule
     une résurrection, qui vide tous les statuts, y met fin) et indépendant de la survie
@@ -516,6 +519,14 @@ autour de l'appel à `evolveCharacter` -- il n'y a volontairement pas de champ d
     joueur : `endsTurn` ne ferme que le tour en cours, celui de la carte qui agit.
   - `stun` `disarmed` `silence-active` `silence-passive` `silence-ultimate`
     `evasive` `critical` `burn` `poison`.
+
+  ⚠️ **`data.objectInstanceId` lie un statut à l'objet qui l'a posé, dans les DEUX sens.**
+  Quand le statut expire, le moteur détruit l'objet nommé (`statuses.ts`) ; quand l'objet
+  est détruit, le moteur retire du (ex-)porteur tout statut qui le nomme
+  (`zones.destroyObject`). C'est ce qui fait que « Destruction détruit tous les objets
+  équipés » emporte aussi leurs effets (Crit +, Détermination, Potion force, Miroir de
+  Renvoi) au lieu de les laisser tourner sur des cartes déjà au cimetière. Un état qui doit
+  **survivre** à la disparition de sa carte (Poche de sang) ne doit donc PAS porter ce champ.
 
   Trois champs transverses utilisables sur **n'importe quel** statut :
   `ticksOnBench: true` (la durée continue de descendre au banc), `hidden: true`
@@ -663,6 +674,12 @@ avant qu'il ne puisse agir. Donc :
 `api.log(message, data)` écrit dans `state.log`, lu par le client. Le message est en
 **français** et nomme les cartes/joueurs par leur nom d'affichage (`names.ts` :
 `cardName(cardId)` / `playerName(state, playerId)`), jamais par un id.
+
+**Ligne privée : `data.privateTo = <playerId>`.** `getPlayerView` retire de la vue de
+l'autre camp toute entrée qui porte ce champ. C'est le seul canal pour dire quelque chose à
+UN joueur — la Cible secrète tirée par le Sermet de Vengance de Gon, la carte que Caméléon
+est devenue en main. Par défaut le journal est commun aux deux joueurs : une carte qui a un
+secret à garder doit soit se taire, soit passer par `privateTo`.
 
 Le client ne lit **pas** le texte : il classe chaque entrée sur `data.kind`
 (`'attack' | 'use-ability' | 'play-object' | 'play-terrain' | 'damage' | 'heal' | 'ko' |

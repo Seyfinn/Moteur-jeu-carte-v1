@@ -184,13 +184,8 @@ describe("borrowed-attack -- l'attaque prêtée par une autre carte", () => {
     const leviId = findInstance(match, owner, 'levi');
     const loanOn = () =>
       match.state.players[owner].characters[leviId]!.statuses.find((s) => s.statusId === 'borrowed-attack');
-    // Le terrain arrive au milieu du tour : la première offre attend le début du suivant.
-    expect(loanOn()).toBeUndefined();
-
-    await drive(match, owner, { kind: 'pass' }, answer);
-    await drive(match, match.state.activePlayerId, { kind: 'pass' }, answer);
-
-    expect(match.state.activePlayerId).toBe(owner);
+    // Le livre s'ouvre dès sa pose : le poseur est servi pour le tour en cours, sans quoi
+    // il aurait posé un terrain dont il ne verrait rien avant deux tours.
     const loan = loanOn();
     expect(loan).toBeDefined();
     const borrowedId = String(loan!.data!['attackId']);

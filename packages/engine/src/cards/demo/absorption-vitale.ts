@@ -2,10 +2,16 @@ import type { ObjectCardDef } from '../types.js';
 import { getMaxAttachedObjects } from '../../queries.js';
 
 const LOCK_EFFECTIVE_TURNS = 3;
-// +1 : statuts bloquants (chained/silence-ultimate) posés sur SOI-MÊME pendant son propre
-// tour -- voir CLAUDE.md, "Durées de statuts". 'sacrifice-revive' partage la même durée :
-// il doit expirer exactement au moment où le blocage se lève.
-const LOCK_REMAINING_TURNS = LOCK_EFFECTIVE_TURNS + 1;
+/**
+ * PAS de `+1` ici, contrairement à un statut bloquant posé sur l'adversaire : le sceau
+ * tombe sur son porteur pendant le tour de son propre camp, donc ce tour-là compte déjà
+ * comme le premier des trois. Le décompte qui suit est celui que voit le joueur :
+ * scellé au tour N, encore scellé au tour N+1, tué à l'ouverture du tour N+2 -- trois
+ * tours en jeu. Avec le `+1` d'avant, il tenait jusqu'au tour N+4, soit cinq tours.
+ * 'sacrifice-revive' partage la même durée : il doit expirer exactement au moment où le
+ * blocage se lève.
+ */
+const LOCK_REMAINING_TURNS = LOCK_EFFECTIVE_TURNS - 1;
 
 export const absorptionVitale: ObjectCardDef = {
   type: 'object',

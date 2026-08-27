@@ -728,8 +728,10 @@ export class Match {
     } finally {
       // A one-shot object always leaves play, including when its effect threw -- left in
       // `inPlayObjectInstanceIds` it would keep contributing its modifiers for the rest
-      // of the game.
-      if (!obj.attachedToCharacterInstanceId) {
+      // of the game. Deux sorties légitimes en amont : s'être accroché à un personnage
+      // (équipement) ou être reparti en main (`ctx.returnSelfToHand`, "Caméléon") -- dans
+      // les deux cas la carte n'est plus sur le plateau, il n'y a rien à enterrer.
+      if (!obj.attachedToCharacterInstanceId && player.inPlayObjectInstanceIds.includes(objectInstanceId)) {
         zones.moveObjectToGraveyard(state, playerId, objectInstanceId);
       }
     }
@@ -1116,6 +1118,15 @@ export class Match {
           return;
         }
         zones.attachObjectToCharacter(state, objectInstanceId, targetCharacterInstanceId);
+      },
+
+      returnObjectToHand(objectInstanceId) {
+        const owner = zones.findObjectOwner(state, objectInstanceId);
+        const obj = state.players[owner].objects[objectInstanceId];
+        // Un objet accroché à un personnage est en jeu pour de bon : il n'a rien à faire
+        // en main, et le renvoyer y laisserait le porteur avec une référence morte.
+        if (!obj || obj.attachedToCharacterInstanceId) return;
+        zones.returnObjectToPool(state, owner, objectInstanceId);
       },
 
       destroyObject(objectInstanceId) {

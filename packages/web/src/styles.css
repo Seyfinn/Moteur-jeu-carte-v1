@@ -3255,6 +3255,22 @@ textarea {
   flex-wrap: wrap;
   gap: 12px;
 }
+/* Survol d'une carte du pool : elle grossit sur place, comme une carte de la main en
+   partie (`.hand-card:hover`). `transform` seulement -- la grille ne bouge pas, donc
+   les cartes voisines ne sautent pas d'une ligne au passage de la souris. Le `>` vise
+   la carte du pool elle-même, jamais les vignettes d'évolution qu'elle contient. */
+@media (hover: hover) and (pointer: fine) {
+  .deck-card-grid > .tcg-card {
+    transform-origin: center bottom;
+  }
+  .deck-card-grid > .tcg-card:hover,
+  .deck-card-grid > .tcg-card:focus-within {
+    transform: scale(1.28);
+    z-index: 6;
+    border-color: var(--accent);
+    box-shadow: var(--shadow-lg), 0 0 0 1px var(--accent-soft);
+  }
+}
 /* Carte du pool interdite par une autre déjà prise dans le deck (Chopper / Soraka) :
    la carte est grisée, et la raison est écrite sous elle plutôt que seulement en
    infobulle -- au doigt, il n'y a pas d'infobulle. */

@@ -1,9 +1,9 @@
 import type { CharacterCardDef } from '../types.js';
 
-const LACERATION_ATK = 70;
+const LACERATION_ATK = 55;
 const BLEED_STACKS = 2;
 const REGEN_AMOUNT = 30;
-const TERRITORY_BONUS = 40;
+const TERRITORY_BONUS = 20;
 const AUTEL_DEMONIAQUE_CARD_ID = 'autel-demoniaque';
 
 export const sukuna: CharacterCardDef = {
@@ -47,9 +47,8 @@ export const sukuna: CharacterCardDef = {
       id: 'sort-inverse',
       name: 'Sort Inversé',
       kind: 'passive',
-      description: `À la fin de ton tour, Sukuna récupère ${REGEN_AMOUNT} PV automatiquement, même si elle est sur le banc.`,
+      description: `À la fin de ton tour, la carte récupère ${REGEN_AMOUNT} PV si elle est sur le poste actif.`,
       trigger: 'onTurnEnd',
-      usableFromBench: true,
       condition(ctx) {
         return ctx.event?.playerId === ctx.ownerId;
       },
