@@ -64,11 +64,15 @@ describe('Mode Aléatoire -- le tirage', () => {
     const { p1, p2 } = drawRandomPools(createRng(99));
     // Deux réserves indépendantes : elles ne doivent pas être identiques...
     expect(p1).not.toEqual(p2);
-    // ... mais un recouvrement est parfaitement admis (il est même inévitable sur les
-    // terrains : 6 + 6 = 12 pour 11 terrains dans le jeu).
-    expect(listDeckPool().filter((e) => e.type === 'terrain').length).toBeLessThan(
-      RANDOM_POOL_SIZE.terrain * 2
-    );
+    // ... mais un recouvrement est parfaitement admis : chaque réserve est tirée sur le
+    // pool complet, sans retirer à l'autre ce qu'elle a pris. Volontairement pas d'assertion
+    // sur le NOMBRE de cartes du jeu ici -- la propriété testée est l'indépendance des deux
+    // tirages, et l'ajout d'une carte ne doit pas faire tomber ce test.
+    const terrainPool = new Set(listDeckPool().filter((e) => e.type === 'terrain').map((e) => e.id));
+    for (const ids of [p1.terrainCardIds, p2.terrainCardIds]) {
+      expect(ids).toHaveLength(RANDOM_POOL_SIZE.terrain);
+      for (const id of ids) expect(terrainPool.has(id)).toBe(true);
+    }
   });
 
   it("n'inclut jamais une forme évoluée (elles ne sont pas sélectionnables)", () => {

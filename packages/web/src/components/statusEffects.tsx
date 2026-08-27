@@ -61,9 +61,12 @@ const STATUS_VISUALS: Record<string, StatusVisual> = {
   'damage-reflect': { className: 'fx-shield', particles: 'shield', tone: 'buff' },
   'bench-damage-bonus': { className: 'fx-atk-boost', particles: 'arrow-up', tone: 'buff' },
   // Marque posée sur le porteur au bénéfice de celui qui le frappe : un malus, pas un bonus.
-  // Visuel dédié (et non celui du critique) : c'est la version *armée* de `coeur-acier-mark`,
-  // même symbole, en or et en mouvement -- le porteur doit voir que la prime est prête.
+  // Générique et actuellement sans carte qui le pose (l'ancien "Coeur acier" terrain a été
+  // remplacé par l'objet ci-dessous), mais toujours reconnu par le moteur (effect-context.ts).
   'hit-bounty': { className: 'fx-bounty', particles: 'bounty', tone: 'debuff' },
+  // « Coeur acier » (objet à lier) : les prochaines attaques du porteur lui rapportent du
+  // HP max -- même symbole que atk-boost/extra-attack, c'est un bonus qui monte en jauge.
+  'attack-charges': { className: 'fx-atk-boost', particles: 'arrow-up', tone: 'buff' },
   vulnerable: { className: 'fx-vulnerable', particles: 'target', tone: 'debuff' },
   // « Jacob et Essau » : deux destins attachés l'un à l'autre. Le visuel de la chaîne
   // (comme `chained`) est le seul du jeu qui dise « attaché », mais en teinte neutre :
@@ -72,16 +75,19 @@ const STATUS_VISUALS: Record<string, StatusVisual> = {
   // « Attaque cloné » : une frappe de plus ce tour-ci. Un bonus offensif, donc le visuel
   // de l'ATK en hausse -- sa contrepartie (le silence) arrive plus tard, avec son propre badge.
   'extra-attack': { className: 'fx-atk-boost', particles: 'arrow-up', tone: 'buff' },
+  // « Livre de Chrollo » : une attaque prêtée par une autre carte. Neutre : elle donne
+  // autant qu'elle enlève, puisqu'elle ferme toutes les attaques propres du porteur.
+  'borrowed-attack': { className: 'fx-mark', particles: 'mark', tone: 'neutral' },
   // « Crit + » : compteur de critiques réussis vers un taux garanti -- même symbole que
   // `critical`/`concentration`, la mécanique qu'il finit par déclencher.
   'crit-streak': { className: 'fx-critical', particles: 'target', tone: 'buff' },
   // Card-specific statuses whose semantics (shield / ability lock) match an existing
   // built-in visual closely enough to reuse it, rather than falling back to the generic one.
   'blitzcrank-mana-barrier-shield': { className: 'fx-shield', particles: 'shield', tone: 'buff' },
-  // Marque de Coeur Acier, avant qu'elle ne se charge : même symbole que `hit-bounty`
-  // ci-dessus, en bleu acier et immobile -- « repérée, mais pas encore dangereuse ».
-  'coeur-acier-mark': { className: 'fx-mark', particles: 'mark', tone: 'debuff' },
   'blitzcrank-hook-locked': { className: 'fx-locked', particles: 'lock', tone: 'debuff' },
+  // « Ronces grimpantes » : l'emprise qui monte de 10 % par tour passé au poste actif.
+  // Même visuel que `vulnerable`, dont c'est exactement la mécanique.
+  'ronces-grimpantes-emprise': { className: 'fx-vulnerable', particles: 'target', tone: 'debuff' },
   // « Manipulation » de Makima : le porteur est visé pour frapper son propre camp.
   'forced-attack': { className: 'fx-vulnerable', particles: 'target', tone: 'debuff' },
   // « Sacrifice » de Makima : une compétence fermée, comme un silence -- mais ciblée.

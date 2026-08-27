@@ -139,6 +139,15 @@ const ENTRIES: GlossaryEntry[] = [
       'et meurent ensemble. Seul celui des deux qui tient le poste actif peut utiliser ses abilities.',
   },
   {
+    id: 'borrowed-attack',
+    name: 'Attaque empruntée',
+    icon: '❖',
+    tone: 'neutral',
+    text:
+      "Le personnage gagne une attaque qui n'est pas sur sa carte. Tant que le prêt tient, " +
+      "c'est la seule qu'il puisse porter : ses propres attaques sont fermées.",
+  },
+  {
     id: 'forced-attack',
     name: 'Manipulé',
     icon: '🎯',

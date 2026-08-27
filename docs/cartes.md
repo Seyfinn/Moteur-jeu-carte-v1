@@ -300,6 +300,52 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   Dio meurt pendant le tour arrêté, le verrou tombe avec lui (le modifier ne vit que tant
   que la carte est en jeu) ; le -50 %, lui, est porté par chaque personnage et tient.
 
+### Escanor — 340 HP
+
+- **Énergie solaire** (passive, `onGameStart` + `onAttackDeclared`, banc) — *« Escanor
+  commence la partie au cycle 1, et ne peut que utiliser l'attaque correspondant à son
+  cycle actuel. Attaquer fait augmenter le cycle actuel de 1. »*
+  → Le cycle est un compteur persistant (statut caché-mais-visible `escanor-cycle`,
+  `data.cycle`, sans `remainingTurns` donc jamais retiré tout seul), posé à 1 sur
+  `onGameStart` (utile s'il démarre au banc) et incrémenté sur chaque `onAttackDeclared`
+  qui le concerne. Chacune des quatre attaques a son propre `condition()` qui la
+  restreint au cycle correspondant — c'est ce mécanisme, pas un modifier `canAttack`, qui
+  empêche de lancer une attaque hors cycle.
+  → Le cycle 4 (Soleil) fait exception : au lieu d'incrémenter, l'event handler détecte
+  son id d'attaque et repose directement le compteur à 1 (« Retourne au cycle 1 après
+  avoir attaqué avec Soleil »).
+- **Cycle 1 - Aube** (attaque, cycle 1) — 20 ATK, pas de texte imprimé.
+- **Cycle 2 - Aura Solaire** (attaque, cycle 2) — 20 ATK, *« Annule 50 % des dégâts
+  subits pendant un tour. »*
+  → Pose un statut propre (`escanor-aura-solaire`, `remainingTurns: 1`, `ticksOnBench`)
+  lu par un modifier `getIncomingDamageAmount` du personnage qui divise par deux tout
+  dégât entrant tant qu'il est présent (même schéma que le bouclier de Blitzcrank, mais en
+  pourcentage plutôt qu'en réserve fixe). N'affecte pas la Valeur Lock (le texte ne parle
+  que de « dégâts »).
+- **Cycle 3 - Vague Solaire** (attaque, cycle 3) — 15 ATK, *« Inflige 15 dégâts à
+  l'ensemble du banc adverse. »*
+  → ⚠️ Écart texte/moteur confirmé par l'auteur : touche aussi l'actif adverse pour 15
+  dégâts, en plus de tout le banc (chaque cible adverse atteignable via `canTargetBench`
+  reçoit le même montant). Le texte imprimé, lui, ne mentionne que le banc.
+- **Cycle 4 - Soleil** (attaque, cycle 4) — 150 ATK, *« Retourne au cycle 1 après avoir
+  attaqué avec Soleil »* → remise à 1 gérée par Énergie solaire (voir plus haut), pas dans
+  l'`execute()` de l'attaque elle-même.
+- **Orgueil absolu** (active) — *« Réussite (45 %) : Augmente d'un cycle / Échec (45 %) :
+  Recule d'un cycle. S'il est déjà au cycle 1, ne peut pas infliger de dégâts ce tour. /
+  Orgueil Ultime (10 %) : Passe au cycle 4 directement. »*
+  → Ne ferme pas le tour (défaut moteur, rien dans le texte ne dit le contraire) :
+  Escanor peut donc enchaîner avec une attaque du nouveau cycle dans la foulée.
+  → ⚠️ Le moteur n'a pas de roue à trois issues : implémenté par deux `ctx.rollChance`
+  successifs (confirmé par l'auteur) — d'abord 10 % pour Orgueil Ultime, puis, seulement
+  en cas d'échec de ce premier jet, 50 % pour Réussite (50 % de 90 % restants = 45 %
+  global, donc les probabilités globales 45/45/10 sont exactes). Deux roues de % sont
+  donc affichées à l'écran au lieu d'une seule.
+  → Cycle 4 déjà atteint + Réussite : reste au cycle 4, aucun autre effet (confirmé par
+  l'auteur — pas de comportement symétrique au cas du cycle 1).
+  → Cycle 1 déjà atteint + Échec : pas de décrément (resterait sous 1), remplacé par le
+  statut générique `disarmed` pendant 1 tour (retiré avant son tour suivant, donc actif
+  seulement pour le reste du tour en cours).
+
 ### Guts — 250 HP
 
 - **Coup d'épée** (50 ATK) — *« Se soigne de 25. »*
@@ -1075,6 +1121,31 @@ mort. Un exemplaire. »*
 - Le remplacement après un KO n'est pas concerné (il ne passe pas par `switchActive`) : un
   personnage mort n'est plus enchaîné.
 
+### Coeur acier — exemplaire unique, objet à lier
+
+*« Vos 3 prochaines attaques augmente vos hp max de 35 et vous rend 35hp. »*
+
+- ⚠️ Refonte complète (confirmée par l'auteur) : cette carte était un terrain 6 tours
+  (marque + prime `hit-bounty` de 150 HP max sans soin sur l'adversaire). Elle est
+  désormais un objet à lier posé sur un personnage ALLIÉ, qui buffe SON porteur sur ses
+  propres attaques. `hit-bounty` reste un statut générique valide dans le moteur, mais
+  plus aucune carte du jeu ne le pose actuellement.
+- Moteur : objet **à lier** (`equipment: true`, `maxCopies: 1`), équipe le personnage
+  choisi (actif ou banc, sous réserve de `canTargetBench`) avec le statut générique
+  `attack-charges` (`data: { remaining: 3, bonusMaxHP: 35, objectInstanceId }`).
+- **Nouveau statut générique moteur** (pas un modifier de carte) : consommé une charge
+  par attaque **déclarée** par le porteur — qu'elle touche ou non, une seule fois même si
+  l'attaque frappe plusieurs cibles (AoE) — dans `match.ts::consumeAttackCharges`, appelé
+  juste après `consumeExtraAttack` sur le `case 'attack'`. Chaque charge appelle
+  `raiseMaxHP(porteur, 35)` **sans** `keepCurrentHP` (confirmé par l'auteur : « augmente
+  vos HP max de 35 et vous rend 35hp » est un seul mouvement, pas deux effets cumulés — le
+  plafond ET les PV actuels montent de 35, contrairement à l'ancienne prime « sans soin »
+  de l'ex-terrain). La dernière charge retire le statut et détruit l'objet porteur.
+- ⚠️ Angle mort assumé : un personnage **lié** (statut `linked`, ex. Jacob et Essau) dont
+  le partenaire attaque via `resolveLinkedPartnerAttack` ne consomme pas de charge à ce
+  moment-là — seule l'attaque déclarée par l'action du joueur (`action.characterInstanceId`)
+  en consomme une.
+
 ### Concentration
 
 *« La prochaine attaque du personnage actif a 70% de chances de critiquer. Si elle ne crit
@@ -1416,28 +1487,6 @@ tous les dégâts adverses. »*
   qui interdisait à son possesseur de changer de personnage pendant les 3 tours. Retiré —
   plus aucune carte du pool ne refuse `canSwitchStandard`.
 
-### Coeur acier — 6 tours
-
-*« Marque l'actif adverse. Si c'est toujours le même à votre tour suivant, la marque se
-charge : la première attaque qui le touche alors rapporte 150 HP max à son attaquant (pas de
-soin), puis la marque se réinitialise. Si l'adversaire a switché entre-temps, la marque passe
-simplement sur le nouvel actif. »*
-
-- Moteur : deux statuts qui se succèdent sur la cible, pour qu'elle voie venir le coup :
-  `coeur-acier-mark` (marque posée, aucune mécanique propre, purement visuelle) puis le
-  statut générique `hit-bounty` (`data: { bonusMaxHP, forOwnerId }`) une fois la marque
-  chargée, consommé au premier coup qui touche vraiment.
-- « Pas de soin » au sens littéral : la prime passe par
-  `raiseMaxHP(..., { keepCurrentHP: true })`, donc le plafond de l'attaquant monte de 150 et
-  ses PV actuels ne bougent pas d'un point.
-- « La marque se réinitialise » : le terrain garde `markedInstanceId`/`charged` dans ses
-  `data`, et repère l'encaissement au fait que `hit-bounty` a disparu d'une cible encore
-  marquée comme chargée. Il repose alors une marque neuve, qui devra attendre un tour de
-  plus pour se recharger. Sans ce retour à zéro, le terrain rechargeait la même cible à
-  chaque tour et repayait la prime autant de fois.
-- Les trois passives filtrent sur leur propre terrain, et `onTerrainRemoved` nettoie les
-  deux statuts.
-
 ### Confiscation — 2 tours
 
 *« Pendant 2 tours, aucun personnage (allié comme ennemi) ne peut utiliser ses capacités
@@ -1454,10 +1503,120 @@ aucun joueur ne peut utiliser ou équiper de cartes Objet. »*
 - Moteur : la destruction est un passive `onTerrainPlayed` filtré sur son propre terrain ;
   l'interdiction est un modifier `canPlayObject`.
 
+### Faille dimensionnelle — 5 tours
+
+*« Tous les joueurs peuvent switch gratuitement jusqu'à 2 fois pendant la durée de ce
+terrain. »*
+
+- **« Gratuitement » = le switch ne ferme pas le tour.** Un switch est normalement une
+  action finale (`match.ts::runAction` posait `endsTurn = true` en dur) : sous la Faille, le
+  joueur peut changer d'actif **puis** attaquer, poser un objet, enchaîner un second switch.
+  C'est la première (et pour l'instant la seule) carte à se servir de la requête
+  `doesActionEndTurn`, qui existait dans `QueryName` sans être évaluée nulle part.
+- **2 charges par camp, pas 2 en tout**, et elles courent sur toute la durée du terrain —
+  pas par tour. Les deux peuvent être dépensées dans le même tour.
+- **Le compteur vit dans le `data` de l'instance de terrain**, une clé par joueur. Il ne
+  pouvait pas vivre dans le modifier : un modifier est une fonction pure, il ne peut pas
+  consommer la charge qu'il lit (même limite que pour `extra-attack`). Le modifier
+  `doesActionEndTurn` se contente donc de **lire** le compteur — la question est posée
+  *avant* le switch, donc avec le compteur encore intact — et c'est le trigger `onSwitch` de
+  la carte qui le décrémente juste après.
+- ⚠️ **Seuls les switchs décidés par le joueur consomment une charge.** L'event `onSwitch`
+  porte désormais un `reason: 'action' | 'forced'` (ajouté pour cette carte) : un
+  `forceSwitch` de carte adverse (Manipulation de Light Yagami, Hook, Boogie Woogie…) ne
+  facture rien. De toute façon il ne ferme aucun tour — il ne passe pas par l'action de
+  switch —, donc le facturer reviendrait à punir la victime.
+- Un switch refusé en silence par `zones.switchActive` (porteur `chained`, `canSwitchAny`
+  fermé par Arène…) **ferme le tour malgré tout** : rien n'a bougé, la carte n'a rien
+  décompté, et le rendre gratuit laisserait le joueur relancer la même action sans fin.
+- Deux Failles en jeu (une par camp) donnent bien 2 charges **chacune** : chaque terrain
+  tient son propre compteur et il suffit qu'un seul vote « gratuit ».
+
 ### Hôpital — 2 tours
 
 *« Les soins reçus par vos personnages sont multipliés par 2 pendant 2 tours. »*
 → modifier `getIncomingHealAmount`.
+
+### Isaac D6 — 5 tours
+
+*« Chaque joueur peut choisir de donner un de ses objets à Isaac D6. Chaque tour, Isaac D6
+reroll l'item, le transformant en un autre objet du jeu de manière aléatoire. Chaque tour,
+le joueur peut décider de prendre cet objet ou de le laisser pour qu'il soit reroll une
+nouvelle fois au tour suivant. »*
+
+- **Ce qu'on peut confier** : un objet de sa **main** (réserve non jouée) uniquement. Ni un
+  objet déjà posé, ni un équipement accroché à un personnage.
+- **Un objet par camp à la fois**, les deux compteurs indépendants. Le dé est un `data` sur
+  l'instance de terrain : une clé par joueur, contenant un simple `cardId`.
+- **L'`ObjectInstance` d'origine est détruite en entrant dans le dé**, et une neuve est
+  fabriquée à la sortie (`ctx.createObject`). Garder l'instance en vie hors de toute zone
+  n'apporterait rien — le reroll change la carte de toute façon — et laisserait un objet
+  fantôme dans `player.objects`.
+- **Quand la question est posée** : au début de chaque tour du joueur concerné. **Plus une
+  fois immédiatement à la pose**, pour celui qui pose le terrain : son propre début de tour
+  est déjà passé, sans ça il attendrait un tour complet avant de pouvoir s'en servir.
+  L'adversaire, lui, est servi normalement au début de son tour.
+- **Le reroll pioche dans tout le registre** (`listCards()` filtré sur les objets), pas
+  seulement dans les decks en jeu, et exclut la face actuelle — « un **autre** objet ».
+- **Reprendre est gratuit** : la carte rejoint la main, elle n'est pas *jouée*. Ça ne touche
+  ni au budget de 2 objets par tour, ni à la fin du tour. Le dé redevient vide, et une
+  nouvelle offre de confier arrivera au tour suivant.
+- **À la fin du terrain, l'objet est rendu**, sous la face qu'il a à ce moment-là
+  (`onTerrainRemoved`, quelle que soit la raison : expiré, remplacé, détruit). Sur son
+  **dernier** tour, le possesseur n'est plus sollicité : le décompte tombe juste après
+  `onTurnStart`, relancer dans le vide n'aurait pas de sens.
+- ⚠️ **« Ne rien confier » est la première option du prompt**, parce qu'un choix laissé sans
+  réponse pendant 120 s est résolu par `defaultChoiceAnswer` — personne ne doit perdre une
+  carte par silence.
+
+### Livre de Chrollo — 3 tours
+
+⚠️ **Carte volontairement réduite par rapport à son texte d'origine.** Le JSON de départ
+proposait « un actif, un passif **ou** une attaque au hasard parmi l'entièreté des
+ability/attaque du jeu ». Les deux premiers ont été abandonnés d'un commun accord :
+
+- une bonne moitié des **passifs imprimés** du jeu ne sont pas des `AbilityDef` mais des
+  `modifiers` (L'Infini de Gojo, le Sharingan de Kakashi) — il n'y a littéralement rien à
+  « exécuter » ;
+- ceux qui sont des abilities, comme les **actifs**, lisent les statuts, compteurs et formes
+  d'évolution de **leur propre carte** (Guts, Kayn, Jacob et Essau, Katarina) : transplantés
+  sur un autre personnage, ils tournent dans le vide ou font n'importe quoi.
+
+Une **attaque**, à l'inverse, c'est essentiellement « un ATK et un `execute` qui frappe
+l'actif d'en face » : elle se transplante proprement.
+
+*Texte retenu : « Chrollo prête son livre aux joueurs. Chaque tour, au début du tour : une
+attaque au hasard parmi l'entièreté des attaques du jeu est proposée aux joueurs. Le joueur
+peut décider d'accepter le livre de Chrollo et prendre ce qui est offert. Il ne pourra alors
+utiliser que cette attaque pendant ce tour. La même attaque est proposée aux deux joueurs
+pendant le tour. »*
+
+- **Nouveau statut générique du moteur : `borrowed-attack`** (`data: { cardId, attackId }`).
+  Il fait deux choses d'un coup : `queries.ts::attacksAvailableTo` ajoute l'attaque empruntée
+  à celles du porteur, et `queries.ts::canAttack` refuse **toutes les siennes** — « il ne
+  pourra que utiliser cette attaque pendant ce tour ». `attacksAvailableTo` est désormais
+  **le** point d'entrée pour énumérer les attaques d'un personnage en jeu : `match.ts`
+  (validation et résolution), `turn.ts` (la Manipulation de Makima retourne bien l'attaque
+  empruntée) et le client (panneau de commandes, fiche de personnage) passent tous par lui.
+  Lire `getCharacterCard(...).attacks` en direct raterait l'empruntée.
+- **L'attaque s'exécute avec le contexte du PORTEUR** : son ATK effectif, ses buffs, ses
+  malus, sa cible en face. Sur une collision d'`attackId` entre deux cartes, l'empruntée
+  gagne — c'est elle que `canAttack` autorise.
+- **Le tirage se fait une fois par manche**, rangé dans le `data` du terrain avec le
+  `state.turnNumber` qui l'a produit : « la même attaque est proposée aux deux joueurs
+  pendant le tour ». `turnNumber` n'avance qu'au retour du joueur qui ouvre la manche, il
+  identifie donc exactement le tour de jeu que les deux camps partagent.
+- **Le prêt dure exactement le tour de son bénéficiaire** : `remainingTurns: 2` (le `+1` des
+  statuts bloquants — le statut est posé pendant `onTurnStart`, qui passe **avant**
+  `tickStatusesAtTurnStart`) et `ticksOnBench: true`, pour qu'un porteur renvoyé au banc dans
+  la foulée ne gèle pas le décompte.
+- Le prêt est fait au **personnage actif du moment** et repart avec lui : switcher pendant le
+  tour fait perdre l'attaque empruntée (le nouvel actif n'a pas le statut).
+- ⚠️ **« Refermer le livre » est la première option du prompt** : accepter ferme toutes les
+  attaques du joueur, ce n'est pas un cadeau qu'on peut lui imposer par un silence de 120 s.
+- Comme Isaac D6, le possesseur n'est plus sollicité sur le **dernier** tour du terrain.
+- Le poseur n'est pas servi au moment de la pose (contrairement à Isaac D6) : sa première
+  offre arrive au début de son tour suivant, conformément à « au début du tour ».
 
 ### Point faible — 2 tours
 
@@ -1485,6 +1644,45 @@ soigne de 50 HP à la place. »*
 - Moteur : modifier `getIncomingDamageAmount` filtré sur `source === 'burn'` et sur vos
   propres personnages. Le soin passe par `getIncomingHealAmount`, donc Hôpital le double.
   La durée de la brûlure, elle, continue de s'écouler normalement.
+
+### Ronces grimpantes — 5 tours
+
+*« Tous les personnages actifs subissent de plus en plus de dégâts en fonction du temps
+qu'ils restent au poste actif. Premier tour 0% de dégâts prit en plus, ensuite, augmente de
+10% les dégâts subis à chaque tour (Tour 2 = 10%, tour 3 = 20%) tant que le personnage actif
+reste sur le poste actif. Se réinitialise si il y a un switch où si le personnage actif
+meurt, seulement pour le joueur concerné. »*
+
+- **Modifier `getIncomingDamageAmount`**, exactement comme le statut `vulnérable` : ça
+  amplifie **toutes** les instances de dégâts reçues — attaques, capacités, effets d'objet ou
+  de terrain, **tics de poison / brûlure / saignement** compris. Seul un coût en HP qu'un
+  camp se paie à lui-même y échappe, parce qu'il passe par `ignoreDamageReduction`, qui
+  court-circuite la requête.
+- **Le compteur est porté par un statut** (`ronces-grimpantes-emprise`, `data.turns`) posé
+  sur l'actif, et non par le `data` du terrain : le joueur voit ainsi un badge qui lui dit où
+  il en est, et l'affichage ne peut pas se désynchroniser du multiplicateur. Le statut est
+  privé à la carte (donc ignoré par « Inversion de la Réalité » / Poupée Voodoo, qui ne
+  déplacent que les statuts de `BUILTIN_STATUS_IDS` — ce qui est bien le comportement voulu
+  pour de la comptabilité liée au terrain).
+- **Chaque camp a exactement un tour complet à 0 %.** Le compteur porte un drapeau `armed` :
+  à la pose (et à chaque arrivée au poste actif), il est armé pour celui qui est **en train
+  de jouer** et pas pour l'autre, dont le début de tour n'est pas encore passé. Résultat : le
+  poseur compte son tour en cours comme premier tour, l'adversaire comptera le sien, et les
+  deux passent à +10 % à leur deuxième tour sous le terrain.
+- **Le reset passe par `onBecomeActive`**, ce qui couvre les trois chemins d'un seul coup :
+  switch volontaire, switch **forcé** par une carte, et **remplacement après un KO** (qui
+  n'est pas un switch et n'émet donc pas `onSwitch`). Le nouvel arrivant repart à 0 %.
+- Chaque mise à jour **balaie tout le plateau du camp** avant de reposer le statut sur
+  l'actif : un seul personnage par camp porte le badge, donc un personnage renvoyé au banc
+  n'en garde pas un périmé. Le modifier vérifie de toute façon que la cible tient bien le
+  poste actif de son camp — « tous les personnages **actifs** », le banc ne prend rien de
+  plus.
+- Le statut est posé avec `skipEvasionRoll: true` : le terrain frappe les deux camps, et son
+  actif d'en face n'a pas à pouvoir « esquiver » de la comptabilité affichée.
+- **`onTerrainRemoved` nettoie les deux camps** : le terrain peut partir autrement que par
+  son propre décompte (détruit, remplacé), et son tick ne tournerait alors plus jamais — le
+  badge resterait collé aux personnages pour toute la partie (même bug que celui corrigé sur
+  Absorption Vitale).
 
 ---
 

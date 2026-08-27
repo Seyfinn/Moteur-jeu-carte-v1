@@ -77,6 +77,11 @@ import { kaynAssassin } from './kayn-assassin.js';
 import { rhaast } from './rhaast.js';
 import { gon } from './gon.js';
 import { gonAdulte } from './gon-adulte.js';
+import { escanor } from './escanor.js';
+import { failleDimensionnelle } from './faille-dimensionnelle.js';
+import { roncesGrimpantes } from './ronces-grimpantes.js';
+import { isaacD6 } from './isaac-d6.js';
+import { livreDeChrollo } from './livre-de-chrollo.js';
 
 export {
   aizen,
@@ -156,6 +161,11 @@ export {
   rhaast,
   gon,
   gonAdulte,
+  escanor,
+  failleDimensionnelle,
+  roncesGrimpantes,
+  isaacD6,
+  livreDeChrollo,
 };
 
 let registered = false;
@@ -243,6 +253,11 @@ export function registerDemoCards(): void {
   registerCard(rhaast);
   registerCard(gon);
   registerCard(gonAdulte);
+  registerCard(escanor);
+  registerCard(failleDimensionnelle);
+  registerCard(roncesGrimpantes);
+  registerCard(isaacD6);
+  registerCard(livreDeChrollo);
 }
 
 /**
@@ -315,6 +330,7 @@ export const DEMO_ROSTER: RosterConfig = {
     levi.id,
     kayn.id,
     gon.id,
+    escanor.id,
   ],
   objectCardIds: [
     potionForce.id,
@@ -342,6 +358,7 @@ export const DEMO_ROSTER: RosterConfig = {
     offrandeDuDieuDeLaMort.id,
     critPlus.id,
     absorptionVitale.id,
+    coeurAcier.id,
   ],
   terrainCardIds: [
     hopital.id,
@@ -349,10 +366,13 @@ export const DEMO_ROSTER: RosterConfig = {
     destruction.id,
     regulationThermique.id,
     bouclierUltime.id,
-    coeurAcier.id,
     autelDemoniaque.id,
     pointFaible.id,
     protectionDivine.id,
     arene.id,
+    failleDimensionnelle.id,
+    roncesGrimpantes.id,
+    isaacD6.id,
+    livreDeChrollo.id,
   ],
 };

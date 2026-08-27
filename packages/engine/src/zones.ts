@@ -320,7 +320,20 @@ export function createCharacterClone(
   return instanceId;
 }
 
-export async function switchActive(state: GameState, playerId: PlayerId, newActiveInstanceId: string, api: EngineApi): Promise<void> {
+/**
+ * `reason` dit d'où vient le switch : 'action' quand le joueur l'a demandé lui-même,
+ * 'forced' (le défaut) quand une carte le lui impose. Il ne change rien à la résolution --
+ * les deux passent par exactement les mêmes gardes -- et ne sert qu'à être relayé dans
+ * `onSwitch`, pour qu'une carte qui compte les changements volontaires ne facture pas ceux
+ * que son porteur subit.
+ */
+export async function switchActive(
+  state: GameState,
+  playerId: PlayerId,
+  newActiveInstanceId: string,
+  api: EngineApi,
+  reason: 'action' | 'forced' = 'forced'
+): Promise<void> {
   const player = state.players[playerId];
   const benchIndex = player.benchCharacterInstanceIds.indexOf(newActiveInstanceId);
   if (benchIndex === -1) throw new Error(`"${newActiveInstanceId}" is not on ${playerId}'s bench`);
@@ -364,7 +377,7 @@ export async function switchActive(state: GameState, playerId: PlayerId, newActi
   await api.emitEvent({
     name: 'onSwitch',
     playerId,
-    data: { newActiveInstanceId, previousActiveInstanceId: previousActiveId },
+    data: { newActiveInstanceId, previousActiveInstanceId: previousActiveId, reason },
   });
   await api.emitEvent({
     name: 'onBecomeActive',

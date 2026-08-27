@@ -147,7 +147,7 @@ Payloads utiles (voir `EventPayloads` dans `types.ts` pour la liste complète) :
 | `afterDamage` | `{ targetInstanceId, amount, shieldAbsorbed, sourceInstanceId?, sourceOwnerId?, damageSource? }` |
 | `onCharacterKO` | `{ characterInstanceId, killerInstanceId?, killerOwnerId? }` |
 | `onTerrainRemoved` | `{ terrainInstanceId, reason: 'expired' \| 'replaced' \| 'destroyed' }` |
-| `onSwitch` | `{ newActiveInstanceId, previousActiveInstanceId? }` |
+| `onSwitch` | `{ newActiveInstanceId, previousActiveInstanceId?, reason: 'action' \| 'forced' }` |
 | `onAbilityUsed` | `{ characterInstanceId, abilityId }` |
 
 Points importants :
@@ -390,6 +390,14 @@ autour de l'appel à `evolveCharacter` -- il n'y a volontairement pas de champ d
   `canSwitchAny` reçoit `{ playerId, outgoingInstanceId, incomingInstanceId }`, donc il sait
   aussi refuser UNE carte précise à l'entrée. Aucun des trois ne touche au remplacement
   après un KO (voir la section « Économie de tour »).
+- **Rendre une action gratuite (switch)** : `doesActionEndTurn` est une requête
+  permission-style à défaut ALLOW (« oui, ça ferme le tour »), et **n'est évaluée que pour
+  l'action de switch** (`match.ts::runAction`). Un modifier qui vote `allow: false` rend le
+  switch gratuit. ⚠️ Un modifier ne peut pas **consommer** une charge (fonction pure) : une
+  carte qui offre un nombre limité de switchs gratuits garde son compteur dans le `data` de
+  son instance et le décrémente sur un trigger `onSwitch`, en filtrant sur
+  `event.data.reason === 'action'` — sans quoi un `forceSwitch` adverse ferait payer sa
+  victime (cf. Faille dimensionnelle).
 - **Rejouer/copier un objet** (« Spectre » d'Aki) : `ctx.playObjectImmediately(cardId)`.
   L'objet est créé, mis en jeu, résolu, puis part au cimetière (ou reste accroché si c'est
   un équipement) -- le cycle de vie complet d'un objet posé, mais hors du budget de 2 objets
@@ -465,7 +473,16 @@ autour de l'appel à `evolveCharacter` -- il n'y a volontairement pas de champ d
     lui-même (`ignoreDamageReduction`).
   - `hit-bounty` (`data: { bonusMaxHP, forOwnerId? }`) : la première attaque qui touche
     réellement le porteur donne du HP max permanent à son attaquant, puis se consomme.
-    Ex : la marque chargée de Coeur Acier.
+    Générique et toujours géré par le moteur (`effect-context.ts`), mais actuellement sans
+    carte qui le pose (l'ancien terrain Coeur Acier, qui en était l'exemple, a été remplacé
+    par un objet -- voir `attack-charges` ci-dessous).
+  - `attack-charges` (`data: { remaining, bonusMaxHP, objectInstanceId? }`) : chacune des
+    `remaining` prochaines attaques **déclarées** par le porteur (touche ou non) lui donne
+    `bonusMaxHP` HP max -- PV actuels compris, un `raiseMaxHP` ordinaire, pas la version
+    « sans soin » de `hit-bounty`. Consommé dans `match.ts::consumeAttackCharges`, appelé
+    comme `consumeExtraAttack` sur le `case 'attack'` (donc une seule fois par attaque,
+    même si elle touche plusieurs cibles). La dernière charge détruit l'objet porteur si
+    `data.objectInstanceId` est fourni. Ex : Coeur Acier (objet à lier).
   - `concentration` (`data.percent`) : la prochaine attaque crit à ce pourcentage, sinon
     0 dégât + désarmé. Ex : l'objet Concentration.
   - `chained` : bloque **tout** départ du poste actif — l'action de switch standard comme
@@ -479,9 +496,17 @@ autour de l'appel à `evolveCharacter` -- il n'y a volontairement pas de champ d
   - `extra-attack` (`data: { remaining, damagePercent }`) : le porteur peut attaquer
     `remaining` fois de plus ce tour au lieu de le terminer, la frappe supplémentaire
     n'infligeant que `damagePercent` % des dégâts. Ex : Attaque cloné. C'est le **seul**
-    moyen de prolonger un tour après une attaque : `doesActionEndTurn` existe dans
-    `QueryName` mais n'est évaluée nulle part, et un modifier — fonction pure — ne pourrait
-    de toute façon pas consommer la charge qu'il lit.
+    moyen de prolonger un tour après une **attaque** : `doesActionEndTurn` n'est évaluée
+    que pour l'action de **switch** (voir plus bas), et un modifier — fonction pure — ne
+    pourrait de toute façon pas consommer la charge qu'il lit.
+  - `borrowed-attack` (`data: { cardId, attackId }`) : le porteur emprunte une attaque qui
+    n'est **pas** sur sa carte, et c'est alors la **seule** qu'il puisse porter (`canAttack`
+    refuse toutes les siennes). Elle s'exécute avec le contexte du porteur : son ATK effectif,
+    ses buffs, sa cible en face. Ex : Livre de Chrollo.
+    ⚠️ Corollaire : pour énumérer les attaques d'un personnage **en jeu**, passer par
+    `queries.ts::attacksAvailableTo(state, instanceId)` (ou `findAttackFor`) et jamais par
+    `getCharacterCard(...).attacks` en direct — qui raterait l'empruntée. C'est déjà le cas
+    dans `match.ts`, `turn.ts` et côté client (`boardActions.tsx`, `cardDetails.tsx`).
   - `forced-attack` (`data: { targetInstanceId }`) : au début du tour de son porteur, celui-ci
     retourne les **dégâts** de son attaque (ATK effectif) sur le personnage désigné de son
     PROPRE banc, puis son tour se termine aussitôt. Ex : Manipulation de Makima. Résolu par

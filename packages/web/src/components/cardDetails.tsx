@@ -1,6 +1,6 @@
 import { getCharacterCard, getObjectCard, getTerrainCard, type CharacterInstance, type GameState } from 'engine';
 import { statusBadgeText } from './CharacterCard';
-import { attackReadouts } from './boardActions';
+import { attackReadouts, liveAttacks } from './boardActions';
 
 /**
  * Fiche d'un personnage. Avec `instance` + `state`, les ATK affichés sont ceux du moment
@@ -10,6 +10,10 @@ import { attackReadouts } from './boardActions';
 export function characterDetailBody(cardId: string, instance?: CharacterInstance, state?: GameState) {
   const def = getCharacterCard(cardId);
   const readouts = instance && state ? attackReadouts(state, instance) : [];
+  // En jeu, la fiche liste ce que le personnage peut réellement déclarer : son attaque
+  // empruntée ("Livre de Chrollo") en fait partie, ses propres attaques n'en font plus
+  // partie tant que le prêt tient. Hors partie (deck-builder, aperçu), la carte nue.
+  const attacks = instance && state ? liveAttacks(state, instance.instanceId) : def.attacks;
   const currentHP = instance ? Math.max(0, instance.currentMaxHP - instance.damage) : undefined;
   // Même total que sur la carte : bouclier du moteur + réserves portées par un statut
   // (`data.shield`, cf. Mana Barrier de Blitzcrank).
@@ -39,10 +43,10 @@ export function characterDetailBody(cardId: string, instance?: CharacterInstance
         </div>
       )}
 
-      {def.attacks.length > 0 && (
+      {attacks.length > 0 && (
         <div className="hover-card-section">
           <h4>Attaques</h4>
-          {def.attacks.map((a) => {
+          {attacks.map((a) => {
             const live = readouts.find((r) => r.id === a.id);
             const boosted = live !== undefined && live.effective !== a.baseATK;
             return (

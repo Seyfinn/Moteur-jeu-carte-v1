@@ -41,6 +41,17 @@ export type QueryName =
    */
   | 'canSwitchAny'
   | 'canUseAbility'
+  /**
+   * Permission-style, défaut ALLOW (= « oui, cette action ferme le tour ») : une carte qui
+   * vote `allow: false` rend l'action gratuite. Payload : `{ playerId, actionKind }`, plus
+   * `{ outgoingInstanceId, incomingInstanceId }` pour un switch.
+   *
+   * ⚠️ Évalué pour le seul `actionKind: 'switch'` (match.ts::runAction, « Faille
+   * dimensionnelle »). Une attaque ne passe PAS par là : la prolonger demande de consommer
+   * une charge, ce qu'un modifier -- fonction pure -- ne peut pas faire ; c'est le rôle du
+   * statut `extra-attack`. Une carte qui offre un switch gratuit COMPTÉ doit donc décrémenter
+   * son propre compteur sur `onSwitch` (`reason: 'action'`), le vote se contentant de le lire.
+   */
   | 'doesActionEndTurn'
   | 'getMaxAttachedObjects'
   | 'canTargetBench'

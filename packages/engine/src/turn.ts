@@ -3,8 +3,7 @@ import { getStatus, removeStatus, tickStatusesAtTurnStart } from './statuses.js'
 import { checkWinCondition, tickPendingRevives, tickTerrainAtTurnStart } from './zones.js';
 import { otherPlayer, type GameState, type PlayerId } from './types.js';
 import { cardName, playerName } from './names.js';
-import { getCharacterCard } from './cards/registry.js';
-import { canAttack, getEffectiveATK } from './queries.js';
+import { attacksAvailableTo, canAttack, getEffectiveATK } from './queries.js';
 import { drawAtEndOfTurn, refillBenchFromHand } from './draw-mode.js';
 
 /**
@@ -33,7 +32,9 @@ async function resolveForcedAttack(state: GameState, api: EngineApi): Promise<bo
   // ailleurs entre-temps, il n'y a plus personne à frapper et le tour reprend son cours.
   if (!player.benchCharacterInstanceIds.includes(targetInstanceId)) return false;
 
-  const attacks = getCharacterCard(active.cardId).attacks.filter((a) => canAttack(state, activeId, a.id).allow);
+  // `attacksAvailableTo` : un actif qui a emprunté une attaque ("Livre de Chrollo") n'a
+  // plus que celle-là de disponible, et c'est donc elle que la manipulation retourne.
+  const attacks = attacksAvailableTo(state, activeId).filter((a) => canAttack(state, activeId, a.id).allow);
   if (attacks.length === 0) return false;
 
   let chosen = attacks[0]!;

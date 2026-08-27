@@ -40,6 +40,7 @@ import {
   describeObjectUnplayable,
   evaluatePermission,
   evaluateTransform,
+  findAttackFor,
   findCharacter,
   getMaxAttachedObjects,
 } from './queries.js';
@@ -587,8 +588,7 @@ export class Match {
         }
         const char = player.characters[action.characterInstanceId];
         if (!char) return { ok: false, error: 'Personnage inconnu' };
-        const def = getCharacterCard(char.cardId);
-        const attack = def.attacks.find((a) => a.id === action.attackId);
+        const attack = findAttackFor(state, action.characterInstanceId, action.attackId);
         if (!attack) return { ok: false, error: 'Attaque inconnue' };
         const permission = canAttack(state, action.characterInstanceId, action.attackId);
         if (!permission.allow) {
@@ -642,11 +642,33 @@ export class Match {
       case 'attack':
         endsTurn = await this.handleAttack(playerId, action.characterInstanceId, action.attackId);
         endsTurn = this.consumeExtraAttack(playerId, action.characterInstanceId, endsTurn);
+        this.consumeAttackCharges(playerId, action.characterInstanceId);
         break;
-      case 'switch':
-        await zones.switchActive(state, playerId, action.newActiveInstanceId, this.api);
-        endsTurn = true;
+      case 'switch': {
+        // « Faille dimensionnelle » : un switch ferme le tour, sauf si une carte l'offre.
+        // La question est posée AVANT le switch, donc avec le compteur de la carte encore
+        // intact -- c'est son propre trigger `onSwitch` qui le décrémente juste après.
+        const switcher = state.players[playerId];
+        const outgoingInstanceId = switcher.activeCharacterInstanceId;
+        const free = !evaluatePermission(
+          state,
+          'doesActionEndTurn',
+          {
+            playerId,
+            actionKind: 'switch',
+            outgoingInstanceId,
+            incomingInstanceId: action.newActiveInstanceId,
+          },
+          true
+        ).allow;
+        await zones.switchActive(state, playerId, action.newActiveInstanceId, this.api, 'action');
+        // `switchActive` peut renoncer en silence (enchaîné, `canSwitchAny` refusé). Le
+        // switch n'a alors pas eu lieu, la carte n'a rien décompté : rendre le tour gratuit
+        // laisserait le joueur relancer la même action sans fin.
+        const happened = switcher.activeCharacterInstanceId === action.newActiveInstanceId;
+        endsTurn = !(free && happened);
         break;
+      }
       case 'pass':
         this.api.log(`${playerName(state, playerId)} passe son tour`, { kind: 'pass' }, playerId);
         endsTurn = true;
@@ -751,9 +773,9 @@ export class Match {
    * an attack that would normally close the turn instead spends one of them and arms the
    * discount that makes the follow-up land softer (see getExtraAttackDamageMultiplier).
    *
-   * The only place a card can currently keep a turn alive past an attack: `doesActionEndTurn`
-   * exists in QueryName but is inert, and a modifier is a pure function anyway -- it could
-   * never spend the grant it is reading.
+   * The only place a card can currently keep a turn alive past an ATTACK: `doesActionEndTurn`
+   * is only evaluated for the switch action (see runAction), and a modifier is a pure
+   * function anyway -- it could never spend the grant it is reading.
    */
   private consumeExtraAttack(playerId: PlayerId, attackerInstanceId: string, endsTurn: boolean): boolean {
     const attacker = this.state.players[playerId].characters[attackerInstanceId];
@@ -780,11 +802,40 @@ export class Match {
     return endsTurn;
   }
 
+  /**
+   * 'attack-charges' (e.g. "Coeur acier"): the bearer's own attacks -- declared, hit or
+   * not -- spend down `data.remaining`, each one granting `data.bonusMaxHP` max HP (an
+   * ordinary raiseMaxHP, current HP rises with the cap). Doesn't touch endsTurn, so unlike
+   * consumeExtraAttack this is a pure side effect called for its own sake. The object that
+   * carried the status (`data.objectInstanceId`) is destroyed once the last charge is
+   * spent, same convention as damage-reflect/atk-boost.
+   */
+  private consumeAttackCharges(playerId: PlayerId, attackerInstanceId: string): void {
+    const attacker = this.state.players[playerId].characters[attackerInstanceId];
+    if (!attacker) return;
+    const charge = statusesMod.getStatus(attacker, 'attack-charges');
+    if (!charge) return;
+
+    const bonus = Number(charge.data?.['bonusMaxHP'] ?? 0);
+    if (bonus > 0) this.api.raiseMaxHP(attackerInstanceId, bonus);
+
+    const remaining = Number(charge.data?.['remaining'] ?? 0) - 1;
+    if (remaining > 0) {
+      charge.data = { ...charge.data, remaining };
+      return;
+    }
+
+    statusesMod.removeStatus(attacker, 'attack-charges');
+    const objectInstanceId = charge.data?.['objectInstanceId'] as string | undefined;
+    if (objectInstanceId) this.api.destroyObject(objectInstanceId);
+  }
+
   private async handleAttack(playerId: PlayerId, characterInstanceId: string, attackId: string): Promise<boolean> {
     const state = this.state;
     const char = state.players[playerId].characters[characterInstanceId]!;
-    const def = getCharacterCard(char.cardId);
-    const attack = def.attacks.find((a) => a.id === attackId)!;
+    // `findAttackFor` et pas `def.attacks` : l'attaque peut être empruntée à une autre
+    // carte ("Livre de Chrollo"). Elle s'exécute avec le contexte du porteur.
+    const attack = findAttackFor(state, characterInstanceId, attackId)!;
 
     this.api.log(`${cardName(char.cardId)} attaque avec ${attack.name}`, { kind: 'attack', characterInstanceId, attackId }, playerId);
     await this.api.emitEvent({ name: 'onAttackDeclared', playerId, data: { characterInstanceId, attackId } });

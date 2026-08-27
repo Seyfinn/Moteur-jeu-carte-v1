@@ -39,6 +39,7 @@ export const BUILTIN_STATUS_IDS: ReadonlySet<string> = new Set<BuiltinStatusId>(
   'damage-reflect',
   'bench-damage-bonus',
   'hit-bounty',
+  'attack-charges',
   'vulnerable',
   'linked',
   'extra-attack',
@@ -47,6 +48,7 @@ export const BUILTIN_STATUS_IDS: ReadonlySet<string> = new Set<BuiltinStatusId>(
   'unhealable',
   'evasion-locked',
   'sacrifice-revive',
+  'borrowed-attack',
 ]);
 
 /** Human labels for the three damage-over-time statuses, used in the event log. */
