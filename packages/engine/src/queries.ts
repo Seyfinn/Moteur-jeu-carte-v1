@@ -1,5 +1,5 @@
 import type { CharacterInstance, GameState, PlayerId } from './types.js';
-import type { AbilityDef, ModifierDef, ModifierEvalContext, QueryName, Vote } from './cards/types.js';
+import type { AbilityDef, AttackDef, ModifierDef, ModifierEvalContext, QueryName, Vote } from './cards/types.js';
 import { getCard, getCharacterCard, getObjectCard, getTerrainCard } from './cards/registry.js';
 import {
   BASE_CRITICAL_CHANCE_PERCENT,
@@ -10,6 +10,7 @@ import {
   getAtkMultiplierTotal,
   getAtkReductionTotal,
   getExtraAttackDamageMultiplier,
+  getStatus,
   hasStatus,
   isDisarmed,
   isEvasive,
@@ -98,6 +99,7 @@ const VOTE_LABELS: Record<string, string> = {
   'status:stun': 'étourdi',
   'status:disarmed': 'désarmé',
   'status:chained': 'enchaîné',
+  'status:borrowed-attack': "limité à l'attaque empruntée",
   'status:silence-active': 'capacités actives réduites au silence',
   'status:silence-passive': 'capacités passives réduites au silence',
   'default:active-only': 'réservé au personnage actif',
@@ -181,7 +183,64 @@ export function canAttack(state: GameState, characterInstanceId: string, attackI
   const extra: Vote[] = [];
   if (isStunned(char)) extra.push({ allow: false, source: 'status:stun' });
   if (isDisarmed(char)) extra.push({ allow: false, source: 'status:disarmed' });
+  // 'borrowed-attack' ("Livre de Chrollo") : l'attaque empruntée devient la seule que le
+  // porteur puisse porter ce tour-ci. On ne refuse rien quand `attackId` est absent -- la
+  // requête jauge alors le personnage en général, et il a bien une attaque disponible.
+  const borrowed = getStatus(char, 'borrowed-attack');
+  if (borrowed && attackId !== undefined && attackId !== borrowed.data?.['attackId']) {
+    extra.push({ allow: false, source: 'status:borrowed-attack' });
+  }
   return evaluatePermission(state, 'canAttack', { characterInstanceId, attackId }, true, extra);
+}
+
+/**
+ * L'attaque empruntée par ce personnage ("Livre de Chrollo"), si le statut
+ * 'borrowed-attack' est là et pointe toujours sur une attaque qui existe. Renvoyée telle
+ * quelle : elle s'exécutera avec le contexte du PORTEUR, pas celui de la carte d'origine.
+ */
+function borrowedAttackOf(char: CharacterInstance): AttackDef | undefined {
+  const borrowed = getStatus(char, 'borrowed-attack');
+  if (!borrowed) return undefined;
+  const cardId = borrowed.data?.['cardId'];
+  const attackId = borrowed.data?.['attackId'];
+  if (typeof cardId !== 'string' || typeof attackId !== 'string') return undefined;
+  try {
+    return getCharacterCard(cardId).attacks.find((a) => a.id === attackId);
+  } catch {
+    return undefined; // carte inconnue (registre vidé entre deux parties) : rien à emprunter
+  }
+}
+
+/**
+ * Toutes les attaques que ce personnage peut déclarer maintenant : les siennes, plus celle
+ * qu'il a empruntée. **Le seul point d'entrée** pour énumérer les attaques d'un personnage
+ * en jeu -- `getCharacterCard(...).attacks` lu en direct raterait l'empruntée, et le moteur
+ * comme le client s'en servent (panneau de commandes, fiche, manipulation de Makima).
+ *
+ * Sur une collision d'`attackId` (deux cartes qui nommeraient pareil leur attaque),
+ * l'empruntée gagne : c'est elle que `canAttack` autorise, elle ne doit donc jamais se
+ * faire recouvrir par une homonyme.
+ */
+export function attacksAvailableTo(state: GameState, characterInstanceId: string): AttackDef[] {
+  const char = findCharacter(state, characterInstanceId);
+  let own: AttackDef[];
+  try {
+    own = getCharacterCard(char.cardId).attacks;
+  } catch {
+    own = [];
+  }
+  const borrowed = borrowedAttackOf(char);
+  if (!borrowed) return own;
+  return [...own.filter((a) => a.id !== borrowed.id), borrowed];
+}
+
+/** L'attaque `attackId` telle que ce personnage la porterait, empruntée comprise. */
+export function findAttackFor(
+  state: GameState,
+  characterInstanceId: string,
+  attackId: string
+): AttackDef | undefined {
+  return attacksAvailableTo(state, characterInstanceId).find((a) => a.id === attackId);
 }
 
 /**

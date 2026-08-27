@@ -42,6 +42,15 @@ export type BuiltinStatusId =
   | 'bench-damage-bonus'
   /** The first attack that really lands on the bearer grants `data.bonusMaxHP` max HP to its attacker, then the status is consumed. */
   | 'hit-bounty'
+  /**
+   * "Coeur acier" : `data.remaining` of the bearer's own attacks left to grant it
+   * `data.bonusMaxHP` max HP each (current HP rises along with the cap -- an ordinary
+   * `raiseMaxHP`, not the HP-frozen "prime" pattern of `hit-bounty`). Consumed once per
+   * attack DECLARED by the bearer, hit or not (match.ts::applyAction, mirroring how
+   * `extra-attack` is spent). Optional `data.objectInstanceId` is destroyed once the
+   * last charge is spent.
+   */
+  | 'attack-charges'
   /** Bearer takes VULNERABLE_DAMAGE_BONUS_PERCENT% more damage from every incoming damage instance (never consumed). */
   | 'vulnerable'
   /**
@@ -104,7 +113,17 @@ export type BuiltinStatusId =
    * n'importe quelle future carte au même principe ("tiens N tours, puis sacrifie-toi pour
    * en ranimer un autre").
    */
-  | 'sacrifice-revive';
+  | 'sacrifice-revive'
+  /**
+   * "Livre de Chrollo" : le porteur emprunte l'attaque `data.attackId` de la carte
+   * `data.cardId` -- une attaque qui n'est PAS sur sa propre carte. Tant que le statut
+   * tient, c'est la SEULE attaque qu'il puisse porter : `canAttack` refuse toutes les
+   * siennes (queries.ts), et `attacksAvailableTo` ajoute l'empruntée à sa liste, ce qui
+   * la rend visible et jouable partout où le moteur et le client énumèrent les attaques
+   * d'un personnage. L'attaque s'exécute avec le contexte du PORTEUR : son ATK effectif,
+   * ses buffs, sa cible en face.
+   */
+  | 'borrowed-attack';
 
 export interface RaiseMaxHPOptions {
   /**
@@ -446,7 +465,13 @@ export interface EventPayloads {
   onTerrainRemoved: { terrainInstanceId: string; reason: 'expired' | 'replaced' | 'destroyed' };
   onStatusApplied: { characterInstanceId: string; statusId: string };
   onStatusExpired: { characterInstanceId: string; statusId: string };
-  onSwitch: { newActiveInstanceId: string; previousActiveInstanceId?: string };
+  /**
+   * `reason` distingue le switch que le JOUEUR a demandé lui-même ('action') de celui
+   * qu'une carte lui impose ('forced' : Dieu du Tonnerre Volant, Hook, Manipulation...).
+   * Sans lui, une carte qui compte les changements volontaires ("Faille dimensionnelle")
+   * facturerait aussi ceux que son porteur subit.
+   */
+  onSwitch: { newActiveInstanceId: string; previousActiveInstanceId?: string; reason: 'action' | 'forced' };
   onAbilityUsed: { characterInstanceId: string; abilityId: string };
   onCoinFlip: { result: 'heads' | 'tails' };
 }

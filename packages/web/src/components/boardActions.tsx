@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import {
+  attacksAvailableTo,
   canAttack,
   canAttackFromBench,
   canPlayObject,
@@ -13,6 +14,7 @@ import {
   getEffectiveATK,
   getObjectCard,
   getTerrainCard,
+  type AttackDef,
   type CharacterInstance,
   type GameState,
   type PlayerId,
@@ -82,19 +84,27 @@ export function effectiveATK(state: GameState, characterInstanceId: string, base
 }
 
 /**
+ * Les attaques qu'un personnage en jeu peut réellement déclarer : celles de sa carte, plus
+ * celle qu'il a empruntée ("Livre de Chrollo"). Même point d'entrée que le serveur -- lire
+ * `getCharacterCard(...).attacks` en direct raterait l'empruntée, qui est justement la
+ * seule que le moteur autoriserait alors.
+ */
+export function liveAttacks(state: GameState, characterInstanceId: string): AttackDef[] {
+  try {
+    return attacksAvailableTo(state, characterInstanceId);
+  } catch {
+    return []; // vue caviardée : mieux vaut ne rien proposer qu'une action que le serveur refuserait
+  }
+}
+
+/**
  * Les attaques d'un personnage en jeu, avec les deux nombres. Sert autant au panneau de
  * commandes qu'à la fiche et à la carte : les cartes à dégâts évolutifs (Guts, Hulk,
  * Mundo, Sukuna sous Autel...) affichent une valeur imprimée qui n'est plus la bonne dès
  * le deuxième tour, et le joueur n'avait aucun moyen de lire la vraie.
  */
 export function attackReadouts(state: GameState, char: CharacterInstance): AttackReadout[] {
-  let def;
-  try {
-    def = getCharacterCard(char.cardId);
-  } catch {
-    return [];
-  }
-  return def.attacks.map((attack) => ({
+  return liveAttacks(state, char.instanceId).map((attack) => ({
     id: attack.id,
     name: attack.name,
     base: attack.baseATK,
@@ -161,7 +171,7 @@ export function attackOptions(state: GameState, you: PlayerId, conn: GameConnect
     const def = getCharacterCard(char.cardId);
     const benched = player.activeCharacterInstanceId !== attackerId;
 
-    return def.attacks.map((attack) => {
+    return liveAttacks(state, attackerId).map((attack) => {
       // ATK effectif, pas la valeur imprimée : buffs, debuffs et passives cumulatives
       // atterrissent ici, et le joueur n'avait aucun moyen de voir le nombre qu'il allait
       // réellement infliger.

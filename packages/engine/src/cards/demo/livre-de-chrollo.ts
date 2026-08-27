@@ -1,0 +1,127 @@
+import type { AttackDef, EffectContext, TerrainCardDef } from '../types.js';
+import type { PlayerId } from '../../types.js';
+import { getCharacterCard, listCards } from '../registry.js';
+import { randomInt } from '../../rng.js';
+
+const DURATION_TURNS = 3;
+/**
+ * Le prêt tient exactement le tour de son bénéficiaire. Le statut est posé pendant
+ * `onTurnStart`, qui passe AVANT `tickStatusesAtTurnStart` (turn.ts) : d'où le `+1` des
+ * statuts bloquants, sans quoi il serait décompté et retiré avant que le joueur ne joue.
+ * `ticksOnBench` parce que le prêt suit le personnage même s'il finit au banc dans la
+ * foulée -- une durée gelée là-bas ressortirait intacte des tours plus tard.
+ */
+const LOAN_REMAINING_TURNS = 2;
+
+interface Offer {
+  cardId: string;
+  attackId: string;
+}
+
+/**
+ * L'attaque proposée ce tour-ci, tirée une seule fois par manche et rangée dans le `data`
+ * libre du terrain : « La même attaque est proposée aux deux joueurs pendant le tour ».
+ * `state.turnNumber` n'avance qu'au retour du joueur qui ouvre la manche (turn.ts), il
+ * identifie donc exactement le tour de jeu que les deux camps partagent.
+ */
+function offerOfTheTurn(ctx: EffectContext): Offer | undefined {
+  const terrain = ctx.getTerrain(ctx.sourceInstanceId);
+  const data = terrain.data;
+  const cardId = data?.['cardId'];
+  const attackId = data?.['attackId'];
+  if (data?.['turnNumber'] === ctx.state.turnNumber && typeof cardId === 'string' && typeof attackId === 'string') {
+    return { cardId, attackId };
+  }
+
+  const pool: Offer[] = [];
+  for (const card of listCards()) {
+    if (card.type !== 'character') continue;
+    for (const attack of card.attacks) pool.push({ cardId: card.id, attackId: attack.id });
+  }
+  if (pool.length === 0) return undefined;
+
+  const drawn = pool[randomInt(ctx.state.rng, pool.length)]!;
+  terrain.data = { ...data, turnNumber: ctx.state.turnNumber, cardId: drawn.cardId, attackId: drawn.attackId };
+  return drawn;
+}
+
+function attackOf(offer: Offer): AttackDef | undefined {
+  try {
+    return getCharacterCard(offer.cardId).attacks.find((a) => a.id === offer.attackId);
+  } catch {
+    return undefined;
+  }
+}
+
+export const livreDeChrollo: TerrainCardDef = {
+  type: 'terrain',
+  id: 'livre-de-chrollo',
+  name: 'Livre de Chrollo',
+  description: `Chrollo prête son livre aux joueurs. Chaque tour, au début du tour : une attaque au hasard parmi l'entièreté des attaques du jeu est proposée aux joueurs.
+Le joueur peut décider d'accepter le livre de Chrollo et prendre ce qui est offert.
+Il ne pourra alors utiliser que cette attaque pendant ce tour. La même attaque est proposée aux deux joueurs pendant le tour.`,
+  durationTurns: DURATION_TURNS,
+  abilities: [
+    {
+      id: 'livre-de-chrollo-pret',
+      name: 'Le prêt',
+      kind: 'passive',
+      description:
+        "L'attaque empruntée est portée par le personnage actif du moment, avec son propre ATK effectif, et repart avec lui s'il quitte le poste actif.",
+      trigger: 'onTurnStart',
+      condition(ctx) {
+        const playerId = ctx.event?.playerId;
+        if (!playerId) return false;
+        // Le décompte du terrain tombe juste après ce `onTurnStart` et seulement pendant
+        // les tours de son possesseur (zones.tickTerrainAtTurnStart) : lui prêter une
+        // attaque pour un terrain qui disparaît dans la seconde n'aurait aucun sens.
+        // L'adversaire, lui, a toujours un tour complet devant lui.
+        if (playerId !== ctx.ownerId) return true;
+        const remaining = ctx.getTerrain(ctx.sourceInstanceId).remainingTurns;
+        return remaining === undefined || remaining > 1;
+      },
+      async execute(ctx) {
+        const playerId = ctx.event?.playerId as PlayerId | undefined;
+        if (!playerId) return;
+        const active = ctx.getActive(playerId);
+        if (!active) return;
+
+        const offer = offerOfTheTurn(ctx);
+        if (!offer) return;
+        const attack = attackOf(offer);
+        if (!attack) return;
+        const lender = getCharacterCard(offer.cardId).name;
+
+        // « Refuser » en tête : un prompt laissé sans réponse est résolu par la première
+        // option (defaultChoiceAnswer), et accepter ferme toutes les attaques du joueur --
+        // ce n'est pas un cadeau qu'on peut lui imposer par son silence.
+        const answer = await ctx.chooseOptionFor(
+          playerId,
+          `Livre de Chrollo — ${attack.name} (${lender}, ${attack.baseATK} ATK) : ${attack.description}`,
+          [
+            { key: 'refuser', label: 'Refermer le livre' },
+            { key: 'accepter', label: `Emprunter ${attack.name} (seule attaque possible ce tour)` },
+          ]
+        );
+        if (answer !== 'accepter') return;
+
+        // 'borrowed-attack' : statut générique du moteur. Il ajoute l'attaque empruntée à
+        // celles du porteur (queries.ts::attacksAvailableTo) ET ferme toutes les siennes
+        // (queries.ts::canAttack) -- « il ne pourra que utiliser cette attaque ».
+        ctx.applyStatus(
+          active.instanceId,
+          {
+            statusId: 'borrowed-attack',
+            label: `Livre de Chrollo : ${attack.name}`,
+            sourcePlayerId: ctx.ownerId,
+            sourceCardInstanceId: ctx.sourceInstanceId,
+            remainingTurns: LOAN_REMAINING_TURNS,
+            ticksOnBench: true,
+            data: { cardId: offer.cardId, attackId: offer.attackId },
+          },
+          { skipEvasionRoll: true }
+        );
+      },
+    },
+  ],
+};
