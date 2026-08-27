@@ -51,6 +51,8 @@ const MAX_ENTRIES = 60;
 const EDGE = 6;
 /** En deçà, le pointeur n'a pas « glissé » : c'est un clic, avec le tremblement habituel. */
 const DRAG_THRESHOLD_PX = 4;
+/** Même seuil « petit écran » que le reste de l'app (cf. styles.css). */
+const MOBILE_QUERY = '(max-width: 760px)';
 
 function kindOf(entry: LogEntry): string | undefined {
   const kind = entry.data?.['kind'];
@@ -76,7 +78,13 @@ function clampToViewport(pos: Position, width: number, height: number): Position
  * coordonnées explicites.
  */
 export function EventLog({ log, you }: { log: LogEntry[]; you?: PlayerId }) {
-  const [minimized, setMinimized] = useState(false);
+  // Sur petit écran (mobile), le journal démarre réduit : ouvert par défaut, il couvrait
+  // une bonne partie du plateau dès la première seconde. N'affecte que la valeur initiale
+  // -- pas de ré-évaluation live au redimensionnement, volontairement, pour ne pas
+  // réduire/rouvrir le journal sous les pieds d'un joueur qui l'a déjà rouvert lui-même.
+  const [minimized, setMinimized] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(MOBILE_QUERY).matches : false
+  );
   const [pos, setPos] = useState<Position | null>(null);
   const [seenCount, setSeenCount] = useState(log.length);
   const boxRef = useRef<HTMLDivElement>(null);

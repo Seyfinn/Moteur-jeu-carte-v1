@@ -2,8 +2,8 @@ import type { CharacterCardDef } from '../types.js';
 import { getStatus } from '../../statuses.js';
 import { cardName } from '../../names.js';
 
-const GRIFFES_ATK = 40;
-const VULNERABLE_CHANCE_PERCENT = 33;
+const GRIFFES_ATK = 30;
+const VULNERABLE_CHANCE_PERCENT = 40;
 const VULNERABLE_EFFECTIVE_TURNS = 1;
 // Ciblé sur l'ennemi pendant le tour de Black Panther -> +1. Sans ça,
 // tickStatusesAtTurnStart le retirerait au tout début du tour adverse, donc avant que
@@ -11,7 +11,7 @@ const VULNERABLE_EFFECTIVE_TURNS = 1;
 // correction que le Silence de Zoé, le Désarmement de Sion/Killua).
 const VULNERABLE_REMAINING_TURNS = VULNERABLE_EFFECTIVE_TURNS + 1;
 
-const STORE_PERCENT = 50;
+const STORE_PERCENT = 40;
 /** Réserve d'énergie cinétique. Volontairement VISIBLE : le joueur doit voir ce qu'il a en banque. */
 const ENERGY_STATUS_ID = 'black-panther-kinetic-energy';
 
@@ -19,7 +19,7 @@ export const blackPanther: CharacterCardDef = {
   type: 'character',
   id: 'black-panther',
   name: 'Black Panther',
-  baseMaxHP: 340,
+  baseMaxHP: 360,
   attacks: [
     {
       id: 'griffes',

@@ -282,6 +282,16 @@ export class Room {
     }
   }
 
+  /** Un clic malheureux sur une attaque/ability : voir Match.cancelPendingChoice. */
+  handleCancelChoice(playerId: PlayerId): void {
+    if (!this.match) return;
+    const result = this.match.cancelPendingChoice(playerId);
+    if (!result.ok) {
+      const socket = this.sockets[playerId];
+      if (socket) send(socket, { type: 'error', message: result.error });
+    }
+  }
+
   /**
    * Revanche : une nouvelle partie dans le même salon, avec les mêmes noms et les mêmes
    * decks. Les deux camps doivent la demander -- la demande du premier est simplement

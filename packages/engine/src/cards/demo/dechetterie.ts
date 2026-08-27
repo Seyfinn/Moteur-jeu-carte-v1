@@ -1,4 +1,5 @@
 import type { ObjectCardDef } from '../types.js';
+import type { PlayerId } from '../../types.js';
 import { getObjectCard } from '../registry.js';
 import { randomInt } from '../../rng.js';
 
@@ -7,42 +8,49 @@ export const dechetterie: ObjectCardDef = {
   id: 'dechetterie',
   name: 'Déchetterie',
   description:
-    "Exemplaire unique. Tire 2 cartes objet au hasard dans le cimetière adverse et vous en fait choisir une : elle rejoint votre réserve, jouable normalement plus tard.",
+    'Permet de récupérer une carte objet parmi une sélection aléatoire de 5 cartes objets des 2 cimetières.',
   maxCopies: 1,
   async execute(ctx) {
+    const own = ctx.state.players[ctx.ownerId];
     const enemy = ctx.state.players[ctx.opponentId];
-    const pool = [...enemy.graveyardObjectInstanceIds];
+    const pool: Array<{ instanceId: string; ownerId: PlayerId }> = [
+      ...own.graveyardObjectInstanceIds.map((instanceId) => ({ instanceId, ownerId: ctx.ownerId })),
+      ...enemy.graveyardObjectInstanceIds.map((instanceId) => ({ instanceId, ownerId: ctx.opponentId })),
+    ];
     if (pool.length === 0) return;
 
-    const candidates: string[] = [];
-    const pickCount = Math.min(2, pool.length);
+    const candidates: Array<{ instanceId: string; ownerId: PlayerId }> = [];
+    const pickCount = Math.min(5, pool.length);
     for (let i = 0; i < pickCount; i++) {
       const idx = randomInt(ctx.state.rng, pool.length);
       candidates.push(pool[idx]!);
       pool.splice(idx, 1);
     }
 
-    const options = candidates.map((instanceId) => {
-      const obj = enemy.objects[instanceId]!;
+    const options = candidates.map(({ instanceId, ownerId }) => {
+      const obj = ctx.state.players[ownerId].objects[instanceId]!;
       // `card` : la modale affiche l'illustration réelle plutôt qu'une ligne de texte.
       return { key: instanceId, label: getObjectCard(obj.cardId).name, card: { cardId: obj.cardId, kind: 'object' as const } };
     });
     const chosenId = await ctx.chooseOption('Déchetterie : choisissez la carte objet à récupérer', options);
 
-    const stolen = enemy.objects[chosenId];
+    const chosen = candidates.find((c) => c.instanceId === chosenId);
+    if (!chosen) return;
+    const sourcePlayer = ctx.state.players[chosen.ownerId];
+    const stolen = sourcePlayer.objects[chosenId];
     if (!stolen) return;
-    const graveyardIdx = enemy.graveyardObjectInstanceIds.indexOf(chosenId);
-    if (graveyardIdx !== -1) enemy.graveyardObjectInstanceIds.splice(graveyardIdx, 1);
-    delete enemy.objects[chosenId];
+    const graveyardIdx = sourcePlayer.graveyardObjectInstanceIds.indexOf(chosenId);
+    if (graveyardIdx !== -1) sourcePlayer.graveyardObjectInstanceIds.splice(graveyardIdx, 1);
+    delete sourcePlayer.objects[chosenId];
 
     stolen.ownerId = ctx.ownerId;
     const owner = ctx.state.players[ctx.ownerId];
     owner.objects[chosenId] = stolen;
     owner.unplayedObjectInstanceIds.push(chosenId);
 
-    ctx.log(`Déchetterie : récupère ${getObjectCard(stolen.cardId).name} depuis le cimetière adverse`, {
+    ctx.log(`Déchetterie : récupère ${getObjectCard(stolen.cardId).name} depuis un cimetière`, {
       objectInstanceId: chosenId,
-      fromPlayer: ctx.opponentId,
+      fromPlayer: chosen.ownerId,
       toPlayer: ctx.ownerId,
     });
   },

@@ -3012,6 +3012,12 @@ input::placeholder {
   font-size: 1.05rem;
   margin-top: 0;
 }
+/* Un clic malheureux sur une attaque/ability : sortie de secours, à l'écart des vraies
+   réponses pour qu'on ne la confonde pas avec l'une d'elles. */
+.modal-cancel {
+  display: block;
+  margin: 14px auto 0;
+}
 .modal-options {
   display: flex;
   flex-direction: column;
@@ -3329,13 +3335,24 @@ textarea {
 
 /* Formes évoluées rattachées à une carte de base (Gon -> Gon Adulte, Kayn -> Rhaast /
    Kayn Assassin). Purement informatif : ces vignettes ne sont pas sélectionnables, elles
-   disent seulement où la carte peut mener. */
+   disent seulement où la carte peut mener. Affichées seulement au survol de la carte de
+   base sur un pointeur fin (souris) -- fixes en permanence, elles surchargeaient chaque
+   vignette du pool ; au tactile, sans survol possible, elles restent visibles tout le temps. */
 .deck-card-evolutions {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
   margin-bottom: 6px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .deck-card-evolutions {
+    display: none;
+  }
+  .tcg-card:hover .deck-card-evolutions,
+  .tcg-card:focus-within .deck-card-evolutions {
+    display: flex;
+  }
 }
 .deck-card-evolutions-label {
   font-size: 0.68rem;
@@ -3349,8 +3366,10 @@ textarea {
   gap: 6px;
   flex-wrap: wrap;
 }
-/* Vignettes réduites : elles accompagnent la carte, elles ne rivalisent pas avec elle. */
-.deck-card-evolutions-row .card-frame {
+/* Vignettes réduites : elles accompagnent la carte, elles ne rivalisent pas avec elle.
+   (Le sélecteur visait autrefois une classe `.card-frame` que le composant ne pose jamais
+   -- CardFrame rend `.tcg-card`, donc cette règle n'avait jamais réduit ces vignettes.) */
+.deck-card-evolutions-row .tcg-card {
   width: 54px;
   cursor: help;
 }
@@ -3447,6 +3466,42 @@ textarea {
     width: 100%;
     position: static;
     max-height: none;
+  }
+}
+
+/* Le deck-builder sur grand écran : au-delà de la largeur où pool et « deck actuel »
+   tiennent déjà côte à côte, tout paraissait trop petit -- panneau, cartes du pool, textes
+   d'en-tête. Volontairement scopé à `.deck-manager` : ça ne doit pas grossir les cartes du
+   plateau, qui réutilisent les mêmes classes `.tcg-card-*` ailleurs dans l'app. */
+@media (min-width: 1101px) {
+  .deck-manager {
+    max-width: 1680px;
+    font-size: 1.15rem;
+  }
+  .deck-manager-header h1 {
+    font-size: 2rem;
+  }
+  .deck-editor .tcg-card-normal {
+    width: 128px;
+  }
+  .deck-card-grid {
+    gap: 16px;
+  }
+  .deck-section-toggle h2 {
+    font-size: 1.3rem;
+  }
+  .deck-section-count {
+    font-size: 1rem;
+  }
+  .deck-selected-panel {
+    width: 340px;
+    padding: 18px;
+  }
+  .deck-selected-panel h2 {
+    font-size: 1.3rem;
+  }
+  .deck-selected-panel .tcg-card-small {
+    width: 92px;
   }
 }
 

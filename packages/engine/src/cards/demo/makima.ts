@@ -54,20 +54,33 @@ function countSeals(state: GameState, ownerId: PlayerId): number {
   return total;
 }
 
-/** Ce qui reste à sceller chez un allié : ses compétences et ses attaques pas encore prises. */
-function sealableEntries(char: CharacterInstance): { key: string; label: string }[] {
+/** Toutes les compétences et attaques d'un allié, scellées ou non. */
+function allEntries(char: CharacterInstance): { key: string; label: string }[] {
   const def = getCharacterCard(char.cardId);
-  const already = new Set(sealedIdsOf(char));
   const entries: { key: string; label: string }[] = [];
   for (const ability of def.abilities) {
-    if (already.has(ability.id)) continue;
     entries.push({ key: ability.id, label: `${ability.name} (${ability.kind === 'active' ? 'Actif' : 'Passif'})` });
   }
   for (const attack of def.attacks) {
-    if (already.has(attack.id)) continue;
     entries.push({ key: attack.id, label: `${attack.name} (ATK)` });
   }
   return entries;
+}
+
+/** Ce qui reste à sceller chez un allié : ses compétences et ses attaques pas encore prises. */
+function sealableEntries(char: CharacterInstance): { key: string; label: string }[] {
+  const already = new Set(sealedIdsOf(char));
+  return allEntries(char).filter((e) => !already.has(e.key));
+}
+
+/**
+ * Le libellé du statut affiché sur la carte : la liste des noms scellés, pas juste un
+ * compteur -- sinon le badge ne dit pas CE QUI est désactivé (bug rapporté par l'utilisateur).
+ */
+function sealedStatusLabel(char: CharacterInstance, sealedIds: string[]): string {
+  const byKey = new Map(allEntries(char).map((e) => [e.key, e.label]));
+  const names = sealedIds.map((id) => byKey.get(id) ?? id);
+  return `Scellé par Makima : ${names.join(', ')}`;
 }
 
 /** Les alliés du banc qui ont encore quelque chose à sacrifier. */
@@ -131,7 +144,7 @@ export const makima: CharacterCardDef = {
         if (hasStatus(victim, SEAL_STATUS_ID)) ctx.removeStatus(victimId, SEAL_STATUS_ID);
         ctx.applyStatus(victimId, {
           statusId: SEAL_STATUS_ID,
-          label: `Scellé par Makima (${sealedIds.length})`,
+          label: sealedStatusLabel(victim, sealedIds),
           sourcePlayerId: ctx.ownerId,
           sourceCardInstanceId: ctx.sourceInstanceId,
           // Aucun `remainingTurns` : un sacrifice ne se reprend pas, le sceau tient toute

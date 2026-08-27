@@ -12,7 +12,7 @@ import {
   rollCritical,
   rollEvasion,
 } from './queries.js';
-import { BASE_CRITICAL_CHANCE_PERCENT, BASE_EVASION_CHANCE_PERCENT } from './statuses.js';
+import { BASE_CRITICAL_CHANCE_PERCENT, BASE_EVASION_CHANCE_PERCENT, EVASION_LOCKOUT_TURNS } from './statuses.js';
 import { getStatus } from './statuses.js';
 import { chancePercent } from './rng.js';
 import { evolutionFormsOf, getCharacterCard } from './cards/registry.js';
@@ -48,6 +48,33 @@ function announceChanceRoll(
   return hit;
 }
 
+/**
+ * Whether `ownerId`'s team currently carries "Couteau dans le dos" -- the buff is applied
+ * identically to every one of the owner's characters at cast time, so any one of them
+ * having it means the whole side has it, whatever dealt this particular hit.
+ */
+function getTeamBenchDamageBonus(state: GameState, ownerId: PlayerId) {
+  const player = state.players[ownerId];
+  const ids = [player.activeCharacterInstanceId, ...player.benchCharacterInstanceIds].filter(
+    (id): id is string => id !== null
+  );
+  for (const id of ids) {
+    const status = getStatus(player.characters[id]!, 'bench-damage-bonus');
+    if (status) return status;
+  }
+  return undefined;
+}
+
+/** Display name of whatever `sourceInstanceId` is -- character, object or terrain -- for log lines that can be sourced from any of the three. */
+function sourceEntityName(state: GameState, ownerId: PlayerId, sourceInstanceId: string): string {
+  const player = state.players[ownerId];
+  const cardId =
+    player.characters[sourceInstanceId]?.cardId ??
+    player.objects[sourceInstanceId]?.cardId ??
+    player.terrains[sourceInstanceId]?.cardId;
+  return cardId ? cardName(cardId) : '';
+}
+
 export function buildEffectContext(
   state: GameState,
   sourceInstanceId: string,
@@ -81,6 +108,17 @@ export function buildEffectContext(
         roll: 'evasion',
         characterInstanceId: targetInstanceId,
         percent,
+      });
+    }
+    if (evaded) {
+      // Esquiver rend l'esquive impossible au tour suivant du porteur (voir
+      // getEvasionPercent). Posé en direct (pas ctx.applyStatus) : c'est une conséquence
+      // automatique du jet lui-même, pas un effet de carte -- elle ne se roule pas et
+      // aucune immunité ne l'arrête.
+      api.applyStatus(targetInstanceId, {
+        statusId: 'evasion-locked',
+        label: 'Ne peut plus esquiver',
+        remainingTurns: EVASION_LOCKOUT_TURNS + 1,
       });
     }
     return { evaded, percent, fromCard };
@@ -351,18 +389,23 @@ export function buildEffectContext(
         }
       }
 
-      // 'bench-damage-bonus' (e.g. "Couteau dans le dos"): the bearer's damage against
-      // the ENEMY bench is multiplied. Generic engine-recognised status, like
-      // death-ward/atk-boost -- the attacker's identity only exists at this exact point
-      // of the pipeline, so it can't live in a per-card trigger.
-      if (source && finalAmount > 0) {
-        const benchBonus = getStatus(source, 'bench-damage-bonus');
+      // 'bench-damage-bonus' (e.g. "Couteau dans le dos"): ANY damage the owner's side
+      // deals to the ENEMY bench is multiplied -- the card's text says "les dégâts
+      // infligés au banc ennemi", not "par vos personnages", so a terrain (Autel
+      // Démoniaque) or an object hitting the enemy bench counts too, not just a
+      // character's attack/ability. The buff is posed identically on every one of the
+      // owner's characters when the object resolves (see couteau-dans-le-dos.ts), so
+      // checking any one of them tells us whether the team currently has it -- independent
+      // of which kind of source is dealing *this* particular hit (`source` above is only
+      // ever a character, so it can't answer that on its own for terrain/object damage).
+      if (finalAmount > 0) {
+        const benchBonus = getTeamBenchDamageBonus(state, ownerId);
         if (benchBonus) {
           const targetOwner = findCharacterOwner(state, resolvedTargetId);
           if (targetOwner !== ownerId && state.players[targetOwner].benchCharacterInstanceIds.includes(resolvedTargetId)) {
             const multiplier = Number(benchBonus.data?.['multiplier'] ?? 2);
             finalAmount = Math.round(finalAmount * multiplier);
-            api.log(`${cardName(source.cardId)} frappe dans le dos : dégâts au banc x${multiplier}`, { kind: 'info', sourceInstanceId, targetInstanceId: resolvedTargetId, amount: finalAmount });
+            api.log(`${sourceEntityName(state, ownerId, sourceInstanceId)} frappe dans le dos : dégâts au banc x${multiplier}`, { kind: 'info', sourceInstanceId, targetInstanceId: resolvedTargetId, amount: finalAmount });
           }
         }
       }
@@ -512,6 +555,9 @@ export function buildEffectContext(
     },
     createObject(cardId, forPlayerId) {
       return api.createObject(forPlayerId ?? ownerId, cardId);
+    },
+    createTerrain(cardId, forPlayerId) {
+      return api.createTerrain(forPlayerId ?? ownerId, cardId);
     },
 
     async playObjectImmediately(cardId, forPlayerId) {

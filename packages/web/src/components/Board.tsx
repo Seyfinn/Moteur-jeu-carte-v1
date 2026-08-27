@@ -445,8 +445,12 @@ export function Board({ conn }: { conn: GameConnection }) {
   const [localError, setLocalError] = useState<string | null>(null);
 
   const pendingChoice = state.pendingChoice;
-  const choiceTargeting = useBoardTargeting(state, you, pendingChoice, (choiceId, selected) =>
-    conn.answerChoice(choiceId, { kind: 'select-characters', selected })
+  const choiceTargeting = useBoardTargeting(
+    state,
+    you,
+    pendingChoice,
+    (choiceId, selected) => conn.answerChoice(choiceId, { kind: 'select-characters', selected }),
+    conn.cancelChoice
   );
 
   const myTurn = state.activePlayerId === you;
@@ -693,6 +697,7 @@ export function Board({ conn }: { conn: GameConnection }) {
           choice={pendingChoice}
           deadline={conn.choiceDeadline}
           onAnswer={(answer) => conn.answerChoice(pendingChoice.id, answer)}
+          onCancel={pendingChoice.cancellable ? conn.cancelChoice : undefined}
         />
       )}
       {pendingChoice && pendingChoice.playerId !== you && (

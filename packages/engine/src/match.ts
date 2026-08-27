@@ -76,6 +76,19 @@ export type PlayerAction =
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
+/**
+ * Thrown into a suspended `ctx.choose*` await by `Match.cancelPendingChoice` to unwind the
+ * in-flight action's `execute()` immediately, instead of letting it keep running against
+ * state that was just replaced out from under it. Caught by the same generic error handler
+ * `applyAction` already has for any other exception -- distinguished only so that handler
+ * can skip logging a spurious "Erreur pendant l'action" for a deliberate cancel.
+ */
+class ActionCancelledError extends Error {
+  constructor() {
+    super('Action annulée par le joueur');
+  }
+}
+
 function createPlayerState(id: PlayerId, displayName: string, roster: RosterConfig): PlayerState {
   const characters: Record<string, CharacterInstance> = {};
   for (const cardId of roster.characterCardIds) {
@@ -218,8 +231,23 @@ function validateChoiceAnswer(spec: ChoiceSpec, answer: ChoiceAnswer): string | 
 export class Match {
   readonly state: GameState;
   private resolvers = new Map<string, (answer: ChoiceAnswer) => void>();
+  private rejecters = new Map<string, (err: Error) => void>();
   private listeners = new Set<() => void>();
   private inFlight: Promise<void> | null = null;
+  /**
+   * Deep clone of `state` taken right before the currently in-flight player action started
+   * resolving; `null` whenever there's no such action (nothing running, or the in-flight
+   * work isn't a direct response to `applyAction` -- setup's own prompts, for instance).
+   */
+  private cancellableSnapshot: GameState | null = null;
+  /**
+   * Who called `applyAction` to start the in-flight work the snapshot above belongs to.
+   * A choice is only ever `cancellable` for THIS player -- not whoever a downstream
+   * sub-prompt happens to address (e.g. Aizen's redirection asks the OPPONENT which
+   * benched ally eats the hit; that opponent didn't start the attack and must not be able
+   * to unwind it just by having their own unrelated sub-question raised).
+   */
+  private cancellableActionOwner: PlayerId | null = null;
   private api: EngineApi;
 
   private constructor(state: GameState) {
@@ -360,14 +388,57 @@ export class Match {
     const validation = this.validateAction(playerId, action);
     if (!validation.ok) return validation;
 
+    // Snapshot before a single line of the action runs: cancelPendingChoice restores this
+    // verbatim, so a use-count already recorded, damage already dealt or a message already
+    // logged before the first prompt all get undone along with everything else.
+    this.cancellableSnapshot = structuredClone(state);
+    this.cancellableActionOwner = playerId;
     this.inFlight = this.runAction(playerId, action)
       .catch((err) => {
+        if (err instanceof ActionCancelledError) return; // state was already restored synchronously
         this.api.log(`Erreur pendant l'action : ${(err as Error).message}`, { kind: 'error', error: String(err) });
       })
       .finally(() => {
         this.inFlight = null;
+        this.cancellableSnapshot = null;
+        this.cancellableActionOwner = null;
         this.notify();
       });
+    return { ok: true };
+  }
+
+  /**
+   * Annule l'action en cours tant qu'elle attend encore une réponse de son propre auteur :
+   * remet l'état exactement comme avant qu'elle ne démarre (compteurs d'utilisation, dégâts
+   * déjà infligés, journal compris) et fait échouer la coroutine suspendue plutôt que de la
+   * laisser reprendre sur un état qui vient de changer sous ses pieds -- la plupart des
+   * cartes lisent `undefined`/`[]` d'un choix et rendent aussitôt (`if (!targetId) return`),
+   * mais c'est bien l'exception qui garantit qu'aucune ne peut continuer à muter quoi que ce
+   * soit après l'annulation.
+   */
+  cancelPendingChoice(playerId: PlayerId): ActionResult {
+    const pending = this.state.pendingChoice;
+    if (!pending) return { ok: false, error: 'Aucun choix en attente' };
+    if (pending.playerId !== playerId) return { ok: false, error: "Ce choix n'est pas le vôtre" };
+    if (!this.cancellableSnapshot || this.cancellableActionOwner !== playerId) {
+      return { ok: false, error: 'Cette action ne peut plus être annulée' };
+    }
+
+    const reject = this.rejecters.get(pending.id);
+    if (!reject) return { ok: false, error: 'Choix déjà répondu' };
+    this.resolvers.delete(pending.id);
+    this.rejecters.delete(pending.id);
+
+    // Remplace le CONTENU de l'objet en place, sans réaffecter `this.state` : buildApi() et
+    // tout le reste du moteur ont fermé leurs closures sur cette référence précise, donc un
+    // nouvel objet ne serait vu par personne.
+    const snapshot = this.cancellableSnapshot;
+    const mutableState = this.state as unknown as Record<string, unknown>;
+    for (const key of Object.keys(this.state)) delete mutableState[key];
+    Object.assign(this.state, snapshot);
+
+    reject(new ActionCancelledError());
+    this.notify();
     return { ok: true };
   }
 
@@ -395,6 +466,7 @@ export class Match {
     if (pending) {
       const resolve = this.resolvers.get(pending.id);
       this.resolvers.delete(pending.id);
+      this.rejecters.delete(pending.id);
       state.pendingChoice = undefined;
       resolve?.(defaultChoiceAnswer(pending.spec));
     }
@@ -414,6 +486,7 @@ export class Match {
     const resolve = this.resolvers.get(choiceId);
     if (!resolve) return { ok: false, error: 'Choix déjà répondu' };
     this.resolvers.delete(choiceId);
+    this.rejecters.delete(choiceId);
     this.state.pendingChoice = undefined;
     resolve(answer);
     this.notify();
@@ -428,10 +501,16 @@ export class Match {
       throw new Error('A choice is already pending -- card effects must await prompts sequentially');
     }
     const id = randomUUID();
-    this.state.pendingChoice = { id, playerId, spec };
+    this.state.pendingChoice = {
+      id,
+      playerId,
+      spec,
+      cancellable: this.cancellableSnapshot !== null && this.cancellableActionOwner === playerId,
+    };
     this.notify();
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       this.resolvers.set(id, resolve);
+      this.rejecters.set(id, reject);
     });
   }
 
@@ -894,6 +973,10 @@ export class Match {
       heal(targetInstanceId, amount) {
         if (!api.isOnBoard(targetInstanceId)) return;
         const target = findCharacter(state, targetInstanceId);
+        // 'unhealable' (Marque de Mahito) : aucun soin n'a plus d'effet sur le porteur, y
+        // compris son côté "guérit le saignement" -- un soin qui ne peut rien restaurer ne
+        // devrait pas non plus couper un bleed en cours.
+        if (statusesMod.isUnhealable(target)) return;
         const boosted = evaluateTransform(state, 'getIncomingHealAmount', { targetInstanceId }, amount);
         const finalAmount = Math.max(0, boosted);
         if (finalAmount <= 0) return;
@@ -1083,6 +1166,15 @@ export class Match {
         player.objects[instanceId] = { instanceId, cardId, ownerId };
         player.unplayedObjectInstanceIds.push(instanceId);
         api.log(`${playerName(state, ownerId)} récupère une nouvelle carte objet`, { kind: 'gain-object', instanceId, cardId }, ownerId);
+        return instanceId;
+      },
+
+      createTerrain(ownerId, cardId) {
+        const instanceId = randomUUID();
+        const player = state.players[ownerId];
+        player.terrains[instanceId] = { instanceId, cardId, ownerId };
+        player.unplayedTerrainInstanceIds.push(instanceId);
+        api.log(`${playerName(state, ownerId)} récupère une nouvelle carte terrain`, { kind: 'gain-terrain', instanceId, cardId }, ownerId);
         return instanceId;
       },
 

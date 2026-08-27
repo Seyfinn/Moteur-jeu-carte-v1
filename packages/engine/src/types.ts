@@ -76,7 +76,35 @@ export type BuiltinStatusId =
    * sur l'allié désigné au lieu de l'ennemi, puis son tour se termine aussitôt. Le statut
    * est consommé dans tous les cas, y compris quand la cible n'est plus là pour l'encaisser.
    */
-  | 'forced-attack';
+  | 'forced-attack'
+  /**
+   * "Marque" de Mahito : plus aucun `heal()` n'a d'effet sur le porteur, définitivement
+   * (jamais consommé -- seule une résurrection, qui vide tous les statuts, y met fin).
+   * Générique et indépendant de la survie de la carte qui l'a posée : un modifier sur
+   * Mahito elle-même cesserait d'être scanné si elle mourait (cf. getInPlaySources),
+   * ce qui ne colle pas à un texte qui promet "plus jamais". Ne bloque que le soin
+   * ordinaire -- `raiseMaxHP`/`addShield` ne sont pas des `heal()` et restent permis.
+   */
+  | 'unhealable'
+  /**
+   * Posé automatiquement par le moteur sur quiconque esquive avec succès (base ou statut
+   * `evasive`) : ramène son esquive à 0% (avant tout modifier `getEvasionPercent` porté par
+   * une carte -- un taux inné comme L'Infini de Gojo reste donc intact) pendant
+   * `EVASION_LOCKOUT_TURNS` tour(s) de son propre tour. Jamais posé par une carte.
+   */
+  | 'evasion-locked'
+  /**
+   * "Absorption Vitale" : si le porteur est toujours vivant quand ce statut expire (au bout
+   * de `remainingTurns`, convention `+1` des statuts bloquants), le moteur le tue puis
+   * propose à son propriétaire de ranimer sur son banc, à la moitié de ses HP max, un AUTRE
+   * personnage de son cimetière (le porteur qui vient de mourir est exclu du choix). Sans
+   * effet si le cimetière est vide. Résolu dans statuses.ts (le seul endroit qui peut à la
+   * fois attendre un choix et enchaîner KO + résurrection) plutôt que via `onExpire`, qui ne
+   * sait que poser un AUTRE statut, pas exécuter une action. Générique et réutilisable par
+   * n'importe quelle future carte au même principe ("tiens N tours, puis sacrifie-toi pour
+   * en ranimer un autre").
+   */
+  | 'sacrifice-revive';
 
 export interface RaiseMaxHPOptions {
   /**
@@ -117,7 +145,8 @@ export interface DealDamageOptions {
    * Engine-internal: the player whose effect is dealing this damage -- set even for
    * self-inflicted damage and for object/terrain effects, where `attackerInstanceId` is
    * absent. Lets a card tell hostile damage from a cost its own side is paying.
-   * Undefined for status ticks (poison/burn/bleed), which have no acting side.
+   * For status ticks (poison/burn/bleed), only `attackerInstanceId` is set (from the
+   * status's `sourceCardInstanceId`, when known) -- this one stays undefined there.
    */
   attackerOwnerId?: PlayerId;
   /**
@@ -343,6 +372,13 @@ export interface PendingChoice {
   id: string;
   playerId: PlayerId;
   spec: ChoiceSpec;
+  /**
+   * Whether `Match.cancelPendingChoice` can currently abort this prompt and roll back
+   * whatever player action triggered it (an accidental ability/attack click). False for a
+   * choice that isn't the direct result of an `applyAction` call the player just made --
+   * e.g. picking a starting active character during setup, or an opponent's own prompt.
+   */
+  cancellable: boolean;
 }
 
 // ---------------------------------------------------------------------------

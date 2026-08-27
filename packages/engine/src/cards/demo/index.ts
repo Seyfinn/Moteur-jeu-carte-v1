@@ -341,6 +341,7 @@ export const DEMO_ROSTER: RosterConfig = {
     attaqueClone.id,
     offrandeDuDieuDeLaMort.id,
     critPlus.id,
+    absorptionVitale.id,
   ],
   terrainCardIds: [
     hopital.id,
@@ -352,7 +353,6 @@ export const DEMO_ROSTER: RosterConfig = {
     autelDemoniaque.id,
     pointFaible.id,
     protectionDivine.id,
-    absorptionVitale.id,
     arene.id,
   ],
 };

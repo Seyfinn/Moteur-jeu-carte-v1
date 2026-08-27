@@ -68,7 +68,7 @@ export function Lobby({
           <div className="lobby-brand">
             <span className="lobby-brand-mark">⚔</span>
             <div className="lobby-brand-text">
-              <h1>Moteur de jeu de cartes</h1>
+              <h1>Jeu de Cartes</h1>
               <p className="lobby-tagline">Créez un salon et partagez le code avec votre adversaire.</p>
             </div>
           </div>

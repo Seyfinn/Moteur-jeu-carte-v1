@@ -99,6 +99,16 @@ const STATUS_VISUALS: Record<string, StatusVisual> = {
   'chrollo-livre-ouvert': { className: 'fx-mark', particles: 'mark', tone: 'debuff' },
   // « Vision du Futur » d'Aki : des dégâts en réserve pour sa prochaine attaque.
   'aki-vision-bonus': { className: 'fx-atk-boost', particles: 'arrow-up', tone: 'buff' },
+  // « Marque » de Mahito : plus jamais soignable. Même symbole que les autres marques
+  // (coeur-acier-mark, light-yagami-marque-nom) -- « repéré », mais permanent, pas armé.
+  unhealable: { className: 'fx-mark', particles: 'mark', tone: 'debuff' },
+  // Posé par le moteur après une esquive réussie : le même symbole « interdit » que
+  // disarmed, puisque c'est la même idée -- une action momentanément fermée.
+  'evasion-locked': { className: 'fx-disarmed', particles: 'ban', tone: 'debuff' },
+  // « Absorption Vitale » : le compte à rebours avant sacrifice + résurrection d'un autre
+  // personnage. Même symbole que les autres marques d'échéance (coeur-acier-mark,
+  // light-yagami-marque-nom) -- « condamné », pas encore résolu.
+  'sacrifice-revive': { className: 'fx-mark', particles: 'mark', tone: 'debuff' },
 };
 
 const DEFAULT_VISUAL: StatusVisual = { className: 'fx-generic', particles: 'sparkle', tone: 'neutral' };

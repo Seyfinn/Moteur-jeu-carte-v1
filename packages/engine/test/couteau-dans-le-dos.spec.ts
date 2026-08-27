@@ -52,4 +52,25 @@ describe('"Couteau dans le dos" mechanism (bench-damage doubling from any of the
 
     expect(match.state.players[defenderId].characters[defenderBenchId]!.damage).toBe(20);
   });
+
+  it('also doubles damage from a source that is not a character (a terrain or an object)', async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: FX_ROSTER, p2Roster: FX_ROSTER, seed: 72 },
+      { p1ActiveCardId: 'fx-striker', p2ActiveCardId: 'fx-tank' }
+    );
+    const attackerId = match.state.activePlayerId;
+    const defenderId = attackerId === 'p1' ? 'p2' : 'p1';
+    // The buff is posed on every one of the owner's characters, not tied to whichever one
+    // happens to deal this particular hit -- so it must still apply when the hit comes
+    // from a terrain/object effect, whose `sourceInstanceId` isn't a character at all.
+    const anyAlly = match.state.players[attackerId].characters[match.state.players[attackerId].activeCharacterInstanceId!]!;
+    anyAlly.statuses.push({ statusId: 'bench-damage-bonus', label: 'Couteau dans le dos', remainingTurns: 2, data: { multiplier: 2 } });
+
+    const defenderBenchId = match.state.players[defenderId].benchCharacterInstanceIds[0]!;
+    const api = match['api'] as EngineApi;
+    const ctx = api.buildEffectContext('not-a-character-instance-id', attackerId, undefined, 'other');
+    await ctx.dealDamage(defenderBenchId, 10, { skipEvasionRoll: true });
+
+    expect(match.state.players[defenderId].characters[defenderBenchId]!.damage).toBe(20);
+  });
 });

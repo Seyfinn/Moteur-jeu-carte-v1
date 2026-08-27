@@ -23,8 +23,8 @@ const OWNER_ROSTER: RosterConfig = {
   terrainCardIds: [],
 };
 
-describe('Caméléon -- swaps an unplayed object for a fresh one, capped by remaining copy allowance', () => {
-  it("destroys the chosen card and creates the replacement, refusing a replacement already at its copy limit", async () => {
+describe('Caméléon -- transforms in place into a card from hand and immediately resolves its effect', () => {
+  it('becomes the chosen card and plays it, refusing a target already at its copy limit', async () => {
     const match = await createReadyMatch(
       { p1Name: 'A', p2Name: 'B', p1Roster: OWNER_ROSTER, p2Roster: FX_ROSTER, seed: 110 },
       { p2ActiveCardId: 'fx-tank' }
@@ -33,33 +33,34 @@ describe('Caméléon -- swaps an unplayed object for a fresh one, capped by rema
     if (match.state.activePlayerId !== ownerSide) await drive(match, 'p2', { kind: 'pass' });
     const player = match.state.players[ownerSide];
 
-    const chainesId = Object.values(player.objects).find((o) => o.cardId === 'chaines')!.instanceId;
     const cameleonId = Object.values(player.objects).find((o) => o.cardId === 'cameleon')!.instanceId;
-    const potionForceId = Object.values(player.objects).find((o) => o.cardId === 'potion-force')!.instanceId;
-    const potionCountBefore = Object.values(player.objects).filter((o) => o.cardId === 'potion-force').length;
-    expect(potionCountBefore).toBe(1);
-
-    // Only "chaines" is left as a removal candidate (cameleon itself is auto-removed
-    // from this same pool by handlePlayObject before its own execute() runs). For the
-    // replacement choice, "cameleon" would also be eligible and sort first -- steer
-    // explicitly onto "potion-force" instead, to exercise a real swap to a different card.
-    player.unplayedObjectInstanceIds = player.unplayedObjectInstanceIds.filter((id) => id !== potionForceId);
+    const chainesId = Object.values(player.objects).find((o) => o.cardId === 'chaines')!.instanceId;
 
     await drive(match, ownerSide, { kind: 'play-object', objectInstanceId: cameleonId }, (choice) => {
-      if (choice.spec.kind === 'select-option' && choice.spec.options.some((o) => o.key === 'potion-force')) {
+      if (choice.spec.kind === 'select-option') {
+        // "chaines" (maxCopies 1) is already at its cap with this very instance -- it must
+        // not be offered. "potion-force" (maxCopies 2, currently 1 owned) is under its cap.
+        expect(choice.spec.options.some((o) => o.key === 'chaines')).toBe(false);
+        expect(choice.spec.options.some((o) => o.key === 'potion-force')).toBe(true);
         return { kind: 'select-option', key: 'potion-force' };
       }
+      // The nested "select-characters" prompt from potion-force's own execute (which
+      // character to equip) is left to the default answer (first legal candidate).
       return defaultAnswer(choice);
     });
 
-    // "chaines" (maxCopies 1) removed -- but the instance still exists (now in the
-    // graveyard), so its total copy count is unchanged: it must NOT be offered back
-    // as a replacement. "potion-force" (maxCopies 2, currently 1) is under its cap,
-    // so it's the only eligible candidate and gets auto-picked by defaultAnswer.
-    expect(player.graveyardObjectInstanceIds).toContain(chainesId);
-    const potionCountAfter = Object.values(player.objects).filter((o) => o.cardId === 'potion-force').length;
-    expect(potionCountAfter).toBe(2);
-    const chainesCountAfter = Object.values(player.objects).filter((o) => o.cardId === 'chaines').length;
-    expect(chainesCountAfter).toBe(1); // still just the one, now-graveyarded, instance
+    // Caméléon's own instance transformed in place -- same instanceId, new cardId.
+    const transformed = player.objects[cameleonId]!;
+    expect(transformed.cardId).toBe('potion-force');
+
+    // potion-force's effect actually resolved: some character got equipped and boosted.
+    expect(transformed.attachedToCharacterInstanceId).toBeDefined();
+    const equipped = player.characters[transformed.attachedToCharacterInstanceId!]!;
+    expect(equipped.attachedObjectInstanceIds).toContain(cameleonId);
+    expect(equipped.statuses.some((s) => s.statusId === 'atk-boost')).toBe(true);
+
+    // "chaines" was never touched by any of this -- still sitting untouched in hand.
+    expect(player.objects[chainesId]!.cardId).toBe('chaines');
+    expect(player.unplayedObjectInstanceIds).toContain(chainesId);
   });
 });

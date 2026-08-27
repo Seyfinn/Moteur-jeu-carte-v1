@@ -7,6 +7,7 @@ import {
   BURN_DAMAGE,
   CRITICAL_STATUS_CHANCE_PERCENT,
   EVASIVE_STATUS_CHANCE_PERCENT,
+  EVASION_LOCKOUT_TURNS,
   POISON_FLAT_DAMAGE,
   POISON_PERCENT_OF_MAX_HP,
   VULNERABLE_DAMAGE_BONUS_PERCENT,
@@ -82,7 +83,7 @@ const ENTRIES: GlossaryEntry[] = [
     name: 'Désarmé',
     icon: '⊘',
     tone: 'debuff',
-    text: "Empêche d'effectuer une attaque.",
+    text: "Empêche le personnage d'effectuer une attaque.",
   },
   {
     id: 'silence-active',
@@ -117,7 +118,7 @@ const ENTRIES: GlossaryEntry[] = [
     name: 'Esquive',
     icon: '»',
     tone: 'buff',
-    text: `${EVASIVE_STATUS_CHANCE_PERCENT}% de chance d'esquiver.`,
+    text: `${EVASIVE_STATUS_CHANCE_PERCENT}% de chance d'esquiver, annulant totalement l'attaque ennemi.`,
   },
   {
     id: 'extra-attack',
@@ -145,6 +146,20 @@ const ENTRIES: GlossaryEntry[] = [
     text:
       "Au début de son prochain tour, le personnage retourne son attaque contre un allié désigné " +
       'de son propre banc, puis son tour se termine aussitôt.',
+  },
+  {
+    id: 'unhealable',
+    name: 'Marqué (Mahito)',
+    icon: '❖',
+    tone: 'debuff',
+    text: "Plus aucun soin n'a d'effet sur le personnage, définitivement.",
+  },
+  {
+    id: 'evasion-locked',
+    name: 'Ne peut plus esquiver',
+    icon: '⊘',
+    tone: 'debuff',
+    text: `Posé automatiquement après une esquive réussie : 0% de chance d'esquiver pendant ${EVASION_LOCKOUT_TURNS} tour(s).`,
   },
 ];
 

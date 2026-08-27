@@ -34,9 +34,9 @@ describe('recharge d\'ability au banc', () => {
 
     const cooldown = () =>
       match.state.players[owner].characters[chopperId]!.statuses.find((s) => s.statusId === 'chopper-traque-cooldown');
-    // 3 tours de rechargement + 1 : le statut est posé pendant le tour de son porteur, donc
+    // 6 tours de rechargement + 1 : le statut est posé pendant le tour de son porteur, donc
     // le tic du début de ce même tour est déjà passé (cf. CLAUDE.md).
-    expect(cooldown()?.remainingTurns).toBe(4);
+    expect(cooldown()?.remainingTurns).toBe(7);
 
     const passRound = async () => {
       await drive(match, match.state.activePlayerId, { kind: 'pass' });
@@ -45,10 +45,9 @@ describe('recharge d\'ability au banc', () => {
 
     await passRound();
     expect(match.state.players[owner].benchCharacterInstanceIds).toContain(chopperId);
-    expect(cooldown()?.remainingTurns).toBe(3);
+    expect(cooldown()?.remainingTurns).toBe(6);
 
-    await passRound();
-    await passRound();
+    for (let i = 0; i < 5; i++) await passRound();
     expect(cooldown()?.remainingTurns).toBe(1);
 
     await passRound();

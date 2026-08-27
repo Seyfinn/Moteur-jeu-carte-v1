@@ -1,9 +1,10 @@
 import type { CharacterCardDef } from '../types.js';
 import { getObjectCard, getTerrainCard } from '../registry.js';
 import { getStatus, hasStatus } from '../../statuses.js';
-import type { PlayerId } from '../../types.js';
+import { findCharacter } from '../../queries.js';
 
 const ATTACK_BASE_ATK = 40;
+const FORGE_ATK_BONUS = 40;
 const LOCK_EFFECTIVE_TURNS = 3;
 // +1 : voir katarina.ts / sion.ts -- statut posé sur SOI-MÊME pendant son propre
 // tour, le tick de statuses.ts décrémente PUIS filtre avant que le joueur actif ne
@@ -12,12 +13,12 @@ const LOCK_REMAINING_TURNS = LOCK_EFFECTIVE_TURNS + 1;
 
 const MATERIALS_STATUS_ID = 'ornn-materials-gathered';
 const LOCK_TRACKER_STATUS_ID = 'ornn-forge-lock';
+const FORGE_COUNT_STATUS_ID = 'ornn-forges-completed';
 
 interface RecoverableCard {
   instanceId: string;
   cardId: string;
   kind: 'object' | 'terrain';
-  ownerId: PlayerId;
   name: string;
 }
 
@@ -31,7 +32,12 @@ export const ornn: CharacterCardDef = {
       id: 'recuperation-de-materiaux',
       name: 'Récupération de matériaux',
       baseATK: ATTACK_BASE_ATK,
-      description: `Inflige ${ATTACK_BASE_ATK} dégâts à l'actif adverse. Débloque Living Forge pour le reste de la partie.`,
+      // Texte carte : "Inflige 40 dégâts supplémentaires par objet forgé." -- l'ATK de base
+      // (40) est affiché implicitement comme les autres attaques (même convention que
+      // Soraka/Guts), le texte ne décrit que le bonus par forge réussie (modifier
+      // `getEffectiveATK` ci-dessous). Le déverrouillage de Living Forge, lui, est déjà
+      // annoncé par le texte de la passive "Matériaux".
+      description: `Inflige ${FORGE_ATK_BONUS} dégâts supplémentaires par objet forgé.`,
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (target) {
@@ -50,7 +56,7 @@ export const ornn: CharacterCardDef = {
       id: 'materiaux',
       name: 'Matériaux',
       kind: 'passive',
-      description: 'Ornn ne peut pas utiliser Living Forge sans avoir utilisé "Récupération de matériaux" au moins une fois auparavant.',
+      description: 'Ornn ne peut pas utiliser "Living Forge" sans avoir utilisé son attaque "Récupération de matériaux" auparavant.',
       // Purement descriptive : la restriction vit dans le condition() de Living Forge.
       async execute() {},
     },
@@ -58,7 +64,7 @@ export const ornn: CharacterCardDef = {
       id: 'living-forge',
       name: 'Living Forge',
       kind: 'active',
-      description: `Ornn se bloque sur le poste actif pendant ${LOCK_EFFECTIVE_TURNS} tours (ne peut ni attaquer ni switch). S'il est toujours vivant à l'issue, récupère un objet ou terrain au choix parmi les 4 cimetières.`,
+      description: `Ornn construit un objet et est bloqué sur le poste actif pendant ${LOCK_EFFECTIVE_TURNS} tours, il ne peut ni attaquer ni switch. Si il est toujours vivant après les ${LOCK_EFFECTIVE_TURNS} tours, récupérer un objet ou terrain au choix parmi les 2 cimetières.`,
       condition(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);
         if (!hasStatus(self, MATERIALS_STATUS_ID)) return false;
@@ -88,7 +94,7 @@ export const ornn: CharacterCardDef = {
       id: 'living-forge-reward',
       name: 'Living Forge (récompense)',
       kind: 'passive',
-      description: "S'il survit aux 3 tours de Living Forge, récupère un objet ou terrain au choix parmi les 4 cimetières.",
+      description: "S'il survit aux 3 tours de Living Forge, récupère un objet ou terrain au choix parmi les 2 cimetières.",
       trigger: 'onTurnStart',
       // Doit rester déclenchable même si Ornn a quitté le poste actif entre-temps (le
       // "chained" de Living Forge bloque désormais aussi les switchs forcés, mais une
@@ -106,31 +112,37 @@ export const ornn: CharacterCardDef = {
         return getStatus(self, LOCK_TRACKER_STATUS_ID)?.remainingTurns === 1;
       },
       async execute(ctx) {
+        // Chaque forge réussie (Ornn a survécu aux 3 tours, qu'il y ait ou non quelque
+        // chose à récupérer ensuite) alimente en permanence le bonus de dégâts de
+        // "Récupération de matériaux" -- même schéma que le Berserk de Guts.
+        const self = ctx.getCharacter(ctx.sourceInstanceId);
+        const existingCount = getStatus(self, FORGE_COUNT_STATUS_ID);
+        const forges = Number(existingCount?.data?.['count'] ?? 0) + 1;
+        if (existingCount) ctx.removeStatus(ctx.sourceInstanceId, FORGE_COUNT_STATUS_ID);
+        ctx.applyStatus(ctx.sourceInstanceId, {
+          statusId: FORGE_COUNT_STATUS_ID,
+          label: `Objets forgés (${forges})`,
+          sourceCardInstanceId: ctx.sourceInstanceId,
+          hidden: true, // compteur interne : le palier est déjà annoncé dans le journal
+          data: { count: forges },
+        });
+        ctx.log(
+          `Living Forge : forge réussie, "Récupération de matériaux" inflige désormais +${forges * FORGE_ATK_BONUS} dégâts`,
+          { characterInstanceId: ctx.sourceInstanceId, forges }
+        );
+
+        // Seulement les cimetières d'Ornn lui-même : plus d'accès aux cimetières adverses.
+        const player = ctx.state.players[ctx.ownerId];
         const candidates: RecoverableCard[] = [];
-        for (const playerId of ['p1', 'p2'] as PlayerId[]) {
-          const player = ctx.state.players[playerId];
-          for (const objectInstanceId of player.graveyardObjectInstanceIds) {
-            const obj = player.objects[objectInstanceId];
-            if (!obj) continue;
-            candidates.push({
-              instanceId: objectInstanceId,
-              cardId: obj.cardId,
-              kind: 'object',
-              ownerId: playerId,
-              name: getObjectCard(obj.cardId).name,
-            });
-          }
-          for (const terrainInstanceId of player.graveyardTerrainInstanceIds) {
-            const terrain = player.terrains[terrainInstanceId];
-            if (!terrain) continue;
-            candidates.push({
-              instanceId: terrainInstanceId,
-              cardId: terrain.cardId,
-              kind: 'terrain',
-              ownerId: playerId,
-              name: getTerrainCard(terrain.cardId).name,
-            });
-          }
+        for (const objectInstanceId of player.graveyardObjectInstanceIds) {
+          const obj = player.objects[objectInstanceId];
+          if (!obj) continue;
+          candidates.push({ instanceId: objectInstanceId, cardId: obj.cardId, kind: 'object', name: getObjectCard(obj.cardId).name });
+        }
+        for (const terrainInstanceId of player.graveyardTerrainInstanceIds) {
+          const terrain = player.terrains[terrainInstanceId];
+          if (!terrain) continue;
+          candidates.push({ instanceId: terrainInstanceId, cardId: terrain.cardId, kind: 'terrain', name: getTerrainCard(terrain.cardId).name });
         }
         if (candidates.length === 0) return;
 
@@ -140,41 +152,42 @@ export const ornn: CharacterCardDef = {
           // plutôt qu'une simple ligne de texte.
           candidates.map((c) => ({
             key: c.instanceId,
-            label: `${c.name} (${c.kind === 'object' ? 'objet' : 'terrain'}${c.ownerId === ctx.ownerId ? '' : ', ennemi'})`,
+            label: `${c.name} (${c.kind === 'object' ? 'objet' : 'terrain'})`,
             card: { cardId: c.cardId, kind: c.kind },
           }))
         );
         const chosen = candidates.find((c) => c.instanceId === chosenKey);
         if (!chosen) return;
 
-        const fromPlayer = ctx.state.players[chosen.ownerId];
-        const toPlayer = ctx.state.players[ctx.ownerId];
-
         if (chosen.kind === 'object') {
-          const idx = fromPlayer.graveyardObjectInstanceIds.indexOf(chosen.instanceId);
-          if (idx !== -1) fromPlayer.graveyardObjectInstanceIds.splice(idx, 1);
-          const obj = fromPlayer.objects[chosen.instanceId]!;
-          delete fromPlayer.objects[chosen.instanceId];
-          obj.ownerId = ctx.ownerId;
-          toPlayer.objects[chosen.instanceId] = obj;
-          toPlayer.unplayedObjectInstanceIds.push(chosen.instanceId);
+          const idx = player.graveyardObjectInstanceIds.indexOf(chosen.instanceId);
+          if (idx !== -1) player.graveyardObjectInstanceIds.splice(idx, 1);
+          player.unplayedObjectInstanceIds.push(chosen.instanceId);
         } else {
-          const idx = fromPlayer.graveyardTerrainInstanceIds.indexOf(chosen.instanceId);
-          if (idx !== -1) fromPlayer.graveyardTerrainInstanceIds.splice(idx, 1);
-          const terrain = fromPlayer.terrains[chosen.instanceId]!;
-          delete fromPlayer.terrains[chosen.instanceId];
-          terrain.ownerId = ctx.ownerId;
+          const idx = player.graveyardTerrainInstanceIds.indexOf(chosen.instanceId);
+          if (idx !== -1) player.graveyardTerrainInstanceIds.splice(idx, 1);
+          const terrain = player.terrains[chosen.instanceId]!;
           terrain.remainingTurns = undefined; // redéfini normalement à la prochaine pose
           terrain.data = undefined; // et sans l'état accumulé par sa vie précédente (marques, cibles suivies...)
-          toPlayer.terrains[chosen.instanceId] = terrain;
-          toPlayer.unplayedTerrainInstanceIds.push(chosen.instanceId);
+          player.unplayedTerrainInstanceIds.push(chosen.instanceId);
         }
 
         ctx.log(`Living Forge : récupère ${chosen.name}`, {
           instanceId: chosen.instanceId,
           kind: chosen.kind,
-          fromPlayer: chosen.ownerId,
         });
+      },
+    },
+  ],
+  modifiers: [
+    {
+      query: 'getEffectiveATK',
+      transform(ctx, current) {
+        if (ctx.query['characterInstanceId'] !== ctx.sourceInstanceId) return current;
+        const char = findCharacter(ctx.state, ctx.sourceInstanceId);
+        const record = getStatus(char, FORGE_COUNT_STATUS_ID);
+        const forges = Number(record?.data?.['count'] ?? 0);
+        return (current as number) + forges * FORGE_ATK_BONUS;
       },
     },
   ],

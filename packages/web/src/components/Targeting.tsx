@@ -27,9 +27,18 @@ export interface BoardTargeting {
    * action de plus à faire faire. Un vrai choix du moteur, lui, se valide toujours.
    */
   immediate?: boolean;
+  /**
+   * Vrai quand ce choix vient de l'action que CE joueur vient de lancer et peut donc
+   * encore être défait en entier (voir `Match.cancelPendingChoice`) -- pas seulement vidé
+   * localement. Faux pour un choix qui ne se raccroche à aucune action annulable (le choix
+   * de l'actif de départ en mise en place, une sous-question posée à l'adversaire...).
+   */
+  cancellable: boolean;
   /** Clic sur une carte : retient la cible, ou la retire si elle l'était déjà. */
   toggle(instanceId: string): void;
   clear(): void;
+  /** Présent seulement quand `cancellable` : annule l'action entière côté moteur. */
+  cancelAction?: () => void;
   confirm(): void;
 }
 
@@ -57,6 +66,10 @@ export function switchTargeting(
     options: new Set(benchIds),
     selected: [],
     immediate: true,
+    // Rien n'est encore envoyé au moteur tant que le joueur n'a pas cliqué une carte du
+    // banc : `clear`/`onCancel` back out for free, il n'y a pas besoin d'un vrai
+    // cancelPendingChoice ici.
+    cancellable: false,
     toggle: (instanceId) => {
       if (benchIds.includes(instanceId)) onPick(instanceId);
     },
@@ -79,7 +92,8 @@ export function useBoardTargeting(
   state: GameState,
   you: PlayerId,
   pendingChoice: PendingChoice | undefined,
-  answer: (choiceId: string, selected: string[]) => void
+  answer: (choiceId: string, selected: string[]) => void,
+  cancelAction: () => void
 ): BoardTargeting | null {
   const [selected, setSelected] = useState<string[]>([]);
   const choiceId = pendingChoice?.id;
@@ -116,8 +130,10 @@ export function useBoardTargeting(
     // La sélection est filtrée à la volée : un personnage retenu puis tué par un effet qui
     // se résout entre-temps ne doit pas partir dans la réponse.
     selected: selected.filter((id) => options.has(id) && onBoard.has(id)),
+    cancellable: pendingChoice.cancellable,
     toggle,
     clear: () => setSelected([]),
+    cancelAction: pendingChoice.cancellable ? cancelAction : undefined,
     confirm: () => answer(choiceId, selected.filter((id) => options.has(id))),
   };
 }
@@ -199,7 +215,13 @@ export function TargetingBar({
         <button className="primary" disabled={!enough} onClick={targeting.confirm}>
           Valider ce choix
         </button>
-        <button onClick={targeting.clear} disabled={selected.length === 0}>
+        {/* Un clic malheureux sur une attaque/ability doit pouvoir revenir en arrière, pas
+            seulement vider la sélection en cours -- d'où le vrai cancel dès qu'il est
+            disponible, même sans rien avoir encore sélectionné. */}
+        <button
+          onClick={targeting.cancelAction ?? targeting.clear}
+          disabled={selected.length === 0 && !targeting.cancelAction}
+        >
           Annuler
         </button>
       </div>

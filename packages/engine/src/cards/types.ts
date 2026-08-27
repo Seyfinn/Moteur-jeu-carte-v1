@@ -252,6 +252,8 @@ export interface EffectContext {
 
   /** Creates a brand-new object instance of `cardId`, added straight to that player's unplayed pool. `forPlayerId` defaults to the effect's own owner -- pass the opponent for a card that hands THEM something. Returns the new instance id. */
   createObject(cardId: string, forPlayerId?: PlayerId): string;
+  /** Same as `createObject`, but for a terrain card: added straight to that player's unplayed pool, `remainingTurns`/`data` left unset (stamped normally the next time it's actually played). Returns the new instance id. */
+  createTerrain(cardId: string, forPlayerId?: PlayerId): string;
   /**
    * Joue gratuitement une carte objet (créée à la volée) : effet résolu tout de suite,
    * puis cimetière -- ou accrochée au personnage si l'objet est un équipement. Ne consomme

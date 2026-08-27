@@ -122,36 +122,31 @@ export const locke: CharacterCardDef = {
       name: 'Purgatoire',
       kind: 'passive',
       description: `Si l'ennemi au poste actif est à ${PURGATOIRE_THRESHOLD_PERCENT}% de ses hp max ou moins, l'execute immédiatement.`,
-      // "immédiatement" veut dire dès que l'actif adverse passe sous le seuil suite à une
-      // instance de dégâts, quelle qu'en soit la cause (Marteau, un allié de Locke, un tic
-      // de poison/brûlure/saignement -- tout passe par afterDamage, voir match.ts).
+      // "immédiatement" veut dire dès que l'actif adverse SE RETROUVE sous le seuil, peu
+      // importe comment : un coup classique (Marteau, un allié de Locke, un tic de
+      // poison/brûlure/saignement -- afterDamage), un switch/remplacement qui amène un
+      // survivant déjà sous le seuil (onSwitch/onBecomeActive, ex: rescapé d'une AoE), ou
+      // une perte de HP max pure comme une valeur lock qui ne déclenche aucun `afterDamage`
+      // (rattrapée au prochain `onTurnStart`, filet de sécurité qui tourne à chaque tour,
+      // le sien comme celui de l'adversaire). Re-vérifié depuis l'état courant à chaque
+      // déclenchement plutôt que depuis le payload de l'event : aucun de ces chemins ne
+      // dépend donc de la cause précise du passage sous le seuil.
       // usableFromBench: false (défaut) : canUseAbility exige donc que LOCKE lui-même
       // soit le personnage actif pour que Purgatoire se déclenche -- conforme au choix
       // "l'aura ne tourne que quand Locke est sorti".
-      // Angles morts assumés (un AbilityDef n'a qu'un seul `trigger` -- en ajouter un
-      // second aurait dupliqué "Purgatoire" en deux blocs identiques dans le détail de
-      // carte, voir cardDetails.tsx) :
-      //  - une perte de HP max pure (valeur lock) qui ferait passer sous le seuil sans
-      //    dégâts ne déclenche pas afterDamage ;
-      //  - un personnage du banc déjà sous le seuil (ex: survivant d'une AoE) qui devient
-      //    l'actif adverse par switch/remplacement sans subir de nouveaux dégâts à ce
-      //    moment-là n'est pas exécuté tant qu'il n'encaisse pas un nouveau coup.
-      // Dans les deux cas, Purgatoire reste "en retard d'un événement" plutôt qu'omniscient.
-      trigger: 'afterDamage',
+      trigger: ['afterDamage', 'onSwitch', 'onBecomeActive', 'onTurnStart'],
       usesPerTurn: Infinity,
       condition(ctx) {
-        const targetId = ctx.event?.data['targetInstanceId'] as string | undefined;
-        if (!targetId) return false;
-        if (ctx.isKO(targetId)) return false; // déjà mort via les dégâts classiques
         const opponentActive = ctx.getActive(ctx.opponentId);
-        if (!opponentActive || opponentActive.instanceId !== targetId) return false;
-        const target = ctx.getCharacter(targetId);
+        if (!opponentActive) return false;
+        if (ctx.isKO(opponentActive.instanceId)) return false; // déjà mort
+        const target = ctx.getCharacter(opponentActive.instanceId);
         if (hasDeathWard(target)) return false;
         const remainingHP = target.currentMaxHP - target.damage;
         return remainingHP > 0 && remainingHP <= target.currentMaxHP * (PURGATOIRE_THRESHOLD_PERCENT / 100);
       },
       async execute(ctx) {
-        const targetId = ctx.event!.data['targetInstanceId'] as string;
+        const targetId = ctx.getActive(ctx.opponentId)!.instanceId;
         ctx.log(`Purgatoire : achève ${cardName(ctx.getCharacter(targetId).cardId)}`, {
           characterInstanceId: targetId,
         });

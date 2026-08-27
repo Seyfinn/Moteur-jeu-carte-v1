@@ -49,10 +49,11 @@ describe('Ornn "Living Forge" -- gated by Matériaux, then a delayed 3-turn surv
     if (match.state.activePlayerId !== ornnSide) await drive(match, enemySide, { kind: 'pass' });
     const ornnId = match.state.players[ornnSide].activeCharacterInstanceId!;
 
-    // Plant a discarded object in the enemy's graveyard for Ornn to later recover.
+    // Plant a discarded object in Ornn's own graveyard for him to later recover (Living
+    // Forge no longer reaches into the enemy's graveyards).
     const stashedId = 'fixture-stashed-object';
-    match.state.players[enemySide].objects[stashedId] = { instanceId: stashedId, cardId: 'fx-heal-object', ownerId: enemySide };
-    match.state.players[enemySide].graveyardObjectInstanceIds.push(stashedId);
+    match.state.players[ornnSide].objects[stashedId] = { instanceId: stashedId, cardId: 'fx-heal-object', ownerId: ornnSide };
+    match.state.players[ornnSide].graveyardObjectInstanceIds.push(stashedId);
 
     await drive(match, ornnSide, { kind: 'attack', characterInstanceId: ornnId, attackId: 'recuperation-de-materiaux' }); // ends his turn
     await drive(match, enemySide, { kind: 'pass' }); // back to Ornn's turn
@@ -72,13 +73,14 @@ describe('Ornn "Living Forge" -- gated by Matériaux, then a delayed 3-turn surv
     }
 
     // 4th of his own turns: the lock has expired and the survival reward fires,
-    // auto-picking the only candidate (the stashed enemy object) via defaultAnswer.
+    // auto-picking the only candidate (the stashed object in his own graveyard) via
+    // defaultAnswer.
     await drive(match, enemySide, { kind: 'pass' });
 
     expect(match.state.players[ornnSide].objects[stashedId]).toBeDefined();
     expect(match.state.players[ornnSide].objects[stashedId]!.ownerId).toBe(ornnSide);
     expect(match.state.players[ornnSide].unplayedObjectInstanceIds).toContain(stashedId);
-    expect(match.state.players[enemySide].graveyardObjectInstanceIds).not.toContain(stashedId);
+    expect(match.state.players[ornnSide].graveyardObjectInstanceIds).not.toContain(stashedId);
 
     const attackAllowedAgain = match.applyAction(ornnSide, {
       kind: 'attack',
