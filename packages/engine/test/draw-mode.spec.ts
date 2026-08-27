@@ -184,7 +184,15 @@ describe('Mode Pioche -- banc, Main Personnage et secours', () => {
     const attacker = match.state.activePlayerId;
     const defender: PlayerId = attacker === 'p1' ? 'p2' : 'p1';
     const attackerActive = match.state.players[attacker].activeCharacterInstanceId!;
-    const attackId = getCharacterCard(match.state.players[attacker].characters[attackerActive]!.cardId).attacks[0]!.id;
+    // Whichever character the draw pile hands the attacker might not deal damage on its
+    // own attack (e.g. Yumeko's "Mise a Fond" is 0 ATK until a separate bet is won) --
+    // swap in a known, reliably-damaging attacker. The point of this test is the rescue
+    // mechanic that fires on KO, not a specific matchup. A raw `api.dealDamage` call would
+    // dodge this, but it can't safely trigger the mandatory-replacement choice below: that
+    // choice can only be answered by code running *after* the same internal await, so
+    // calling it outside the normal action path (`drive`) would deadlock.
+    match.state.players[attacker].characters[attackerActive]!.cardId = 'guts';
+    const attackId = getCharacterCard('guts').attacks[0]!.id;
 
     // Le défenseur n'a plus que son actif : ni banc, ni Main Personnage.
     const victim = match.state.players[defender];

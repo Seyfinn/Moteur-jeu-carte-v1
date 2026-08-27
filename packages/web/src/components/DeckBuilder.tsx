@@ -182,7 +182,6 @@ function PoolCardTile({
                 e.stopPropagation();
                 onRemove();
               }}
-              disabled={count === 0}
             >
               −
             </button>

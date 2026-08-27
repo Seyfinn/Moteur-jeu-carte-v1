@@ -145,6 +145,7 @@ function parseClientMessage(raw: unknown): ClientMessage | null {
     }
     case 'forfeit':
     case 'rematch':
+    case 'cancel-choice':
       return message as unknown as ClientMessage;
     case 'submit-draft': {
       const roster = message['roster'];
@@ -303,6 +304,12 @@ function handleMessage(socket: WebSocket, message: ClientMessage): void {
       const conn = connections.get(socket);
       if (!conn) return sendError(socket, 'Not in a room');
       rooms.get(conn.roomCode)?.handleAnswerChoice(conn.playerId, message.choiceId, message.answer);
+      return;
+    }
+    case 'cancel-choice': {
+      const conn = connections.get(socket);
+      if (!conn) return sendError(socket, 'Not in a room');
+      rooms.get(conn.roomCode)?.handleCancelChoice(conn.playerId);
       return;
     }
   }

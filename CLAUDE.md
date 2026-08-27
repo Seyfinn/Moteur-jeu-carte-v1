@@ -412,7 +412,7 @@ autour de l'appel à `evolveCharacter` -- il n'y a volontairement pas de champ d
   'onAbilityUsed', 'onAttackDeclared']` et un `switch` sur `ctx.event.name` dans `execute`.
   Surtout **pas** une capacité par event : la carte afficherait la même ligne trois fois.
 - **Attaque marquée « peut crit »** : convention maison, ça veut dire **33 %** de chance de
-  critique (contre 2 % de base). S'implémente avec le statut générique `critical` et son
+  critique (contre 5 % de base). S'implémente avec le statut générique `critical` et son
   `data.percent`, posé juste avant `dealDamage` et retiré juste après (cf. Levi, Killua) --
   en laissant tranquille un `critical` que le personnage porterait déjà.
 - **Override d'une règle générale** (fréquence, ciblage du banc, ATK effectif, limite
@@ -421,9 +421,11 @@ autour de l'appel à `evolveCharacter` -- il n'y a volontairement pas de champ d
   carte est en jeu (voir `queries.ts` et le README pour la liste des `QueryName`).
 - **Taux d'esquive / de critique innés** (ex: L'Infini de Gojo, Black Flash de Todo,
   Execution de Caitlyn) : modifier `getEvasionPercent` / `getCriticalPercent` renvoyant
-  `Math.max(current, MON_POURCENTAGE)`. Base : 5 % d'esquive, 2 % de critique ; les
-  statuts `evasive`/`critical` montent la base à 33 % (`critical` accepte un
-  `data.percent` pour un one-shot, cf. Godspeed de Killua à 100 %).
+  `Math.max(current, MON_POURCENTAGE)`. Base : 1 % d'esquive, 5 % de critique ; le statut
+  `evasive` monte l'esquive à 20 %, `critical` monte le critique à 33 % (`critical` accepte
+  un `data.percent` pour un one-shot, cf. Godspeed de Killua à 100 %). Ces bases sont celles
+  lues par `getEvasionPercent`/`getCriticalPercent` **avant** un modifier de carte : un taux
+  inné comme celui de Gojo (`Math.max`) reste donc intact face à `evasion-locked` ci-dessous.
 - ⚠️ **Un modifier qui porte le texte d'une capacité PASSIVE doit déclarer
   `silencedByPassive: true`.** Un modifier vit tant que la carte est en jeu et ne passe
   jamais par `canUseAbility` : sans ce champ, une passive codée en modifier (L'Infini de
@@ -440,8 +442,22 @@ autour de l'appel à `evolveCharacter` -- il n'y a volontairement pas de champ d
   - `damage-reflect` (`data: { percent, objectInstanceId? }`) : renvoie un pourcentage
     du prochain coup à l'attaquant, une seule fois, puis se consomme (et détruit l'objet
     porteur s'il est indiqué). Ex : Miroir de Renvoi.
-  - `bench-damage-bonus` (`data.multiplier`, défaut 2) : les dégâts du porteur contre le
-    **banc adverse** sont multipliés. Ex : Couteau dans le dos.
+  - `bench-damage-bonus` (`data.multiplier`, défaut 2) : les dégâts infligés au **banc
+    adverse** par le CAMP du porteur sont multipliés — pas seulement ceux du porteur
+    lui-même : le pipeline de dégâts vérifie si n'importe quel personnage du camp porte
+    le statut, donc ça couvre aussi bien une attaque/capacité qu'un effet de terrain ou
+    d'objet du même camp. Ex : Couteau dans le dos (posé sur tous ses personnages),
+    Autel Démoniaque (terrain) en profite déjà sans rien coder de plus.
+  - `unhealable` : plus aucun `heal()` n'a d'effet sur le porteur, définitivement — y
+    compris le nettoyage de bleed qu'un soin fait normalement. Jamais consommé (seule
+    une résurrection, qui vide tous les statuts, y met fin) et indépendant de la survie
+    de la carte qui l'a posé (contrairement à un modifier, qui cesserait d'être scanné
+    si son porteur mourait). Ex : Marque de Mahito.
+  - `evasion-locked` : jamais posé par une carte -- le moteur lui-même l'applique à
+    quiconque esquive avec succès (`effect-context.ts::rollEvasionAnnounced`), pour
+    `EVASION_LOCKOUT_TURNS` tour(s) de son propre tour (`+1`, comme un statut bloquant).
+    Ramène l'esquive à 0 % avant tout modifier de carte, donc un taux inné (L'Infini de
+    Gojo) n'est pas affecté. Une carte n'a jamais besoin de le poser ou de le lire.
   - `vulnerable` : le porteur subit +50% sur **chaque** instance de dégâts reçue
     (`VULNERABLE_DAMAGE_BONUS_PERCENT`), tics de poison/brûlure/saignement compris.
     L'amplification a lieu avant les réductions de dégâts des cartes, n'est jamais

@@ -44,6 +44,9 @@ export const BUILTIN_STATUS_IDS: ReadonlySet<string> = new Set<BuiltinStatusId>(
   'extra-attack',
   'crit-streak',
   'forced-attack',
+  'unhealable',
+  'evasion-locked',
+  'sacrifice-revive',
 ]);
 
 /** Human labels for the three damage-over-time statuses, used in the event log. */
@@ -54,11 +57,17 @@ const STATUS_TICK_LABELS: Record<string, string> = {
 };
 
 /** Innate rates every character has on their attacks/abilities, with no status required. */
-export const BASE_EVASION_CHANCE_PERCENT = 5;
-export const BASE_CRITICAL_CHANCE_PERCENT = 2;
+export const BASE_EVASION_CHANCE_PERCENT = 1;
+export const BASE_CRITICAL_CHANCE_PERCENT = 5;
 /** Rates while the 'evasive'/'critical' status is present -- replaces the base rate, doesn't stack with it. */
-export const EVASIVE_STATUS_CHANCE_PERCENT = 33;
+export const EVASIVE_STATUS_CHANCE_PERCENT = 20;
 export const CRITICAL_STATUS_CHANCE_PERCENT = 33;
+/**
+ * 'evasion-locked': a successful dodge (base rate or 'evasive' status) makes evasion
+ * impossible (0%, before any card's own getEvasionPercent modifier) for this many of the
+ * bearer's own turns. Blocking-type status, so it's applied with +1 (see CLAUDE.md).
+ */
+export const EVASION_LOCKOUT_TURNS = 1;
 
 export function hasStatus(char: CharacterInstance, statusId: string): boolean {
   return char.statuses.some((s) => s.statusId === statusId);
@@ -78,6 +87,10 @@ export function isDisarmed(char: CharacterInstance): boolean {
 
 export function isEvasive(char: CharacterInstance): boolean {
   return hasStatus(char, 'evasive');
+}
+
+export function isEvasionLocked(char: CharacterInstance): boolean {
+  return hasStatus(char, 'evasion-locked');
 }
 
 export function isCritical(char: CharacterInstance): boolean {
@@ -110,6 +123,16 @@ export function getVulnerableDamageMultiplier(char: CharacterInstance): number {
  */
 export function hasDeathWard(char: CharacterInstance): boolean {
   return hasStatus(char, 'death-ward');
+}
+
+/**
+ * "Marque" de Mahito : `heal()` ordinaire (match.ts) devient un no-op tant que ce statut
+ * est présent. Générique et engine-recognized comme death-ward/vulnerable, plutôt qu'un
+ * modifier porté par Mahito -- qui cesserait d'être scanné si elle mourait (voir
+ * `unhealable` dans types.ts), ce qui ne collerait pas à un texte qui promet "plus jamais".
+ */
+export function isUnhealable(char: CharacterInstance): boolean {
+  return hasStatus(char, 'unhealable');
 }
 
 /**
@@ -276,12 +299,15 @@ export async function tickStatusesAtTurnStart(state: GameState, playerId: Player
           // this specific tick into an unhealable max-HP loss instead -- re-checked
           // fresh every tick, so it only applies for whichever ticks currently
           // qualify (see cards/demo/muzan.ts).
+          // Attribue le tic à qui a posé le statut (`sourceCardInstanceId`) : un kill par
+          // poison/brûlure/bleed doit nommer son tueur comme n'importe quel autre kill,
+          // sinon les passives "sur kill" (Mangeur de démons de Chainsaw Man...) le ratent.
           if (status.statusId === 'poison' && api.poisonTicksAsValeurLock(instanceId)) {
             api.log(`${cardName(char.cardId)} : le poison (Sang Maudit) retire ${amount} HP max`, { kind: 'status-tick', characterInstanceId: instanceId, statusId: status.statusId, amount });
-            await api.applyValeurLock(instanceId, amount);
+            await api.applyValeurLock(instanceId, amount, { attackerInstanceId: status.sourceCardInstanceId });
           } else {
             api.log(`${cardName(char.cardId)} subit ${amount} dégâts de ${STATUS_TICK_LABELS[status.statusId] ?? status.statusId}`, { kind: 'status-tick', characterInstanceId: instanceId, statusId: status.statusId, amount });
-            await api.dealDamage(instanceId, amount, { source: status.statusId });
+            await api.dealDamage(instanceId, amount, { source: status.statusId, attackerInstanceId: status.sourceCardInstanceId });
           }
         }
 
@@ -316,6 +342,12 @@ export async function tickStatusesAtTurnStart(state: GameState, playerId: Player
       if (typeof objectInstanceId === 'string') {
         api.destroyObject(objectInstanceId);
       }
+      // 'sacrifice-revive' : le porteur a tenu jusqu'au bout -- il meurt, et son propriétaire
+      // ranime un AUTRE personnage de son cimetière (Absorption Vitale). L'objet qui a posé
+      // ce statut est déjà envoyé au cimetière par koCharacter (équipement du porteur).
+      if (status.statusId === 'sacrifice-revive' && api.isOnBoard(instanceId)) {
+        await resolveSacrificeRevive(state, playerId, instanceId, api);
+      }
       await api.emitEvent({
         name: 'onStatusExpired',
         playerId,
@@ -323,4 +355,26 @@ export async function tickStatusesAtTurnStart(state: GameState, playerId: Player
       });
     }
   }
+}
+
+async function resolveSacrificeRevive(state: GameState, playerId: PlayerId, instanceId: string, api: EngineApi): Promise<void> {
+  await api.koCharacter(instanceId);
+  const player = state.players[playerId];
+  const graveyard = player.graveyardCharacterInstanceIds.filter((id) => id !== instanceId);
+  if (graveyard.length === 0) return;
+  // `card` : la modale affiche l'illustration réelle plutôt qu'une ligne de texte.
+  const options = graveyard.map((id) => {
+    const cardId = player.characters[id]?.cardId ?? '';
+    return { key: id, label: cardName(cardId), card: { cardId, kind: 'character' as const } };
+  });
+  const answer = await api.chooseFor(playerId, {
+    kind: 'select-option',
+    prompt: 'Absorption Vitale : choisissez le personnage à ranimer sur votre banc',
+    options,
+  });
+  if (answer.kind !== 'select-option') return;
+  const chosenChar = player.characters[answer.key];
+  if (!chosenChar) return;
+  const reviveHP = Math.floor(chosenChar.currentMaxHP / 2);
+  await api.reviveCharacter(answer.key, reviveHP, 'bench');
 }

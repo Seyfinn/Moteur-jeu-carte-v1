@@ -1,14 +1,14 @@
 import type { ObjectCardDef } from '../types.js';
 
 /**
- * Interdit de jouer "Attaque cloné" quand un de ces trois personnages est au poste actif :
+ * Interdit de jouer "Attaque cloné" quand un de ces personnages est au poste actif :
  * l'interaction est jugée trop puissante (Locke double-attaquerait avec Marteau, un clou de
  * plus par tour vers l'explosion garantie ; Light Yagami et Yumeko profitent chacun d'une
- * seconde chance de déclencher leur propre effet sur-coup dans le même tour). Blocage
- * volontairement au niveau de la carte (liste en dur), pas un modifier générique : rien
- * d'autre dans le moteur n'a besoin de refuser "par personnage nommé".
+ * seconde chance de déclencher leur propre effet sur-coup dans le même tour ; Kayn de même).
+ * Blocage volontairement au niveau de la carte (liste en dur), pas un modifier générique :
+ * rien d'autre dans le moteur n'a besoin de refuser "par personnage nommé".
  */
-const BANNED_ACTIVE_CARD_IDS = ['locke', 'light-yagami', 'yumeko'];
+const BANNED_ACTIVE_CARD_IDS = ['locke', 'light-yagami', 'yumeko', 'kayn'];
 
 const EXTRA_ATTACKS = 1;
 const SECOND_ATTACK_DAMAGE_PERCENT = 50;

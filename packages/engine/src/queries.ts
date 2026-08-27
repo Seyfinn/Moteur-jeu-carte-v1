@@ -13,6 +13,7 @@ import {
   hasStatus,
   isDisarmed,
   isEvasive,
+  isEvasionLocked,
   isSilencedActive,
   isSilencedPassive,
   isStunned,
@@ -382,17 +383,20 @@ export function getCriticalMultiplier(state: GameState, characterInstanceId: str
 }
 
 /**
- * Esquive: every character has a base 5% chance to fully negate an incoming
+ * Esquive: every character has a base chance to fully negate an incoming
  * attack/ability (damage or status application), no status required. The
- * 'evasive' status raises that to 33% while it's present (it replaces the
- * base rate rather than stacking with it), and any card in play can push it
- * further with a `getEvasionPercent` modifier -- which is how a permanent innate
+ * 'evasive' status raises that while it's present (it replaces the base rate
+ * rather than stacking with it), and any card in play can push it further
+ * with a `getEvasionPercent` modifier -- which is how a permanent innate
  * esquive (Gojo's "L'Infini", Kakashi's Sharingan) is declared, so it holds from
  * the very first hit of the game and survives a revive, with no status to
- * (re-)apply. Never consumed on a successful roll.
+ * (re-)apply. Never consumed on a successful roll -- but a successful dodge now
+ * poses 'evasion-locked' on the bearer (effect-context.ts), which zeroes this
+ * BASE (still overridable by a card's own modifier, same as Gojo/Kakashi above)
+ * for their next turn.
  */
 export function getEvasionPercent(state: GameState, char: CharacterInstance): number {
-  const base = isEvasive(char) ? EVASIVE_STATUS_CHANCE_PERCENT : BASE_EVASION_CHANCE_PERCENT;
+  const base = isEvasionLocked(char) ? 0 : isEvasive(char) ? EVASIVE_STATUS_CHANCE_PERCENT : BASE_EVASION_CHANCE_PERCENT;
   const percent = Number(
     evaluateTransform(state, 'getEvasionPercent', { characterInstanceId: char.instanceId }, base)
   );

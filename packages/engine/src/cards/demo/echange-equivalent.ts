@@ -1,5 +1,6 @@
 import type { ObjectCardDef } from '../types.js';
-import { getObjectCard, getTerrainCard } from '../registry.js';
+import { getObjectCard, getTerrainCard, listCards } from '../registry.js';
+import { DECK_LIMITS } from '../../deck.js';
 
 const SACRIFICE_COUNT = 2;
 
@@ -7,7 +8,7 @@ export const echangeEquivalent: ObjectCardDef = {
   type: 'object',
   id: 'echange-equivalent',
   name: 'Echange équivalent',
-  description: `Sacrifiez ${SACRIFICE_COUNT} cartes de votre réserve non jouée (objets ou terrains, au choix). En échange, récupérez une carte objet ou terrain au choix dans votre cimetière.`,
+  description: `Sacrifier ${SACRIFICE_COUNT} cartes, objets ou terrain. En échange, vous permet de récupérer une carte objet ou terrain parmi toutes les cartes du jeu.`,
   async execute(ctx) {
     const player = ctx.state.players[ctx.ownerId];
 
@@ -63,43 +64,43 @@ export const echangeEquivalent: ObjectCardDef = {
       }
     }
 
-    const recoverPool = [
-      ...player.graveyardObjectInstanceIds.map((instanceId) => ({
-        instanceId,
-        cardId: player.objects[instanceId]!.cardId,
-        kind: 'object' as const,
-        name: getObjectCard(player.objects[instanceId]!.cardId).name,
-      })),
-      ...player.graveyardTerrainInstanceIds.map((instanceId) => ({
-        instanceId,
-        cardId: player.terrains[instanceId]!.cardId,
-        kind: 'terrain' as const,
-        name: getTerrainCard(player.terrains[instanceId]!.cardId).name,
-      })),
-    ];
+    // "Parmi toutes les cartes du jeu" : n'importe quel objet ou terrain enregistré, pas
+    // seulement ceux déjà possédés -- une copie toute neuve est fabriquée (createObject /
+    // createTerrain), toujours plafonnée par le nombre max d'exemplaires du deck (même
+    // règle que Caméléon : une carte déjà à son plafond, dont un exemplaire unique dès sa
+    // première copie, n'est pas proposée).
+    const recoverPool: Array<{ cardId: string; kind: 'object' | 'terrain'; name: string }> = [];
+    for (const def of listCards()) {
+      if (def.type !== 'object' && def.type !== 'terrain') continue;
+      const maxCopies = def.maxCopies ?? DECK_LIMITS.maxCopiesPerCard;
+      const currentCopies =
+        def.type === 'object'
+          ? Object.values(player.objects).filter((o) => o.cardId === def.id).length
+          : Object.values(player.terrains).filter((t) => t.cardId === def.id).length;
+      if (currentCopies < maxCopies) {
+        recoverPool.push({ cardId: def.id, kind: def.type, name: def.name });
+      }
+    }
     if (recoverPool.length === 0) return;
 
-    const recoveredId = await ctx.chooseOption(
-      'Echange équivalent : choisissez la carte objet ou terrain à récupérer de votre cimetière',
+    const recoveredCardId = await ctx.chooseOption(
+      'Echange équivalent : choisissez la carte objet ou terrain à récupérer',
+      // `card` : la modale affiche l'illustration réelle plutôt qu'une ligne de texte.
       recoverPool.map((c) => ({
-        key: c.instanceId,
+        key: c.cardId,
         label: `${c.name} (${c.kind === 'object' ? 'objet' : 'terrain'})`,
         card: { cardId: c.cardId, kind: c.kind },
       }))
     );
-    const recovered = recoverPool.find((c) => c.instanceId === recoveredId);
+    const recovered = recoverPool.find((c) => c.cardId === recoveredCardId);
     if (!recovered) return;
 
     if (recovered.kind === 'object') {
-      const idx = player.graveyardObjectInstanceIds.indexOf(recoveredId);
-      if (idx !== -1) player.graveyardObjectInstanceIds.splice(idx, 1);
-      player.unplayedObjectInstanceIds.push(recoveredId);
+      ctx.createObject(recovered.cardId);
     } else {
-      const idx = player.graveyardTerrainInstanceIds.indexOf(recoveredId);
-      if (idx !== -1) player.graveyardTerrainInstanceIds.splice(idx, 1);
-      player.unplayedTerrainInstanceIds.push(recoveredId);
+      ctx.createTerrain(recovered.cardId);
     }
 
-    ctx.log(`Echange équivalent : récupère ${recovered.name}`, { instanceId: recoveredId, kind: recovered.kind });
+    ctx.log(`Echange équivalent : récupère ${recovered.name}`, { cardId: recovered.cardId, kind: recovered.kind });
   },
 };

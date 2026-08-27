@@ -117,16 +117,16 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   - Moteur : modifier `getEffectiveATK`, réévalué à chaque coup. Le bonus tombe dès que la
     brûlure expire.
 
-### Black Panther — 340 HP
+### Black Panther — 360 HP
 
-- **Griffes** (40 ATK) — *« 33% de chance d'infliger vulnérable pendant 1 tour. »*
+- **Griffes** (30 ATK) — *« 40% de chance d'infliger vulnérable pendant 1 tour. »*
   - Moteur : première carte du pool à poser `vulnerable`. `remainingTurns = 1 + 1` : posé sur
     l'ennemi pendant le tour de Black Panther, il serait sinon retiré au tout début du tour
     adverse, donc avant que Black Panther ait pu frapper une cible réellement vulnérable
     (même `+1` que le Silence de Zoé ou le Désarmement de Sion).
-  - Moteur : le jet de 33 % n'a lieu que si le coup a réellement entamé la cible (même
+  - Moteur : le jet de 40 % n'a lieu que si le coup a réellement entamé la cible (même
     convention que Sion/Killua/Chopper) — une esquive annule donc aussi le vulnérable.
-- **Energie Cinétique** (active, 1×/partie) — *« Black Panther stock 50% des dégâts qu'il
+- **Energie Cinétique** (active, 1×/partie) — *« Black Panther stock 40% des dégâts qu'il
   reçoit. Peut relacher cette énergie stocké à l'ennemi actif. Utilisable une fois. »*
   - Moteur : « Utilisable une fois » porte sur la **libération seule** (`usesPerGame: 1`).
     Le stockage, lui, tourne en permanence dès le début de partie et ne s'arrête jamais.
@@ -249,8 +249,8 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   33% de chance d'appliquer Poison pendant 1 tour. »*
   - Moteur : le jet de poison n'a lieu que si le coup n'a pas été esquivé.
 - **Traque** (active, utilisable du banc) — *« Soigne un personnage allié au choix (actif ou
-  banc) de 70 HP. Utilisable même depuis le banc. Rechargement : 3 tours après usage. »*
-  - Moteur : le rechargement est un statut de cooldown à `remainingTurns = 3 + 1` (posé sur
+  banc) de 70 HP même depuis le banc utilisable une fois tout les 6 tours. »*
+  - Moteur : le rechargement est un statut de cooldown à `remainingTurns = 6 + 1` (posé sur
     soi pendant son propre tour), pas un `usesPerGame`. Il porte `ticksOnBench: true` : la
     recharge descend même quand Chopper reste au banc — c'est bien là que la Traque se joue,
     et sans ce champ elle ne revenait jamais.
@@ -302,7 +302,10 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
 
 ### Guts — 250 HP
 
-- **Coup d'épée** (50 ATK) — *« Inflige 50 dégâts à l'actif adverse. »*
+- **Coup d'épée** (50 ATK) — *« Se soigne de 25. »*
+  - Moteur : texte carte sur l'effet secondaire seulement (même convention que Soraka) —
+    l'ATK 50 affiché inflige les dégâts, implicite. Inflige puis se soigne de 25,
+    inconditionnellement (le soin n'est pas subordonné à ce que le coup touche).
 - **Berserk** (passive, `afterDamage`, banc) — *« Tous les 100 HP que Guts perd au cours de
   la partie, "Coup d'épée" inflige 50 dégâts supplémentaires de façon permanente. »*
   - Moteur : compteur cumulé dans un statut caché (`data.count`) qui ne redescend jamais,
@@ -638,15 +641,18 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
 
 ### Locke — 250 HP
 
-- **Purgatoire** (passive, `afterDamage`) — *« Si l'ennemi au poste actif est à 10% de ses
-  hp max ou moins, l'execute immédiatement. »*
+- **Purgatoire** (passive, `afterDamage` / `onSwitch` / `onBecomeActive` / `onTurnStart`) —
+  *« Si l'ennemi au poste actif est à 10% de ses hp max ou moins, l'execute immédiatement. »*
   - Moteur : aura active uniquement quand **Locke est lui-même l'actif**
-    (`usableFromBench` non déclaré, donc `canUseAbility` l'exige). Se déclenche après
-    n'importe quelle instance de dégâts touchant l'actif adverse (attaque, ability, tic de
-    poison/brûlure/saignement), pas seulement les coups de Locke. Respecte `death-ward`
-    (Détermination). Un seul trigger (`afterDamage`) : un second trigger `onBecomeActive`
-    aurait dû être une deuxième `AbilityDef`, ce qui aurait affiché "Purgatoire" en double
-    dans le détail de carte -- angle mort assumé, voir le commentaire dans `locke.ts`.
+    (`usableFromBench` non déclaré, donc `canUseAbility` l'exige). La condition relit l'état
+    courant de l'actif adverse (pas le payload de l'event), donc elle se déclenche quelle
+    que soit la cause du passage sous le seuil : n'importe quelle instance de dégâts
+    (`afterDamage` — attaque, ability, tic de poison/brûlure/saignement, pas seulement les
+    coups de Locke), un switch/remplacement qui amène un survivant déjà sous le seuil
+    (`onSwitch`/`onBecomeActive`, ex : rescapé d'une AoE), ou une perte de HP max pure
+    (valeur lock) qui ne déclenche aucun `afterDamage` — rattrapée au `onTurnStart` suivant,
+    filet de sécurité qui tourne à chaque tour (le sien comme celui de l'adversaire).
+    Respecte `death-ward` (Détermination).
 - **Cloué** (passive, descriptive) — *« Lorsqu'un ennemi a 3 clous sur lui, Locke fait
   exploser les clous infligeant 100 dégâts + 50% hp max. »*
   - Moteur : logique réellement codée dans Marteau ci-dessous (c'est la pose du 3e clou
@@ -683,7 +689,16 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   leurs dégâts directement en réduction de HP max. »* (descriptif : la mécanique est dans
   l'`AttackDef`.)
 - **Marque** (passive) — *« Les PV retirés par Mahito ne peuvent plus jamais être récupérés,
-  par aucun soin. »* (conséquence directe du valeur lock, rien de plus dans le code.)
+  par aucun soin. »*
+  - Moteur : Paume Transfiguratrice pose le statut générique `unhealable` sur la cible dès
+    que le coup a réellement retiré du HP max (comparaison du `currentMaxHP` avant/après
+    l'appel à `dealDamage` -- pas de marque sur un coup esquivé). `unhealable` est
+    engine-recognized comme `death-ward`/`vulnerable` : `heal()` (match.ts) devient un
+    no-op complet sur le porteur (y compris le nettoyage de bleed qu'un soin fait
+    normalement), et ça survit à la mort de Mahito -- contrairement à un modifier porté
+    par sa propre carte, qui cesserait d'être scanné dès qu'elle serait KO (voir
+    `getInPlaySources`, queries.ts). N'est levé que par une résurrection, qui vide tous
+    les statuts du personnage.
 
 ### Makima — 190 HP
 
@@ -765,17 +780,28 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
 
 ### Ornn — 600 HP
 
-- **Récupération de matériaux** (40 ATK) — *« Inflige 40 dégâts à l'actif adverse. Débloque
-  Living Forge pour le reste de la partie. »* → pose un statut caché de déblocage.
-- **Matériaux** (passive) — *« Ornn ne peut pas utiliser Living Forge sans avoir utilisé
-  "Récupération de matériaux" au moins une fois auparavant. »* (descriptif ; la garde est la
+- **Récupération de matériaux** (40 ATK, scaling) — *« Inflige 40 dégâts supplémentaires par
+  objet forgé. »* → l'ATK de base (40, implicite comme les autres attaques) pose aussi le
+  statut caché de déblocage de Living Forge (texte porté par la passive "Matériaux", pas
+  répété ici). Le bonus « par objet forgé » est un modifier `getEffectiveATK` qui ajoute
+  40 par forge **réussie** (voir Living Forge (récompense) ci-dessous) — compteur permanent
+  dans un statut caché, jamais remis à zéro, même schéma que le Berserk de Guts.
+- **Matériaux** (passive) — *« Ornn ne peut pas utiliser "Living Forge" sans avoir utilisé son
+  attaque "Récupération de matériaux" auparavant. »* (descriptif ; la garde est la
   `condition()` de Living Forge.)
-- **Living Forge** (active) — *« Ornn se bloque sur le poste actif pendant 3 tours (ne peut
-  ni attaquer ni switch). S'il est toujours vivant à l'issue, récupère un objet ou terrain
-  au choix parmi les 4 cimetières. »*
-  - Moteur : le blocage est la combinaison `chained` + `disarmed` ; la récompense est un
-    passive `onTurnStart` séparé qui lit un statut caché de suivi. « 4 cimetières » = les
-    deux vôtres (objets, terrains) et les deux de l'adversaire.
+- **Living Forge** (active) — *« Ornn construit un objet et est bloqué sur le poste actif
+  pendant 3 tours, il ne peut ni attaquer ni switch. Si il est toujours vivant après les
+  3 tours, récupérer un objet ou terrain au choix parmi les 2 cimetières. »*
+  - Moteur : « construit un objet » est purement narratif — aucune carte objet n'est
+    réellement créée, seul le blocage (`chained` + `disarmed`) est posé ; la récompense est
+    un passive `onTurnStart` séparé qui lit un statut caché de suivi.
+  - « 2 cimetières » = seulement les deux d'Ornn lui-même (objets, terrains) — il n'a plus
+    accès aux cimetières adverses (avant : 4 cimetières, les deux camps).
+- **Living Forge (récompense)** (passive, `onTurnStart`) — à chaque forge réussie (Ornn
+  survit aux 3 tours de blocage, qu'il y ait ou non quelque chose à récupérer ensuite), le
+  compteur de "Récupération de matériaux" progresse de +40 dégâts de façon permanente
+  (voir ci-dessus), puis, si ses propres cimetières objet/terrain ne sont pas vides,
+  récupère la carte choisie.
   - Le choix de la récupération passe par `ctx.chooseOption` avec un `card` par option : la
     modale montre les illustrations réelles des cartes récupérables, pas une liste de noms.
 
@@ -925,12 +951,39 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
 
 ### Adrénaline Ultime
 
-*« Utilisable uniquement si ton personnage actif a au moins 150 HP restants. Réduit ses HP
+*« Utilisable uniquement si ton personnage actif a au moins 110 HP restants. Réduit ses HP
 actuels à 10 HP et multiplie par 2 les dégâts de toutes ses attaques pendant ce tour. »*
 
 - Moteur : le coût en HP est infligé avec `ignoreShield` + `ignoreDamageReduction` (sinon le
   bouclier absorbe le coût). Le `atk-multiplier` porte `ticksOnBench: true`, sinon partir au
   banc figerait le buff pour le reste de la partie.
+
+### Absorption Vitale — exemplaire unique, objet à lier
+
+*« Pendant 3 tours, empêche votre personnage actif de switch et d'utiliser ses abilities. Si
+il est encore vivant après les 3 tours, le tue, et vous permet de récupérer un personnage
+dans votre cimetière, le ramenant sur votre banc avec la moitié de ses hp. Si votre
+personnage actif meurt avant la fin des 3 tours, cette carte va au cimetière sans faire
+effet. »*
+
+- Moteur : anciennement un terrain, désormais un objet à lier (`equipment: true`,
+  `maxCopies: 1`) — s'accroche au personnage actif au moment de la pose via
+  `ctx.attachSelfTo`. `chained` (bloque le switch) et `silence-ultimate` (bloque les
+  capacités) portent désormais leur propre `remainingTurns` (3 + 1) au lieu d'être suivis
+  manuellement par un terrain : plus besoin de traquer « l'actif du moment », le porteur ne
+  peut de toute façon plus quitter le poste une fois scellé.
+- Moteur : le KO différé et la résurrection sont portés par le statut générique
+  `sacrifice-revive` (même durée, 3 + 1) : quand il expire avec son porteur toujours en vie,
+  le moteur le tue puis propose à son propriétaire de ranimer, sur son banc à la moitié de
+  ses HP max, un AUTRE personnage de son cimetière (celui qui vient d'être sacrifié est
+  exclu du choix). Résolu directement dans `statuses.ts` (le seul endroit qui peut à la fois
+  attendre un choix et enchaîner KO + résurrection) plutôt que via `onExpire`, qui ne sait
+  poser qu'un autre statut, pas exécuter une action — un objet ne pouvant réagir à aucun
+  event (voir CLAUDE.md), ce comportement ne pouvait plus vivre dans une `AbilityDef` comme
+  au temps du terrain.
+- Si le porteur meurt avant l'échéance (n'importe quelle cause), l'objet équipé part avec
+  lui au cimetière du propriétaire (nettoyage automatique de `zones.koCharacter`) sans que
+  `sacrifice-revive` n'ait jamais l'occasion d'expirer — sans effet, comme le dit le texte.
 
 ### Annulation de territoire
 
@@ -974,21 +1027,37 @@ Incapable d'utiliser son actif aux 2 prochains tours. »*
   reste libre — ce que dit « aux 2 prochains tours ».
 - Moteur : la contrepartie est due même si le joueur n'attaque pas deux fois (ou pas du tout)
   — `extra-attack` expire de toute façon au tour suivant et arme son silence.
-- **Refusée si Locke, Light Yagami ou Yumeko est au poste actif** (`unplayableReason`,
-  message « Interaction trop puissante. ») : liste en dur des trois `cardId` sur la carte,
+- **Refusée si Locke, Light Yagami, Yumeko ou Kayn est au poste actif** (`unplayableReason`,
+  message « Interaction trop puissante. ») : liste en dur des `cardId` sur la carte,
   vérifiée sur `state.players[ownerId].characters[activeId].cardId`. Le serveur rejette
   l'action avec cette phrase et la main grise la carte avec la même. Choix délibéré de ne
   PAS passer par un modifier générique (`canPlayObject` n'existe pas côté objet) : rien
-  d'autre dans le moteur n'a besoin de refuser « par personnage nommé ».
+  d'autre dans le moteur n'a besoin de refuser « par personnage nommé ». Ne couvre que
+  `kayn` lui-même, pas ses formes évoluées (`kayn-assassin` / `rhaast`) — un `cardId`
+  distinct chacune.
 
 ### Caméléon
 
-*« Défaussez une carte objet de votre réserve et remplacez-la par une autre carte objet de
-votre deck, au choix — à condition que celle-ci n'ait pas déjà atteint son nombre maximum
-d'exemplaires. »*
+*« Choisissez une carte objet de votre main actuelle, Caméléon devient celle-ci. Possible
+seulement si la carte choisi n'est pas une carte déjà sélectionné 2 fois ou si ce n'est pas
+une carte unique exemplaire. »*
 
-- Moteur : choix via `ctx.chooseOption` (le prompt `select-characters` ne sait afficher que
-  des personnages). `ctx.createObject` fabrique la nouvelle carte.
+- Moteur : transforme SA PROPRE instance en place (mute `cardId` de l'objet en jeu, même
+  principe qu'une évolution de personnage mais pour un objet) plutôt que de défausser +
+  créer deux cartes séparées. La restriction reste la même règle de deck qu'avant (une carte
+  déjà à son plafond d'exemplaires, dont un exemplaire unique dès sa première copie, n'est
+  pas proposée) : devenir une copie de plus compte comme un exemplaire supplémentaire.
+- Moteur : une fois transformé, résout l'effet de la nouvelle carte **immédiatement**, avec
+  le même `ctx` (donc le même `sourceInstanceId`) — cette transformation fait office de
+  « jeu » de la carte copiée. Elle s'accroche normalement si la carte copiée est à lier
+  (`ctx.attachSelfTo` marche puisque c'est la même instance qui vient de changer d'identité),
+  sinon repart au cimetière comme n'importe quel objet : le wrapper de `match.ts` se base sur
+  `attachedToCharacterInstanceId` (état réel de l'instance après résolution), pas sur le
+  champ `equipment` déclaré par Caméléon lui-même (qui reste `false`).
+- Choix via `ctx.chooseOption` (le prompt `select-characters` ne sait afficher que des
+  personnages) — parmi les cartes objet encore dans la réserve non jouée (« votre main
+  actuelle »), Caméléon lui-même déjà exclu de cette liste par `handlePlayObject` avant que
+  son `execute()` ne tourne.
 
 ### Chaînes — exemplaire unique
 
@@ -1039,11 +1108,14 @@ attaque inflige maximum 5 de dégâts. »*
 ### Couteau dans le dos — exemplaire unique
 
 *« Exemplaire unique. Dès maintenant et jusqu'à la fin de votre prochain tour, les dégâts
-infligés au banc ennemi par n'importe lequel de vos personnages (attaque ou capacité) sont
-doublés. »*
+infligés au banc ennemi sont doublés. »*
 
 - Moteur : statut `bench-damage-bonus` (`data.multiplier`) posé sur **tous** vos personnages,
-  avec `ticksOnBench: true`.
+  avec `ticksOnBench: true`. Le pipeline de dégâts (`effect-context.ts::dealDamage`) ne
+  regarde pas seulement l'attaquant du coup en cours : il vérifie si **n'importe lequel**
+  des personnages du camp porte le statut, ce qui couvre aussi bien une attaque/capacité
+  qu'un effet de **terrain** (Autel Démoniaque) ou d'**objet** -- le texte dit « les dégâts
+  infligés au banc ennemi », pas « par vos personnages ».
 
 ### Crit + — à lier
 
@@ -1069,20 +1141,29 @@ doublés. »*
 
 ### Déchetterie — exemplaire unique
 
-*« Exemplaire unique. Tire 2 cartes objet au hasard dans le cimetière adverse et vous en fait
-choisir une : elle rejoint votre réserve, jouable normalement plus tard. »*
+*« Permet de récupérer une carte objet parmi une sélection aléatoire de 5 cartes objets des 2
+cimetières. »*
 
-- Moteur : `ctx.chooseOption` avec un `card` par option — la modale montre les deux cartes
-  tirées en illustration, pas leurs seuls noms.
+- Moteur : pioche jusqu'à 5 cartes objet au hasard (`randomInt`) en piochant dans les
+  cimetières objets des DEUX joueurs (le vôtre et celui de l'adversaire) réunis en un seul
+  pool — moins de 5 cartes disponibles au total ne fait que réduire la sélection, jamais
+  d'erreur. La carte choisie rejoint votre réserve non jouée, jouable normalement plus tard,
+  qu'elle vienne de votre propre cimetière ou de celui de l'adversaire.
+- Moteur : `ctx.chooseOption` avec un `card` par option — la modale montre les cartes
+  tirées en illustration, pas seulement leurs noms.
 
-### Détermination — exemplaire unique
+### Détermination — exemplaire unique, objet à lier
 
-*« Exemplaire unique. Jusqu'à la fin de ce tour, aucun coup ne peut faire descendre votre
-personnage actif en dessous de 1 HP. »*
+*« Empêche le personnage actif de mourir pendant 1 tour, si il subit des dégâts, ne peut pas
+descendre en dessous de 1hp. »*
 
-- Moteur : statut `death-ward`, avec `ticksOnBench: true`. Ne couvre **pas** la perte de HP
-  max (Mahito, poison Sang Maudit) ni une mise à mort directe par `koCharacter` (Perfect
-  Execution d'Akali).
+- Moteur : objet à lier (`equipment: true`) — s'accroche au personnage actif au lieu de
+  partir au cimetière. Statut `death-ward`, avec `ticksOnBench: true`. Ne couvre **pas** la
+  perte de HP max (Mahito, poison Sang Maudit) ni une mise à mort directe par `koCharacter`
+  (Perfect Execution d'Akali).
+- Moteur : le statut porte `data.objectInstanceId` — dès que `death-ward` expire
+  naturellement (1 tour plus tard), le moteur détruit l'objet tout seul (même convention
+  qu'Attaque cloné) au lieu de le laisser accroché pour rien.
 
 ### Dieu du Tonnerre Volant
 
@@ -1097,10 +1178,21 @@ finir votre tour. Ignore Stun. »*
 
 ### Echange équivalent
 
-*« Sacrifiez 2 cartes de votre réserve non jouée (objets ou terrains, au choix). En échange,
-récupérez une carte objet ou terrain au choix dans votre cimetière. »*
+*« Sacrifier 2 cartes, objets ou terrain. En échange, vous permet de récupérer une carte
+objet ou terrain parmi toutes les cartes du jeu. »*
 
-- Moteur : les deux choix passent par `ctx.chooseOption`.
+- Moteur : le sacrifice vise toujours la réserve non jouée du joueur (`ctx.chooseOption`,
+  deux choix successifs). La récupération, elle, n'est plus limitée au cimetière : elle
+  porte sur **n'importe quel objet ou terrain enregistré dans le jeu** — `listCards()`
+  filtré par type — et fabrique une copie toute neuve (`ctx.createObject` /
+  `ctx.createTerrain`), plafonnée par le nombre max d'exemplaires du deck (même règle que
+  Caméléon : une carte déjà à son plafond, dont un exemplaire unique dès sa première copie,
+  n'est pas proposée).
+- **Ajout moteur** : `ctx.createTerrain(cardId, forPlayerId?)` — pendant de `createObject`
+  côté terrain (`EffectContext`/`EngineApi`), absent jusqu'ici car aucune carte n'avait
+  besoin de fabriquer un terrain tout neuf plutôt que d'en récupérer un existant. Ajoute une
+  instance à la réserve non jouée avec `remainingTurns`/`data` indéfinis, redéfinis
+  normalement à la prochaine pose.
 
 ### Extension du territoire — exemplaire unique
 
@@ -1238,12 +1330,17 @@ ferra pas effet. »*
 
 *« Soigne un de vos personnages (actif ou banc) de 100 HP. »*
 
-### Potion force
+### Potion force — objet à lier
 
-*« Votre personnage actif inflige 40 dégâts de plus avec ses attaques jusqu'à la fin de ce
-tour. »*
+*« Augmente les dégâts des attaques d'un personnage de 50 pendant 1 tour »*
 
-- Moteur : statut `atk-boost` avec `ticksOnBench: true`.
+- Moteur : objet à lier (`equipment: true`) — le joueur choisit le personnage à équiper
+  (actif ou banc, `ctx.choose` comme Crit +), en filtrant sur `getMaxAttachedObjects` et
+  `canTargetBench` (pour son propre banc, au cas où il serait isolé par une carte adverse).
+  Statut `atk-boost` (`data.amount: 50`), `remainingTurns: 1`, avec `ticksOnBench: true`.
+- Moteur : le statut porte `data.objectInstanceId` — dès que `atk-boost` expire
+  naturellement (1 tour plus tard), le moteur détruit l'objet tout seul (même convention
+  qu'Attaque cloné) au lieu de le laisser accroché pour rien.
 
 ### Poupée Voodoo
 
@@ -1256,8 +1353,8 @@ vos personnages ou sur l'actif ennemi. »*
 
 ### Voleur de bouclier
 
-*« Retire tout le shield du personnage actif ennemi et l'applique à votre personnage
-actif. »*
+*« Vole le shield ennemi, lui retirant totalement son shield et se l'applique à soit
+même. »*
 
 - Moteur : agit sur le champ `shield` natif ; le pseudo-bouclier de Mana Barrier n'est pas un
   `shield` et n'est donc pas volable. S'ajoute au bouclier existant.
@@ -1265,18 +1362,6 @@ actif. »*
 ---
 
 ## Terrains
-
-### Absorption Vitale — 4 tours
-
-*« Votre personnage actif est scellé : pendant 3 tours il ne peut ni switcher ni utiliser ses
-capacités (il peut toujours attaquer). S'il tient jusqu'au bout, il meurt et vous ranimez sur
-votre banc, à la moitié de ses HP max, un autre personnage de votre cimetière (jamais celui
-qui vient d'être sacrifié). S'il meurt ou quitte le poste actif avant la fin, le terrain part
-au cimetière sans rien donner. »*
-
-- Moteur : sceau = `chained` + `silence-ultimate` sans durée propre, d'où un passive
-  `onTerrainRemoved` obligatoire pour les lever si le terrain part autrement que par son
-  décompte. Les trois passives filtrent sur `terrainInstanceId === sourceInstanceId`.
 
 ### Arène — 2 tours
 
@@ -1316,6 +1401,8 @@ adverse et 15 dégâts à chaque personnage sur le banc adverse. »*
 
 - Moteur : 3 activations au total, dont celle à la pose (`onTerrainPlayed`, filtré sur son
   propre terrain) ; les suivantes viennent d'`onTurnStart`.
+- Ses dégâts au banc sont doublés par Couteau dans le dos si le camp qui possède ce
+  terrain a la carte active (voir Couteau dans le dos plus haut).
 
 ### Bouclier Ultime — 3 tours
 
@@ -1380,11 +1467,15 @@ dégâts de base au lieu de 2 fois. »*
 
 ### Protection Divine — 3 tours
 
-*« Pendant 3 tours, au début de chaque tour du possesseur, ajoute 50 de shield à son
-personnage actif du moment. »*
+*« Ajoute 50 de shield au personnage actif allié et 30 de shield au personnage actif
+ennemi. »*
 
-- Moteur : 3 activations au total, dont celle à la pose. Le bouclier va à l'actif **du
-  moment**, pas à celui qui était là à la pose.
+- Moteur : 3 activations au total (durée du terrain), dont celle à la pose, au début de
+  chaque tour du possesseur. Le bouclier va aux actifs **du moment** (allié et ennemi),
+  pas à ceux qui étaient là à la pose.
+- Moteur : déclenché uniquement sur les tours du possesseur (pas ceux de l'adversaire) —
+  l'actif adverse reçoit donc son shield par contrecoup de l'activation du possesseur,
+  jamais deux fois par manche.
 
 ### Régulation Thermique — 5 tours
 

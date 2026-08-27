@@ -46,6 +46,8 @@ export interface EngineApi {
   cloneCharacter(ownerId: PlayerId, sourceInstanceId: string, hp: number, placement: 'active' | 'bench'): string;
   /** Creates a brand-new object instance of `cardId` for `ownerId`, added straight to their unplayed pool. Returns the new instance id. */
   createObject(ownerId: PlayerId, cardId: string): string;
+  /** Same as `createObject`, but for a terrain card. Returns the new instance id. */
+  createTerrain(ownerId: PlayerId, cardId: string): string;
 
   emitEvent(event: EngineEvent): Promise<void>;
   chooseFor(playerId: PlayerId, spec: ChoiceSpec): Promise<ChoiceAnswer>;

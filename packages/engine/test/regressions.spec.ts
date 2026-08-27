@@ -5,7 +5,7 @@ import { aizen } from '../src/cards/demo/aizen.js';
 import { autelDemoniaque } from '../src/cards/demo/autel-demoniaque.js';
 import { hopital } from '../src/cards/demo/hopital.js';
 import { killua } from '../src/cards/demo/killua.js';
-import { registerTestFixtures, FX_ROSTER } from './fixtures.js';
+import { registerTestFixtures, FX_ROSTER, TINY_ROSTER } from './fixtures.js';
 import { createReadyMatch, defaultAnswer, drive, findInstance, settle } from './test-utils.js';
 
 let demoRegistered = false;
@@ -166,6 +166,43 @@ describe('valeur lock kills', () => {
   });
 });
 
+describe('status-tick kills', () => {
+  it('name the character that applied the status (bleed) as killer on onCharacterKO', async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: TINY_ROSTER, p2Roster: TINY_ROSTER, seed: 810 },
+      {}
+    );
+    const attackerSide = match.state.activePlayerId;
+    const victimSide: PlayerId = attackerSide === 'p1' ? 'p2' : 'p1';
+    const attackerId = match.state.players[attackerSide].activeCharacterInstanceId!;
+    const victimId = match.state.players[victimSide].activeCharacterInstanceId!;
+    // fx-glass has 10 HP; 10 stacks of bleed (100% of max HP) is lethal in one tick.
+    match.state.players[victimSide].characters[victimId]!.statuses.push({
+      statusId: 'bleed',
+      label: 'Bleed',
+      sourceCardInstanceId: attackerId,
+      data: { stacks: 10 },
+    });
+
+    const api = apiOf(match);
+    const killers: unknown[] = [];
+    const originalEmit = api.emitEvent.bind(api);
+    api.emitEvent = async (event) => {
+      if (event.name === 'onCharacterKO') killers.push(event.data['killerInstanceId']);
+      await originalEmit(event);
+    };
+
+    // Bleed ticks at the start of its bearer's own turn.
+    do {
+      await drive(match, match.state.activePlayerId, { kind: 'pass' });
+    } while (match.state.activePlayerId !== victimSide);
+    await settle(match);
+
+    expect(match.state.players[victimSide].graveyardCharacterInstanceIds).toContain(victimId);
+    expect(killers).toContain(attackerId);
+  });
+});
+
 describe('choice answers coming off the wire', () => {
   it('are rejected when they name something that was never offered', async () => {
     const match = await createReadyMatch(
@@ -242,8 +279,8 @@ describe("Aizen's status swap", () => {
 describe('Absorption Vitale revive pool', () => {
   const OWNER_ROSTER: RosterConfig = {
     characterCardIds: FX_ROSTER.characterCardIds,
-    objectCardIds: [],
-    terrainCardIds: ['absorption-vitale'],
+    objectCardIds: ['absorption-vitale'],
+    terrainCardIds: [],
   };
 
   it('never offers back the character it just sacrificed', async () => {
@@ -262,8 +299,8 @@ describe('Absorption Vitale revive pool', () => {
     player.benchCharacterInstanceIds = player.benchCharacterInstanceIds.filter((id) => id !== spareId);
     player.graveyardCharacterInstanceIds.push(spareId);
 
-    const terrainInstanceId = Object.values(player.terrains).find((t) => t.cardId === 'absorption-vitale')!.instanceId;
-    await drive(match, owner, { kind: 'play-terrain', terrainInstanceId });
+    const objectInstanceId = Object.values(player.objects).find((o) => o.cardId === 'absorption-vitale')!.instanceId;
+    await drive(match, owner, { kind: 'play-object', objectInstanceId });
 
     const offered: string[][] = [];
     // The payoff resolves in the owner's startTurn, i.e. at the tail of whichever drive

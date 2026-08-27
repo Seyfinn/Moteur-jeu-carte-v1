@@ -8,47 +8,42 @@ export const cameleon: ObjectCardDef = {
   id: 'cameleon',
   name: 'Caméléon',
   description:
-    "Défaussez une carte objet de votre réserve et remplacez-la par une autre carte objet de votre deck, au choix — à condition que celle-ci n'ait pas déjà atteint son nombre maximum d'exemplaires.",
+    "Choisissez une carte objet de votre main actuelle, Caméléon devient celle-ci. Possible seulement si la carte choisi n'est pas une carte déjà sélectionné 2 fois ou si ce n'est pas une carte unique exemplaire.",
   async execute(ctx) {
     const player = ctx.state.players[ctx.ownerId];
-    if (player.unplayedObjectInstanceIds.length === 0) return;
 
-    // `card` : la modale affiche l'illustration réelle plutôt qu'une ligne de texte.
-    const removeOptions = player.unplayedObjectInstanceIds.map((id) => ({
-      key: id,
-      label: getObjectCard(player.objects[id]!.cardId).name,
-      card: { cardId: player.objects[id]!.cardId, kind: 'object' as const },
-    }));
-    const removedId = await ctx.chooseOption('Caméléon : choisissez la carte objet à remplacer', removeOptions);
-    const removedCardId = player.objects[removedId]?.cardId;
-    if (!removedCardId) return;
+    // "Votre main actuelle" = la réserve non jouée (Caméléon lui-même en est déjà sorti
+    // par handlePlayObject avant que son execute() ne tourne, il ne peut donc pas
+    // s'auto-sélectionner en boucle une fois déjà à son propre plafond d'exemplaires).
+    const handCardIds = new Set(player.unplayedObjectInstanceIds.map((id) => player.objects[id]!.cardId));
 
-    // Retrait effectif d'abord : les copies restantes de la carte retirée comptent
-    // ensuite normalement, comme n'importe quelle autre, pour l'éligibilité ci-dessous.
-    const idx = player.unplayedObjectInstanceIds.indexOf(removedId);
-    if (idx !== -1) player.unplayedObjectInstanceIds.splice(idx, 1);
-    player.graveyardObjectInstanceIds.push(removedId);
-
-    // "Votre deck" = les cartes objet dont vous possédez au moins un exemplaire
-    // (peu importe la zone) -- le moteur ne conserve pas de liste de deck séparée.
-    const deckCardIds = new Set(Object.values(player.objects).map((o) => o.cardId));
-
-    const replacementOptions: ChoiceOption[] = [];
-    for (const cardId of deckCardIds) {
+    const options: ChoiceOption[] = [];
+    for (const cardId of handCardIds) {
       const def = getObjectCard(cardId);
       const maxCopies = def.maxCopies ?? DECK_LIMITS.maxCopiesPerCard;
       const currentCopies = Object.values(player.objects).filter((o) => o.cardId === cardId).length;
+      // Devenir une copie de plus compte comme un exemplaire supplémentaire : même
+      // plafond que le nombre max d'exemplaires du deck -- une carte déjà à son plafond
+      // (un exemplaire unique dès sa première copie) n'est pas proposée.
       if (currentCopies < maxCopies) {
-        replacementOptions.push({ key: cardId, label: def.name, card: { cardId, kind: 'object' } });
+        options.push({ key: cardId, label: def.name, card: { cardId, kind: 'object' } });
       }
     }
-    if (replacementOptions.length === 0) return; // rien d'éligible -- la retirée reste au cimetière
+    if (options.length === 0) return; // rien d'éligible -- Caméléon part au cimetière sans effet
 
-    const chosenCardId = await ctx.chooseOption('Caméléon : choisissez la carte objet de remplacement', replacementOptions);
-    ctx.createObject(chosenCardId);
+    const chosenCardId = await ctx.chooseOption('Caméléon : choisissez la carte objet à devenir', options);
 
-    // The discarded card is public (it goes to the graveyard); the replacement is not --
-    // it lands face down in the pool, so naming it here would leak it to the opponent.
-    ctx.log(`Caméléon : ${getObjectCard(removedCardId).name} est défaussée et remplacée`, { removedCardId });
+    // Caméléon devient la carte choisie : transforme SA PROPRE instance en place (même
+    // principe qu'une évolution de personnage, mais pour un objet), puis résout l'effet de
+    // la nouvelle carte immédiatement avec le même ctx -- cette transformation fait office
+    // de "jeu" de la carte copiée. Elle s'accroche normalement si elle est à lier, sinon
+    // repart au cimetière comme n'importe quel objet : le wrapper de match.ts se base sur
+    // `attachedToCharacterInstanceId` (état réel de l'instance), pas sur le champ
+    // `equipment` déclaré par Caméléon lui-même.
+    const self = player.objects[ctx.sourceInstanceId]!;
+    self.cardId = chosenCardId;
+    const targetDef = getObjectCard(chosenCardId);
+    ctx.log(`Caméléon devient ${targetDef.name}`, { cardId: chosenCardId });
+    await targetDef.execute(ctx);
   },
 };

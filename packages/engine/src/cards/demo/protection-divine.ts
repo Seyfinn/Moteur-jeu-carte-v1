@@ -1,18 +1,21 @@
 import type { EffectContext, TerrainCardDef } from '../types.js';
 
 const DURATION_TURNS = 3;
-const SHIELD_AMOUNT = 50;
+const ALLY_SHIELD_AMOUNT = 50;
+const ENEMY_SHIELD_AMOUNT = 30;
 
 function grantShield(ctx: EffectContext): void {
   const active = ctx.getActive(ctx.ownerId);
-  if (active) ctx.addShield(active.instanceId, SHIELD_AMOUNT);
+  if (active) ctx.addShield(active.instanceId, ALLY_SHIELD_AMOUNT);
+  const enemyActive = ctx.getActive(ctx.opponentId);
+  if (enemyActive) ctx.addShield(enemyActive.instanceId, ENEMY_SHIELD_AMOUNT);
 }
 
 export const protectionDivine: TerrainCardDef = {
   type: 'terrain',
   id: 'protection-divine',
   name: 'Protection Divine',
-  description: `Pendant ${DURATION_TURNS} tours, au début de chaque tour du possesseur, ajoute ${SHIELD_AMOUNT} de shield à son personnage actif du moment.`,
+  description: `Ajoute ${ALLY_SHIELD_AMOUNT} de shield au personnage actif allié et ${ENEMY_SHIELD_AMOUNT} de shield au personnage actif ennemi.`,
   durationTurns: DURATION_TURNS,
   abilities: [
     {

@@ -21,7 +21,13 @@ export type ClientMessage =
   | { type: 'forfeit' }
   /** Revanche : rejouer dans le même salon, avec les mêmes decks. Il en faut une de chaque camp. */
   | { type: 'rematch' }
-  | { type: 'answer-choice'; choiceId: string; answer: ChoiceAnswer };
+  | { type: 'answer-choice'; choiceId: string; answer: ChoiceAnswer }
+  /**
+   * Un clic malheureux sur une attaque/ability : annule l'action qui a ouvert ce choix et
+   * remet l'état comme avant, au lieu de forcer une réponse. N'a d'effet que si
+   * `PendingChoice.cancellable` est vrai (voir `Match.cancelPendingChoice`).
+   */
+  | { type: 'cancel-choice' };
 
 export type ServerMessage =
   /** `sessionToken` is the credential for `resume-session`; the client persists it. */

@@ -85,11 +85,10 @@ export const chainsawMan: CharacterCardDef = {
       // une capacité active (donc sans `trigger`, sinon elle ne serait plus activable
       // manuellement -- voir CLAUDE.md) alors que le comptage réagit à onCharacterKO.
       //
-      // ⚠️ N'attrape que les kills où Chainsaw Man est le tueur DIRECT (attribution portée
-      // par ctx.dealDamage). Un ennemi achevé par le tick du bleed posé ici ne compte PAS :
-      // les tics de statuts (poison/burn/bleed) infligent leurs dégâts sans attributionId
-      // de tueur (voir tickStatusesAtTurnStart, statuses.ts) -- angle mort assumé, cohérent
-      // avec le reste du moteur (même limite documentée pour "sur kill" dans CLAUDE.md).
+      // Attrape aussi bien un kill direct (ctx.dealDamage) qu'un kill par le tic du bleed
+      // posé ici : tickStatusesAtTurnStart (statuses.ts) attribue le tic à
+      // `status.sourceCardInstanceId`, donc onCharacterKO nomme bien Chainsaw Man dans
+      // les deux cas.
       id: 'devoreur-compteur',
       name: 'Dévoreur (compteur)',
       kind: 'passive',

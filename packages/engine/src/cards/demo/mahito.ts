@@ -17,7 +17,24 @@ export const mahito: CharacterCardDef = {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
         const atk = ctx.getEffectiveATK(ctx.sourceInstanceId, PAUME_ATK);
+        const maxHpBefore = ctx.getCharacter(target.instanceId).currentMaxHP;
         await ctx.dealDamage(target.instanceId, atk, { asValeurLock: true });
+        // "Marque" : ne marque que si le coup a réellement retiré du HP max (pas esquivé).
+        // Un ciblage qui n'a rien retiré n'a rien à rendre "plus jamais récupérable". Un
+        // seul jet d'esquive pour tout le coup (comme Chainsaw/Sukuna) : `skipEvasionRoll`
+        // évite que la marque roule sa PROPRE esquive après que le coup a déjà touché.
+        if (ctx.getCharacter(target.instanceId).currentMaxHP < maxHpBefore) {
+          ctx.applyStatus(
+            target.instanceId,
+            {
+              statusId: 'unhealable',
+              label: 'Marque (Mahito)',
+              sourcePlayerId: ctx.ownerId,
+              sourceCardInstanceId: ctx.sourceInstanceId,
+            },
+            { skipEvasionRoll: true }
+          );
+        }
       },
     },
   ],
@@ -37,6 +54,8 @@ export const mahito: CharacterCardDef = {
       name: 'Marque',
       kind: 'passive',
       description: "Les PV retirés par Mahito ne peuvent plus jamais être récupérés, par aucun soin.",
+      // Purement descriptif : implémenté directement dans Paume Transfiguratrice, qui pose
+      // le statut générique 'unhealable' sur la cible touchée (voir statuses.ts).
       async execute() {},
     },
   ],

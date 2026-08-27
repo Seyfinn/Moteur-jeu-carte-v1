@@ -83,10 +83,10 @@ describe('"Attaque cloné" -- the generic `extra-attack` grant the engine spends
     expect(silenced()).toBe(false);
   });
 
-  it("refuse d'etre jouee si Locke, Light Yagami ou Yumeko est au poste actif", async () => {
+  it("refuse d'etre jouee si Locke, Light Yagami, Yumeko ou Kayn est au poste actif", async () => {
     const { describeObjectUnplayable } = await import('../src/index.js');
     const roster: RosterConfig = {
-      characterCardIds: ['locke', 'light-yagami', 'yumeko', 'fx-tank'],
+      characterCardIds: ['locke', 'light-yagami', 'yumeko', 'kayn', 'fx-tank'],
       objectCardIds: [attaqueClone.id],
       terrainCardIds: [],
     };
@@ -102,8 +102,8 @@ describe('"Attaque cloné" -- the generic `extra-attack` grant the engine spends
     const refused = match.applyAction('p1', { kind: 'play-object', objectInstanceId: objectId });
     expect(refused.ok).toBe(false);
 
-    // Meme refus avec Light Yagami ou Yumeko actifs, aucun avec un autre personnage.
-    for (const bannedCardId of ['light-yagami', 'yumeko']) {
+    // Meme refus avec Light Yagami, Yumeko ou Kayn actifs, aucun avec un autre personnage.
+    for (const bannedCardId of ['light-yagami', 'yumeko', 'kayn']) {
       const bannedId = Object.entries(me.characters).find(([, c]) => c.cardId === bannedCardId)![0];
       me.activeCharacterInstanceId = bannedId;
       expect(describeObjectUnplayable(match.state, 'p1', objectId)).toBe('Interaction trop puissante.');

@@ -80,6 +80,8 @@ export interface GameConnection {
   lastDraftRoster: RosterConfig | null;
   applyAction(action: PlayerAction): void;
   answerChoice(choiceId: string, answer: ChoiceAnswer): void;
+  /** Un clic malheureux sur une attaque/ability : n'a d'effet que si le choix en cours est `cancellable`. */
+  cancelChoice(): void;
   clearError(): void;
   /** Concedes the match: the opponent wins immediately, whoever's turn it is. */
   forfeit(): void;
@@ -271,6 +273,7 @@ export function useGameConnection(): GameConnection {
     (choiceId: string, answer: ChoiceAnswer) => send({ type: 'answer-choice', choiceId, answer }),
     [send]
   );
+  const cancelChoice = useCallback(() => send({ type: 'cancel-choice' }), [send]);
   const clearError = useCallback(() => setError(null), []);
   // Deliberately keeps the socket open: the server ends the match and both sides get the
   // result screen from the state broadcast, exactly like a game won on the board.
@@ -320,6 +323,7 @@ export function useGameConnection(): GameConnection {
     lastDraftRoster,
     applyAction,
     answerChoice,
+    cancelChoice,
     clearError,
     forfeit,
     requestRematch,

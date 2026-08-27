@@ -1,5 +1,4 @@
 import type { CharacterCardDef } from '../types.js';
-import { simpleAttack } from './shared.js';
 import { getStatus } from '../../statuses.js';
 import { findCharacter } from '../../queries.js';
 
@@ -7,12 +6,33 @@ const BERSERK_COUNTER_STATUS_ID = 'guts-berserk-record';
 const HP_CHUNK = 100;
 const BONUS_PER_CHUNK = 50;
 
+const COUP_DEPEE_ATK = 50;
+const COUP_DEPEE_SELF_HEAL = 25;
+
 export const guts: CharacterCardDef = {
   type: 'character',
   id: 'guts',
   name: 'Guts',
   baseMaxHP: 250,
-  attacks: [simpleAttack('coup-depee', "Coup d'épée", 50, "Inflige 50 dégâts à l'actif adverse.")],
+  attacks: [
+    {
+      id: 'coup-depee',
+      name: "Coup d'épée",
+      baseATK: COUP_DEPEE_ATK,
+      // Texte carte : "Se soigne de 25." -- l'ATK 50 affiché inflige les dégâts (implicite,
+      // comme les autres attaques), le texte ne décrit que l'effet secondaire (même
+      // convention que Soraka).
+      description: `Inflige ${COUP_DEPEE_ATK} dégâts à l'actif adverse, puis Guts se soigne de ${COUP_DEPEE_SELF_HEAL}.`,
+      async execute(ctx) {
+        const target = ctx.getActive(ctx.opponentId);
+        if (target) {
+          const atk = ctx.getEffectiveATK(ctx.sourceInstanceId, COUP_DEPEE_ATK);
+          await ctx.dealDamage(target.instanceId, atk);
+        }
+        ctx.heal(ctx.sourceInstanceId, COUP_DEPEE_SELF_HEAL);
+      },
+    },
+  ],
   abilities: [
     {
       id: 'berserk',

@@ -257,11 +257,14 @@ export function ChoiceModal({
   choice,
   deadline,
   onAnswer,
+  onCancel,
 }: {
   state: GameState;
   choice: PendingChoice;
   deadline: number | null;
   onAnswer: (answer: ChoiceAnswer) => void;
+  /** Un clic malheureux sur une attaque/ability : présent seulement quand `choice.cancellable`. */
+  onCancel?: () => void;
 }) {
   const hover = useHoverCard();
   // Répondre fait disparaître la modale sous la souris : son `onMouseLeave` ne partira
@@ -279,6 +282,11 @@ export function ChoiceModal({
         {choice.spec.kind === 'select-option' && <SelectOption spec={choice.spec} onAnswer={answerAndClose} />}
         {choice.spec.kind === 'yes-no' && <YesNo onAnswer={answerAndClose} />}
         {choice.spec.kind === 'order' && <OrderChoice spec={choice.spec} onAnswer={answerAndClose} />}
+        {onCancel && (
+          <button className="modal-cancel" onClick={onCancel}>
+            Annuler cette action
+          </button>
+        )}
       </div>
     </div>
   );

@@ -9,7 +9,7 @@ const POISON_CHANCE_PERCENT = 33;
 const POISON_REMAINING_TURNS = 1;
 
 const TRAQUE_HEAL_AMOUNT = 70;
-const TRAQUE_COOLDOWN_EFFECTIVE_TURNS = 3;
+const TRAQUE_COOLDOWN_EFFECTIVE_TURNS = 6;
 // Posé sur soi-même pendant son propre tour -> +1 (même correction que Spell Thief de
 // Zoé, voir zoe.ts) : utilisée au tour N, réutilisable au tour N+4.
 const TRAQUE_COOLDOWN_REMAINING_TURNS = TRAQUE_COOLDOWN_EFFECTIVE_TURNS + 1;
@@ -51,7 +51,7 @@ export const chopper: CharacterCardDef = {
       id: 'traque',
       name: 'Traque',
       kind: 'active',
-      description: `Soigne un personnage allié au choix (actif ou banc) de ${TRAQUE_HEAL_AMOUNT} HP. Utilisable même depuis le banc. Rechargement : ${TRAQUE_COOLDOWN_EFFECTIVE_TURNS} tours après usage.`,
+      description: `Soigne un personnage allié au choix (actif ou banc) de ${TRAQUE_HEAL_AMOUNT} HP même depuis le banc utilisable une fois tout les ${TRAQUE_COOLDOWN_EFFECTIVE_TURNS} tours.`,
       usableFromBench: true,
       condition(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);

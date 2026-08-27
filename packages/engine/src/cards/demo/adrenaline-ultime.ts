@@ -1,6 +1,6 @@
 import type { ObjectCardDef } from '../types.js';
 
-const MIN_HP_REQUIRED = 150;
+const MIN_HP_REQUIRED = 110;
 const HP_AFTER_USE = 10;
 const ATK_MULTIPLIER = 2;
 const BUFF_DURATION_TURNS = 1;
