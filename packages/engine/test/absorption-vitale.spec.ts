@@ -49,14 +49,21 @@ describe('Absorption Vitale -- lock, then a delayed kill+revive payoff condition
     expect(locked.statuses.some((s) => s.statusId === 'sacrifice-revive')).toBe(true);
     expect(locked.attachedObjectInstanceIds).toContain(objectInstanceId);
 
-    // Nobody attacks him; he survives his own next 3 turns untouched, plus the
-    // extra pass-pair to actually reach the 4th onTurnStart where the payoff fires
-    // (remainingTurns reads 1 there, one tick shy of the statuses' own expiry).
-    for (let i = 0; i < 4; i++) {
-      await drive(match, ownerSide, { kind: 'pass' });
-      await drive(match, enemySide, { kind: 'pass' });
-    }
+    // « Pendant 3 tours » se compte à partir du tour de la pose : scellé au tour N (ici),
+    // encore scellé au tour N+1, exécuté à l'ouverture du tour N+2. Personne ne le touche
+    // entre-temps.
+    const playedOnTurn = match.state.turnNumber;
+    await drive(match, ownerSide, { kind: 'pass' });
+    await drive(match, enemySide, { kind: 'pass' });
+    // Tour N+1 : toujours vivant, toujours scellé.
+    expect(match.state.turnNumber).toBe(playedOnTurn + 1);
+    expect(match.state.players[ownerSide].graveyardCharacterInstanceIds).not.toContain(lockedId);
+    expect(locked.statuses.some((s) => s.statusId === 'chained')).toBe(true);
 
+    await drive(match, ownerSide, { kind: 'pass' });
+    await drive(match, enemySide, { kind: 'pass' });
+
+    expect(match.state.turnNumber).toBe(playedOnTurn + 2);
     expect(match.state.players[ownerSide].graveyardCharacterInstanceIds).toContain(lockedId);
     // The equipped object dies with its bearer -- straight to the owner's graveyard.
     expect(match.state.players[ownerSide].graveyardObjectInstanceIds).toContain(objectInstanceId);

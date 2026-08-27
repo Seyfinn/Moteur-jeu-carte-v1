@@ -1,6 +1,6 @@
 import type { ObjectCardDef } from '../types.js';
 
-const REVIVE_DELAY_TURNS = 10;
+const REVIVE_DELAY_TURNS = 15;
 const BONUS_MAX_HP = 80;
 const BONUS_ATK = 30;
 

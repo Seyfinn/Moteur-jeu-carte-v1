@@ -33,17 +33,18 @@ export const cameleon: ObjectCardDef = {
 
     const chosenCardId = await ctx.chooseOption('Caméléon : choisissez la carte objet à devenir', options);
 
-    // Caméléon devient la carte choisie : transforme SA PROPRE instance en place (même
-    // principe qu'une évolution de personnage, mais pour un objet), puis résout l'effet de
-    // la nouvelle carte immédiatement avec le même ctx -- cette transformation fait office
-    // de "jeu" de la carte copiée. Elle s'accroche normalement si elle est à lier, sinon
-    // repart au cimetière comme n'importe quel objet : le wrapper de match.ts se base sur
-    // `attachedToCharacterInstanceId` (état réel de l'instance), pas sur le champ
-    // `equipment` déclaré par Caméléon lui-même.
+    // Caméléon *devient* la carte choisie : sa propre instance change de carte en place
+    // (même principe qu'une évolution de personnage, mais pour un objet) et repart en
+    // main. Le texte s'arrête là -- devenir une carte n'est pas la jouer : la nouvelle
+    // carte se joue plus tard, normalement, avec ses propres cibles et son propre coût en
+    // budget d'objets. Poser Caméléon a bien consommé une pose, elle.
     const self = player.objects[ctx.sourceInstanceId]!;
     self.cardId = chosenCardId;
     const targetDef = getObjectCard(chosenCardId);
-    ctx.log(`Caméléon devient ${targetDef.name}`, { cardId: chosenCardId });
-    await targetDef.execute(ctx);
+    ctx.returnSelfToHand();
+    // `privateTo` : une carte non jouée est secrète (view.ts masque la réserve adverse).
+    // Annoncer publiquement ce que Caméléon est devenu reviendrait à retourner une carte
+    // de la main sur la table.
+    ctx.log(`Caméléon devient ${targetDef.name}`, { kind: 'info', privateTo: ctx.ownerId, cardId: chosenCardId });
   },
 };

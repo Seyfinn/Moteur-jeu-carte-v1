@@ -2,6 +2,7 @@ import type { CharacterCardDef, EffectContext } from '../types.js';
 import { getStatus } from '../../statuses.js';
 import { canTargetBench } from '../../queries.js';
 import { cardName } from '../../names.js';
+import { pickRandom } from '../../rng.js';
 
 const LA_PIERRE_ATK = 40;
 /** Manche à laquelle la Cible cesse d'être un secret (`state.turnNumber`, cf. CLAUDE.md). */
@@ -113,17 +114,17 @@ export const gon: CharacterCardDef = {
         switch (ctx.event?.name) {
           case 'onGameStart': {
             const enemies = designatableEnemies(ctx);
-            const [targetInstanceId] = await ctx.choose({
-              kind: 'select-characters',
-              prompt: 'Sermet de Vengance : désignez secrètement votre Cible',
-              options: enemies.map((c) => c.instanceId),
-              min: 1,
-              max: 1,
-            });
-            if (!targetInstanceId) return;
-            // Volontairement AUCUN `ctx.log` ici : le journal est commun aux deux joueurs
-            // (getPlayerView ne le filtre pas), une ligne suffirait à vendre la mèche.
+            if (enemies.length === 0) return;
+            // Tirage du moteur, pas un choix du joueur : personne ne désigne la Cible.
+            const { instanceId: targetInstanceId } = pickRandom(ctx.state.rng, enemies);
             writeTargetRecord(ctx, { targetInstanceId, revealed: false });
+            // `privateTo` : la seule ligne de journal que `getPlayerView` retire de la vue
+            // de l'adversaire (view.ts). Le camp de Gon apprend donc sa Cible tout de
+            // suite, l'autre n'en saura rien avant la révélation du tour 10.
+            ctx.log(
+              `Sermet de Vengance : votre Cible est ${cardName(ctx.getCharacter(targetInstanceId).cardId)}`,
+              { kind: 'info', privateTo: ctx.ownerId, characterInstanceId: targetInstanceId }
+            );
             return;
           }
 

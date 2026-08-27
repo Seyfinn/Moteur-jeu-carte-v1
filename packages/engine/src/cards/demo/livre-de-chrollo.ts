@@ -11,7 +11,8 @@ const DURATION_TURNS = 3;
  * `ticksOnBench` parce que le prêt suit le personnage même s'il finit au banc dans la
  * foulée -- une durée gelée là-bas ressortirait intacte des tours plus tard.
  */
-const LOAN_REMAINING_TURNS = 2;
+const LOAN_EFFECTIVE_TURNS = 1;
+const LOAN_REMAINING_TURNS = LOAN_EFFECTIVE_TURNS + 1;
 
 interface Offer {
   cardId: string;
@@ -68,8 +69,16 @@ Il ne pourra alors utiliser que cette attaque pendant ce tour. La même attaque 
       kind: 'passive',
       description:
         "L'attaque empruntée est portée par le personnage actif du moment, avec son propre ATK effectif, et repart avec lui s'il quitte le poste actif.",
-      trigger: 'onTurnStart',
+      // `onTerrainPlayed` en plus de `onTurnStart` : le tour du poseur a commencé avant
+      // que le livre ne soit sur la table, il n'aurait donc rien eu à emprunter avant le
+      // tour de l'adversaire. La pose vaut ouverture du livre pour son propre tour.
+      trigger: ['onTurnStart', 'onTerrainPlayed'],
       condition(ctx) {
+        if (ctx.event?.name === 'onTerrainPlayed') {
+          // Uniquement CE terrain-là : l'event part pour n'importe quelle pose, y compris
+          // celle de l'adversaire (cf. CLAUDE.md).
+          return ctx.event.data['terrainInstanceId'] === ctx.sourceInstanceId;
+        }
         const playerId = ctx.event?.playerId;
         if (!playerId) return false;
         // Le décompte du terrain tombe juste après ce `onTurnStart` et seulement pendant
@@ -81,6 +90,7 @@ Il ne pourra alors utiliser que cette attaque pendant ce tour. La même attaque 
         return remaining === undefined || remaining > 1;
       },
       async execute(ctx) {
+        // À la pose, l'event nomme bien le poseur : c'est lui qui reçoit l'offre.
         const playerId = ctx.event?.playerId as PlayerId | undefined;
         if (!playerId) return;
         const active = ctx.getActive(playerId);
@@ -115,7 +125,9 @@ Il ne pourra alors utiliser que cette attaque pendant ce tour. La même attaque 
             label: `Livre de Chrollo : ${attack.name}`,
             sourcePlayerId: ctx.ownerId,
             sourceCardInstanceId: ctx.sourceInstanceId,
-            remainingTurns: LOAN_REMAINING_TURNS,
+            // Posé à la pose du terrain, la passe de décompte du tour est déjà passée :
+            // le `+1` ferait durer le prêt jusqu'au tour SUIVANT du même joueur.
+            remainingTurns: ctx.event?.name === 'onTerrainPlayed' ? LOAN_EFFECTIVE_TURNS : LOAN_REMAINING_TURNS,
             ticksOnBench: true,
             data: { cardId: offer.cardId, attackId: offer.attackId },
           },

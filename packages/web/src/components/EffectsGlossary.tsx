@@ -44,7 +44,7 @@ const ENTRIES: GlossaryEntry[] = [
     name: 'Poison',
     icon: '☠',
     tone: 'poison',
-    text: `${POISON_FLAT_DAMAGE} HP + ${pct(POISON_PERCENT_OF_MAX_HP)} des HP max par tour.`,
+    text: `${POISON_FLAT_DAMAGE} HP + ${pct(POISON_PERCENT_OF_MAX_HP)} des HP max par tour. Traverse le bouclier.`,
   },
   {
     id: 'burn',

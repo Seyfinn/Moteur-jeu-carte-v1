@@ -98,11 +98,15 @@ export const escanor: CharacterCardDef = {
         return getCycle(ctx) === 3;
       },
       async execute(ctx) {
-        const atk = ctx.getEffectiveATK(ctx.sourceInstanceId, CYCLE_3_ATK);
         const activeTarget = ctx.getActive(ctx.opponentId);
-        if (activeTarget) await ctx.dealDamage(activeTarget.instanceId, atk);
+        if (activeTarget) {
+          const atk = ctx.getEffectiveATK(ctx.sourceInstanceId, CYCLE_3_ATK);
+          await ctx.dealDamage(activeTarget.instanceId, atk);
+        }
+        // Le banc encaisse les 15 dégâts imprimés, pas l'ATK effectif : les boosts
+        // d'attaque n'ont prise que sur le coup porté à l'actif.
         for (const bench of ctx.getBench(ctx.opponentId)) {
-          await ctx.dealDamage(bench.instanceId, atk);
+          await ctx.dealDamage(bench.instanceId, CYCLE_3_ATK);
         }
       },
     },

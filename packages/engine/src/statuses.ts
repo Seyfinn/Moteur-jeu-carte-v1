@@ -309,7 +309,14 @@ export async function tickStatusesAtTurnStart(state: GameState, playerId: Player
             await api.applyValeurLock(instanceId, amount, { attackerInstanceId: status.sourceCardInstanceId });
           } else {
             api.log(`${cardName(char.cardId)} subit ${amount} dégâts de ${STATUS_TICK_LABELS[status.statusId] ?? status.statusId}`, { kind: 'status-tick', characterInstanceId: instanceId, statusId: status.statusId, amount });
-            await api.dealDamage(instanceId, amount, { source: status.statusId, attackerInstanceId: status.sourceCardInstanceId });
+            // Le poison ronge le porteur lui-même : un bouclier ne l'arrête pas (il ne
+            // protège que des coups reçus). Brûlure et saignement, eux, restent absorbés
+            // normalement.
+            await api.dealDamage(instanceId, amount, {
+              source: status.statusId,
+              attackerInstanceId: status.sourceCardInstanceId,
+              ignoreShield: status.statusId === 'poison',
+            });
           }
         }
 

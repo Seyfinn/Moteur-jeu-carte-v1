@@ -531,6 +531,10 @@ export function buildEffectContext(
       api.attachObject(sourceInstanceId, targetCharacterInstanceId);
     },
 
+    returnSelfToHand() {
+      api.returnObjectToHand(sourceInstanceId);
+    },
+
     destroyObject(objectInstanceId) {
       api.destroyObject(objectInstanceId);
     },

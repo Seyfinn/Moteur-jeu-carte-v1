@@ -245,6 +245,15 @@ export interface EffectContext {
   /** Attach the source object instance to a character (keeps it in play instead of going to the graveyard). */
   attachSelfTo(targetCharacterInstanceId: string): void;
 
+  /**
+   * Renvoie l'objet source dans la main (réserve non jouée) de son propriétaire au lieu de
+   * le laisser partir au cimetière en fin de résolution. Pour la carte qui se *transforme*
+   * plutôt que de se consommer ("Caméléon" devient la carte choisie) : elle a bien été
+   * jouée -- le budget d'objets du tour est débité -- mais ce qu'elle est devenue reste à
+   * jouer. Sans effet si l'objet s'est accroché à un personnage entre-temps.
+   */
+  returnSelfToHand(): void;
+
   /** Destroys any object currently in play (own or opponent's), detaching it from its character and sending it to the graveyard. */
   destroyObject(objectInstanceId: string): void;
 

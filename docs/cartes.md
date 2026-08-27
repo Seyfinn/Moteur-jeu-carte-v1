@@ -324,9 +324,12 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   que de « dégâts »).
 - **Cycle 3 - Vague Solaire** (attaque, cycle 3) — 15 ATK, *« Inflige 15 dégâts à
   l'ensemble du banc adverse. »*
-  → ⚠️ Écart texte/moteur confirmé par l'auteur : touche aussi l'actif adverse pour 15
-  dégâts, en plus de tout le banc (chaque cible adverse atteignable via `canTargetBench`
-  reçoit le même montant). Le texte imprimé, lui, ne mentionne que le banc.
+  → ⚠️ Écart texte/moteur confirmé par l'auteur : touche aussi l'actif adverse, en plus de
+  tout le banc. Le texte imprimé, lui, ne mentionne que le banc.
+  → ⚠️ Les deux moitiés n'ont pas le même montant : l'actif encaisse l'**ATK effectif**
+  (`ctx.getEffectiveATK`, donc buffs et malus d'attaque compris), le banc encaisse les
+  **15 dégâts imprimés**, secs. C'est voulu : un boost d'attaque ne doit pas démultiplier
+  une AoE de banc.
 - **Cycle 4 - Soleil** (attaque, cycle 4) — 150 ATK, *« Retourne au cycle 1 après avoir
   attaqué avec Soleil »* → remise à 1 gérée par Énergie solaire (voir plus haut), pas dans
   l'`execute()` de l'attaque elle-même.
@@ -342,6 +345,10 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   donc affichées à l'écran au lieu d'une seule.
   → Cycle 4 déjà atteint + Réussite : reste au cycle 4, aucun autre effet (confirmé par
   l'auteur — pas de comportement symétrique au cas du cycle 1).
+  → Distribution vérifiée sur 300 parties (une utilisation chacune, depuis le cycle 1) :
+  46,3 % de montée, 9,3 % d'Orgueil Ultime, 44,3 % d'échec — conforme au 45/45/10 imprimé.
+  ⚠️ Vu du joueur, « le cycle a monté » couvre **deux** issues (Réussite ET Orgueil Ultime
+  depuis le cycle 3), soit 55 % : cinq montées d'affilée arrivent une fois sur vingt.
   → Cycle 1 déjà atteint + Échec : pas de décrément (resterait sous 1), remplacé par le
   statut générique `disarmed` pendant 1 tour (retiré avant son tour suivant, donc actif
   seulement pour le reste du tour en cours).
@@ -387,16 +394,16 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     sur `ctx.event.name` — une capacité par event afficherait trois fois la même ligne sur
     la carte. `usableFromBench: true` et `usesPerTurn: Infinity` : Gon peut très bien être
     au banc à la désignation, au tour 10, ou quand la Cible meurt.
-  - **Désignation** (`onGameStart`) : c'est le **joueur de Gon** qui choisit, dans une
-    fenêtre de ciblage sur le plateau, parmi les personnages adverses (actif + banc soumis
-    à `canTargetBench`). Première carte du jeu à poser une question depuis `onGameStart` —
-    d'où le test dédié, qui vérifie que la mise en place ne se bloque pas dessus.
-  - **Le secret.** ⚠️ Le journal de partie n'est **pas** filtré par joueur
-    (`getPlayerView` n'y touche pas) : la moindre ligne de journal nommant la Cible la
-    révélerait aux deux camps. La désignation n'écrit donc **rien** dans le journal, et la
-    mémoire est un statut `hidden` — ni badge, ni ligne — porté par **Gon lui-même**
-    (`gon-cible-record`, `data.targetInstanceId`). Sur la victime, il aurait disparu avec
-    elle au cimetière, exactement au moment où il faut le relire.
+  - **Désignation** (`onGameStart`) : **personne ne choisit**. Le moteur tire la Cible au
+    sort (`pickRandom(ctx.state.rng, ...)`) parmi les personnages adverses (actif + banc
+    soumis à `canTargetBench`). Aucune question n'est posée : la mise en place ne s'arrête
+    pas dessus.
+  - **Le secret.** La mémoire est un statut `hidden` — ni badge, ni ligne — porté par
+    **Gon lui-même** (`gon-cible-record`, `data.targetInstanceId`). Sur la victime, il
+    aurait disparu avec elle au cimetière, exactement au moment où il faut le relire.
+    Le camp de Gon, lui, apprend sa Cible **tout de suite** : une ligne de journal
+    `data.privateTo = ctx.ownerId`, que `getPlayerView` retire de la vue de l'adversaire
+    (c'est la seule carte du jeu à se servir de ce canal privé, avec Caméléon).
   - **Révélation** (`onTurnStart`, `state.turnNumber >= 10`) : pose alors un statut bien
     visible `gon-cible` (« Cible de Gon ») sur la victime, avec `skipEvasionRoll` — une
     désignation ne s'esquive pas — plus une ligne de journal. `>=` et pas `===`, pour qu'un
@@ -899,14 +906,16 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
 
 ### Sukuna — 250 HP
 
-- **Lacération** (70 ATK) — *« Inflige 70 dégâts à l'actif adverse et applique 2 stacks de
+- **Lacération** (55 ATK) — *« Inflige 55 dégâts à l'actif adverse et applique 2 stacks de
   bleed. »*
   - Moteur : ré-appliquer bleed **additionne** les stacks (max 10). N'importe quel soin sur
     le porteur enlève le saignement avant qu'il ne tique.
-- **Sort Inversé** (passive, `onTurnEnd`, banc) — *« À la fin de ton tour, Sukuna récupère
-  30 PV automatiquement, même si elle est sur le banc. »*
+- **Sort Inversé** (passive, `onTurnEnd`, actif seulement) — *« À la fin de ton tour, la
+  carte récupère 30 PV si elle est sur le poste actif. »*
+  - Moteur : plus de `usableFromBench` — le passif ne se déclenche donc plus que si Sukuna
+    tient le poste actif à la fin du tour (défaut `canUseAbility` : actif uniquement).
 - **Extention de territoire** (passive) — *« Tant que la carte Terrain Autel Démoniaque est
-  en jeu (jouée par vous ou l'adversaire), les attaques de Sukuna gagnent +40 dégâts. »*
+  en jeu (jouée par vous ou l'adversaire), les attaques de Sukuna gagnent +20 dégâts. »*
   → modifier `getEffectiveATK` conditionné à la présence du terrain, quel qu'en soit le
   poseur.
 
@@ -1015,11 +1024,17 @@ effet. »*
 - Moteur : anciennement un terrain, désormais un objet à lier (`equipment: true`,
   `maxCopies: 1`) — s'accroche au personnage actif au moment de la pose via
   `ctx.attachSelfTo`. `chained` (bloque le switch) et `silence-ultimate` (bloque les
-  capacités) portent désormais leur propre `remainingTurns` (3 + 1) au lieu d'être suivis
+  capacités) portent désormais leur propre `remainingTurns` (voir la durée ci-dessous) au lieu d'être suivis
   manuellement par un terrain : plus besoin de traquer « l'actif du moment », le porteur ne
   peut de toute façon plus quitter le poste une fois scellé.
+- **Durée : `remainingTurns = 3 − 1 = 2`, sans le `+1` habituel.** Le sceau tombe sur son
+  porteur pendant le tour de son propre camp, donc ce tour-là compte déjà comme le premier
+  des trois : scellé au tour N, encore scellé au tour N+1, exécuté à l'ouverture du tour
+  N+2 — trois tours en jeu, tels que le joueur les compte. Avec le `+1` (qui ne vaut que
+  pour un statut bloquant posé sur l'**adversaire**), la carte tenait jusqu'au tour N+4, soit
+  cinq tours.
 - Moteur : le KO différé et la résurrection sont portés par le statut générique
-  `sacrifice-revive` (même durée, 3 + 1) : quand il expire avec son porteur toujours en vie,
+  `sacrifice-revive` (même durée) : quand il expire avec son porteur toujours en vie,
   le moteur le tue puis propose à son propriétaire de ranimer, sur son banc à la moitié de
   ses HP max, un AUTRE personnage de son cimetière (celui qui vient d'être sacrifié est
   exclu du choix). Résolu directement dans `statuses.ts` (le seul endroit qui peut à la fois
@@ -1093,13 +1108,18 @@ une carte unique exemplaire. »*
   créer deux cartes séparées. La restriction reste la même règle de deck qu'avant (une carte
   déjà à son plafond d'exemplaires, dont un exemplaire unique dès sa première copie, n'est
   pas proposée) : devenir une copie de plus compte comme un exemplaire supplémentaire.
-- Moteur : une fois transformé, résout l'effet de la nouvelle carte **immédiatement**, avec
-  le même `ctx` (donc le même `sourceInstanceId`) — cette transformation fait office de
-  « jeu » de la carte copiée. Elle s'accroche normalement si la carte copiée est à lier
-  (`ctx.attachSelfTo` marche puisque c'est la même instance qui vient de changer d'identité),
-  sinon repart au cimetière comme n'importe quel objet : le wrapper de `match.ts` se base sur
-  `attachedToCharacterInstanceId` (état réel de l'instance après résolution), pas sur le
-  champ `equipment` déclaré par Caméléon lui-même (qui reste `false`).
+- Moteur : une fois transformée, la carte **retourne en main** (`ctx.returnSelfToHand()`,
+  nouvelle primitive : `zones.returnObjectToPool`, chemin inverse de la pose) au lieu de
+  partir au cimetière. Le texte s'arrête à « devient celle-ci » — devenir une carte n'est
+  pas la jouer : la nouvelle carte se joue plus tard, normalement, avec ses propres cibles
+  et sa propre pose sur le budget d'objets du tour. Poser Caméléon a bien consommé une pose,
+  elle. `resolveObjectInPlay` n'enterre l'objet que s'il est encore dans
+  `inPlayObjectInstanceIds` : accroché (équipement) ou reparti en main, il n'y a rien à
+  enterrer.
+- Le journal annonce publiquement que **Caméléon** a été jouée (spotlight ordinaire), mais
+  la ligne « Caméléon devient X » porte `data.privateTo = ctx.ownerId` : une carte non jouée
+  est secrète (`getPlayerView` masque la réserve adverse), l'annoncer reviendrait à retourner
+  une carte de la main sur la table.
 - Choix via `ctx.chooseOption` (le prompt `select-characters` ne sait afficher que des
   personnages) — parmi les cartes objet encore dans la réserve non jouée (« votre main
   actuelle »), Caméléon lui-même déjà exclu de cette liste par `handlePlayObject` avant que
@@ -1201,9 +1221,12 @@ infligés au banc ennemi sont doublés. »*
   `queries.ts::getCriticalPercent` garantit `boostPercent`%, exactement comme le statut
   `critical` déjà intégré au moteur (`Math.max` avec le taux courant, ne descend jamais un
   taux déjà plus élevé).
-  - Comme Poche de sang : le compteur est un état posé sur le **personnage**, pas un
-    modifier de l'objet. Détruire Crit + (terrain Destruction...) ne fait donc perdre ni la
-    progression ni un taux déjà garanti.
+  - Le statut porte `data.objectInstanceId` : le compteur est l'effet de **cet objet-là**,
+    pas un acquis du porteur. Détruire Crit + (terrain Destruction...) emporte donc le
+    compteur et le taux garanti avec lui — `zones.destroyObject` retire du (ex-)porteur tout
+    statut nommant l'objet détruit, réciproque exacte de `statuses.ts`, où un statut qui
+    expire détruit l'objet qu'il nomme. Même règle pour la Détermination, la Potion force et
+    le Miroir de Renvoi, qui posent déjà ce champ.
   - Badge visible sur la carte, avec progression : « Critiques (0/2) » → « (1/2) » → «
     Critique garanti (70%) » une fois le seuil atteint (label mis à jour par le moteur à
     chaque incrément, pas par la carte).
@@ -1347,7 +1370,7 @@ il en choisi une. »*
 
 ### Pheonix
 
-*« Tue ce personnage, au bout de 10 tours, le réanime avec 80pv max supplémentaire et 30
+*« Tue ce personnage, au bout de 15 tours, le réanime avec 80pv max supplémentaire et 30
 d'attaque supplémentaire. Si il ne vous reste plus qu'un personnage en vie. Cette carte ne
 ferra pas effet. »*
 
@@ -1609,14 +1632,19 @@ pendant le tour. »*
 - **Le prêt dure exactement le tour de son bénéficiaire** : `remainingTurns: 2` (le `+1` des
   statuts bloquants — le statut est posé pendant `onTurnStart`, qui passe **avant**
   `tickStatusesAtTurnStart`) et `ticksOnBench: true`, pour qu'un porteur renvoyé au banc dans
-  la foulée ne gèle pas le décompte.
+  la foulée ne gèle pas le décompte. ⚠️ Exception pour l'offre faite **à la pose** : la passe
+  de décompte du tour est déjà passée à ce moment-là, donc `remainingTurns: 1`, sans quoi le
+  prêt tiendrait jusqu'au tour suivant du même joueur.
 - Le prêt est fait au **personnage actif du moment** et repart avec lui : switcher pendant le
   tour fait perdre l'attaque empruntée (le nouvel actif n'a pas le statut).
 - ⚠️ **« Refermer le livre » est la première option du prompt** : accepter ferme toutes les
   attaques du joueur, ce n'est pas un cadeau qu'on peut lui imposer par un silence de 120 s.
 - Comme Isaac D6, le possesseur n'est plus sollicité sur le **dernier** tour du terrain.
-- Le poseur n'est pas servi au moment de la pose (contrairement à Isaac D6) : sa première
-  offre arrive au début de son tour suivant, conformément à « au début du tour ».
+- **Le poseur est servi dès la pose** (`trigger: ['onTurnStart', 'onTerrainPlayed']`, la
+  branche `onTerrainPlayed` filtrant sur son propre `terrainInstanceId` comme toujours). Le
+  tour du poseur a commencé avant que le livre ne soit sur la table : sans ça, il posait un
+  terrain dont il ne voyait rien avant deux tours. L'offre du tour est déjà tirée et rangée
+  dans le `data` du terrain, donc l'adversaire recevra bien **la même** au début du sien.
 
 ### Point faible — 2 tours
 

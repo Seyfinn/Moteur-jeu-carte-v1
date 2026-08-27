@@ -468,6 +468,21 @@ export function moveObjectFromPoolToInPlay(state: GameState, playerId: PlayerId,
   player.inPlayObjectInstanceIds.push(objectInstanceId);
 }
 
+/**
+ * Chemin inverse de `moveObjectFromPoolToInPlay` : l'objet quitte le plateau pour revenir
+ * dans la main non jouée de son propriétaire. Sert à la carte qui se *transforme* au lieu
+ * de se consommer ("Caméléon"), pas à annuler une pose -- le budget d'objets du tour, lui,
+ * a bien été débité.
+ */
+export function returnObjectToPool(state: GameState, playerId: PlayerId, objectInstanceId: string): void {
+  const player = state.players[playerId];
+  const idx = player.inPlayObjectInstanceIds.indexOf(objectInstanceId);
+  if (idx !== -1) player.inPlayObjectInstanceIds.splice(idx, 1);
+  if (!player.unplayedObjectInstanceIds.includes(objectInstanceId)) {
+    player.unplayedObjectInstanceIds.push(objectInstanceId);
+  }
+}
+
 export function moveObjectToGraveyard(state: GameState, playerId: PlayerId, objectInstanceId: string): void {
   const player = state.players[playerId];
   const inPlayIdx = player.inPlayObjectInstanceIds.indexOf(objectInstanceId);
@@ -501,6 +516,13 @@ export function destroyObject(state: GameState, objectInstanceId: string): void 
     if (char) {
       const idx = char.attachedObjectInstanceIds.indexOf(objectInstanceId);
       if (idx !== -1) char.attachedObjectInstanceIds.splice(idx, 1);
+      // Un statut qui NOMME l'objet qui le porte (`data.objectInstanceId` : le death-ward
+      // de Détermination, l'atk-boost de Potion force, le compteur de Crit +, le renvoi du
+      // Miroir...) est l'effet de cet objet, pas un état acquis du personnage : il s'en va
+      // avec lui. C'est la réciproque exacte de statuses.ts, où un statut qui expire
+      // détruit l'objet nommé -- sans elle, « Destruction détruit tous les objets équipés »
+      // laissait leurs effets tourner sur des cartes déjà au cimetière.
+      char.statuses = char.statuses.filter((s) => s.data?.['objectInstanceId'] !== objectInstanceId);
     }
     obj.attachedToCharacterInstanceId = undefined;
   }
