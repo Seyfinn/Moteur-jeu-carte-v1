@@ -85,3 +85,10 @@ export {
   DRAW_MODE_STARTING_CHARACTERS,
 } from './draw-mode.js';
 export type { DeckPoolEntry, EvolutionFormEntry, RosterValidation } from './deck.js';
+export {
+  RECYCLE_OBJECT_COST,
+  buildStandardObjectReserve,
+  describeRecycleUnavailable,
+  handObjectCardIds,
+  recycleObjects,
+} from './recycler.js';

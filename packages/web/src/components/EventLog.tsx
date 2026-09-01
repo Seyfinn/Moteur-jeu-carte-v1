@@ -37,6 +37,7 @@ const KIND_ICON: Record<string, string> = {
   'terrain-removed': '🍂',
   'terrain-duration': '⏳',
   'gain-object': '🃏',
+  recycle: '♻️',
   'concentration-missed': '😖',
   'chance-roll': '🎲',
   'proc-miss': '🎲',

@@ -23,6 +23,7 @@ packages/
 - `hp.ts` / `statuses.ts` / `zones.ts` — primitives HP/valeur lock, états (suspension sur banc, exception Poison/Brûlure), déplacements de zone (KO, remplacement obligatoire, cimetière, clonage)
 - `turn.ts` / `match.ts` — machine à tours et orchestration d'une partie (`Match`), avec un pipeline d'actions asynchrone qui se met en pause sur `ctx.choose(...)` et reprend via `answerChoice`. Un tour de jeu couvre l'action des **deux** joueurs, comme aux échecs : le compteur n'avance qu'une fois les deux passés
 - `cards/demo/` — le pool de cartes jouables (≈25 personnages, ≈17 objets, ≈11 terrains). `registerDemoCards()` les enregistre toutes ; `DEMO_ROSTER` est le pool complet exposé au deck-builder et `DEMO_STARTER_DECK` un deck légal prêt à jouer (6/6/2)
+- `recycler.ts` — le Recycleur d'Objets : 3 objets de la main contre 1 objet tiré au hasard dans la réserve du joueur, autant de fois qu'on veut pendant son tour, sans consommer le budget d'objets jouables ni fermer le tour. Les cartes sacrifiées repartent dans la réserve (jamais au cimetière), remélangée avant le tirage. Disponible dans les trois modes : `dealStandardObjectReserves` monte la réserve que le Mode Pioche possède déjà
 - `names.ts` — noms d'affichage (carte, joueur) utilisés par le journal d'événements, qui est écrit en français et étiqueté par `data.kind` pour que le client puisse le classer sans lire le texte
 - `test/` — suite Vitest (règles de tour, HP/valeur lock, états, KO/victoire/égalité, garde-fous du moteur, non-régressions, cartes à mécanique inédite)
 
