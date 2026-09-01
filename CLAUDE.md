@@ -260,6 +260,17 @@ Garde-fous appliqués automatiquement, inutile de les re-coder par carte :
   `onTerrainRemoved` avec `reason: 'replaced'`. La durée du nouveau terrain est déjà
   posée quand cet event part, et si une réaction le détruit dans la foulée, `onTerrainPlayed`
   n'est pas émis.
+- **Le Recycleur d'Objets** (`recycler.ts`) : pendant son tour, un joueur donne
+  `RECYCLE_OBJECT_COST` (3) objets de sa main et en reçoit **1** tiré au hasard dans sa
+  réserve d'objets (`drawPiles.objectCardIds`). Trois choses à savoir pour écrire une
+  carte : recycler **ne compte pas** comme « jouer un objet » (`objectsPlayedThisTurn`
+  n'est pas touché, la limite de 2 reste entière), ce n'est **pas limité par tour**, et
+  ça **ne ferme jamais le tour**. Les cartes sacrifiées **ne vont pas au cimetière** :
+  elles retournent dans la réserve, qui est remélangée *avant* le tirage — la carte reçue
+  peut donc être une des trois. Une carte qui parcourt le cimetière ne les y trouvera pas.
+  Disponible dans les trois modes : le Mode Pioche a déjà sa pile d'objets, et les modes
+  standard en reçoivent une à la création du match (`dealStandardObjectReserves`, tout le
+  catalogue moins la main de départ) — d'où un objet reçu qui peut sortir du deck construit.
 - **Un tour bonus** (« Za Warudo ! » de Dio) : `ctx.grantExtraTurn()`. `endTurn` rouvre
   alors un tour complet pour le même joueur au lieu de passer la main, et la marque est
   consommée à ce moment-là -- une pose ne peut donc jamais en donner deux. C'est un **vrai**

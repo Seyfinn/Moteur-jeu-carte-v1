@@ -44,6 +44,12 @@ import {
   findCharacter,
   getMaxAttachedObjects,
 } from './queries.js';
+import {
+  buildStandardObjectReserve,
+  describeRecycleUnavailable,
+  handObjectCardIds,
+  recycleObjects,
+} from './recycler.js';
 import { endTurn, startTurn } from './turn.js';
 import { getPlayerView } from './view.js';
 import { cardName, playerName } from './names.js';
@@ -73,6 +79,12 @@ export type PlayerAction =
   | { kind: 'use-ability'; characterInstanceId: string; abilityId: string }
   | { kind: 'attack'; characterInstanceId: string; attackId: string }
   | { kind: 'switch'; newActiveInstanceId: string }
+  /**
+   * Le Recycleur d'Objets : `RECYCLE_OBJECT_COST` objets de la main contre un objet tiré au
+   * hasard dans la réserve. Ni limité par tour, ni compté comme « jouer un objet », et ne
+   * ferme jamais le tour (voir recycler.ts).
+   */
+  | { kind: 'recycle-objects'; objectInstanceIds: string[] }
   | { kind: 'pass' };
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -186,6 +198,22 @@ function dealDrawModeOpening(state: GameState): void {
 }
 
 /**
+ * Modes standard (Normal / Aléatoire) : monte la réserve d'objets dans laquelle puise le
+ * Recycleur. Elle n'existe pas autrement hors Mode Pioche -- les objets du deck sont tous
+ * distribués en main dès le départ, et `drawPiles` reste inerte.
+ *
+ * La pile personnage, elle, n'est PAS remplie : rien ne pioche de personnage en mode
+ * standard, et une pile non vide ferait afficher un compteur de pioche au client.
+ */
+function dealStandardObjectReserves(state: GameState, seed: number): void {
+  // Un seed par camp : sans le décalage, les deux réserves seraient mélangées à l'identique.
+  (['p1', 'p2'] as PlayerId[]).forEach((playerId, index) => {
+    const player = state.players[playerId];
+    player.drawPiles.objectCardIds = buildStandardObjectReserve(seed + index, handObjectCardIds(player));
+  });
+}
+
+/**
  * Answers arrive from the network: `kind` matching the prompt is not enough, the payload
  * itself is untrusted. Without this, a malformed (or hostile) answer put arbitrary
  * strings straight into card effects -- most of which then call `findCharacter`, which
@@ -287,6 +315,10 @@ export class Match {
 
     const startingPlayerId: PlayerId = rngFlipCoin(state.rng) === 'heads' ? 'p1' : 'p2';
     state.startingPlayerId = startingPlayerId;
+    // Monté sur un flux dérivé du seed (voir recycler.ts), jamais sur `state.rng` : une
+    // partie rejouée au même seed doit se dérouler exactement pareil qu'avant l'arrivée du
+    // Recycleur, tirage de l'initiative comme jets de critique.
+    if (state.mode !== 'draw') dealStandardObjectReserves(state, seed);
     // Le tirage se voit à l'écran (roue des joueurs) ; le journal n'en garde que le
     // résultat, sans le « pile ou face » qui n'a plus de contrepartie visuelle.
     match.api.log(`${playerName(state, startingPlayerId)} commence la partie`, { kind: 'initiative', startingPlayerId }, startingPlayerId);
@@ -620,6 +652,13 @@ export class Match {
         }
         return { ok: true };
       }
+      case 'recycle-objects': {
+        // Tout le refus tient sur le seul GameState : la main peut donc griser le recycleur
+        // avec exactement la phrase que le serveur renverrait.
+        const unavailable = describeRecycleUnavailable(state, playerId, action.objectInstanceIds);
+        if (unavailable) return { ok: false, error: unavailable };
+        return { ok: true };
+      }
       case 'pass':
         return { ok: true };
     }
@@ -669,6 +708,11 @@ export class Match {
         endsTurn = !(free && happened);
         break;
       }
+      case 'recycle-objects':
+        // Utilisations illimitées : ni compteur par tour, ni budget d'objets consommé, et
+        // `endsTurn` reste faux -- le joueur garde la main pour agir ensuite.
+        recycleObjects(state, playerId, action.objectInstanceIds, this.api);
+        break;
       case 'pass':
         this.api.log(`${playerName(state, playerId)} passe son tour`, { kind: 'pass' }, playerId);
         endsTurn = true;

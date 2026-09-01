@@ -667,8 +667,10 @@ export function Board({ conn }: { conn: GameConnection }) {
         player={me}
         objectDenial={turnGate ?? objectDenial(state, you)}
         terrainDenial={turnGate ?? terrainDenial(state, you)}
+        recycleGate={turnGate}
         onPlayObject={(objectInstanceId) => conn.applyAction({ kind: 'play-object', objectInstanceId })}
         onPlayTerrain={(terrainInstanceId) => conn.applyAction({ kind: 'play-terrain', terrainInstanceId })}
+        onRecycle={(objectInstanceIds) => conn.applyAction({ kind: 'recycle-objects', objectInstanceIds })}
         onBlocked={setLocalError}
       />
 

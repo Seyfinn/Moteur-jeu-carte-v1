@@ -10,6 +10,7 @@ import {
   canUseAbility,
   describeDenials,
   describeObjectUnplayable,
+  describeRecycleUnavailable,
   getCharacterCard,
   getEffectiveATK,
   getObjectCard,
@@ -271,4 +272,18 @@ export function objectCardDenial(state: GameState, you: PlayerId, objectInstance
 
 export function terrainDenial(state: GameState, you: PlayerId): string | null {
   return denialOf(() => canPlayTerrain(state, you));
+}
+
+/**
+ * Le refus du Recycleur d'Objets, calculé par la fonction du moteur elle-même : la zone du
+ * recycleur se grise avec exactement la phrase que le serveur renverrait s'il refusait
+ * l'action. `selectedIds` valide en plus une sélection précise ; sans lui, la question est
+ * juste « ce joueur peut-il recycler quelque chose ? ».
+ */
+export function recycleDenial(state: GameState, you: PlayerId, selectedIds?: readonly string[]): string | null {
+  try {
+    return describeRecycleUnavailable(state, you, selectedIds);
+  } catch {
+    return null; // le serveur reste l'autorité
+  }
 }
