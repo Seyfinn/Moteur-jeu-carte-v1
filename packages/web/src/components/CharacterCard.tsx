@@ -136,6 +136,7 @@ export function CharacterCard({
   hideVitals,
   impact,
   facing,
+  hideName,
 }: {
   char: CharacterInstance;
   isActive: boolean;
@@ -188,6 +189,8 @@ export function CharacterCard({
    * de banc ou de cimetière n'a personne en face.
    */
   facing?: 'left' | 'right';
+  /** Nom repris par un bandeau extérieur (le HUD de combat du personnage actif). */
+  hideName?: boolean;
 }) {
   const hover = useHoverCard();
   const { currentHP } = characterVitals(char);
@@ -299,6 +302,7 @@ export function CharacterCard({
       orientation={orientation}
       rootRef={frameRef}
       className={frameClasses || undefined}
+      hideName={hideName}
       highlight={isActive || selected}
       dimmed={dead && isKOable}
       targetable={targetable}

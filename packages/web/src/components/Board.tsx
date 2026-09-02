@@ -12,7 +12,7 @@ import {
   type PlayerId,
   type PlayerState,
 } from 'engine';
-import { CharacterCard, CharacterVitals } from './CharacterCard';
+import { characterVitals, CharacterCard, CharacterVitals } from './CharacterCard';
 import { CardFrame } from './CardFrame';
 import { ChoiceCountdownBadge, ChoiceModal } from './ChoiceModal';
 import { switchTargeting, TargetingBar, useBoardTargeting, type BoardTargeting } from './Targeting';
@@ -142,7 +142,7 @@ function TerrainSlot({ player, side }: { player: PlayerState; side: 'self' | 'op
           <span className="terrain-slot-empty-icon" aria-hidden="true">
             🗺️
           </span>
-          <span className="terrain-slot-empty-label">Aucun Terrain</span>
+          <span className="terrain-slot-empty-label">Poser un Terrain</span>
         </div>
       )}
     </div>
@@ -173,39 +173,60 @@ function HeatHazeFilter() {
   );
 }
 
-function Nameplate({
-  label,
-  alive,
-  total,
-  lost,
-  isSelf,
-  isTheirTurn,
-}: {
+/** Identité d'un camp, telle que le bandeau de combat la donne à lire. */
+interface CombatantHud {
   label: string;
   alive: number;
   total: number;
   /** Mode Pioche : éliminations subies par ce camp. À DRAW_MODE_ELIMINATIONS_TO_WIN, il perd. */
   lost: number | null;
-  isSelf: boolean;
   isTheirTurn: boolean;
-}) {
+}
+
+/**
+ * Bandeau de combat posé AU-DESSUS du personnage actif : nom du camp à gauche, jauge de PV
+ * à droite. C'est le pendant de `hideName`/`hideVitals` sur la carte -- au format portrait
+ * géant, tout ce texte volait la place de l'illustration, qui est justement ce que ce
+ * format met en avant.
+ */
+function CombatHud({ hud, char, side }: { hud: CombatantHud; char: CharacterInstance | undefined; side: 'self' | 'opponent' }) {
+  const vitals = char ? characterVitals(char) : null;
+
   return (
-    <div className={`nameplate${isSelf ? ' self' : ' opponent'}${isTheirTurn ? ' active-turn' : ''}`}>
-      <span className="nameplate-name">{label}</span>
-      <span className="nameplate-meta">
-        {lost !== null && (
+    <div className={`combat-hud ${side}${hud.isTheirTurn ? ' active-turn' : ''}`}>
+      <div className="combat-hud-identity">
+        {/* Diode de tour : elle s'allume pour le camp qui a la main. */}
+        <span className="combat-hud-diode" aria-hidden="true" />
+        <span className="combat-hud-name">{hud.label}</span>
+        {hud.lost !== null && (
           <span
-            className={`nameplate-eliminations${lost >= DRAW_MODE_ELIMINATIONS_TO_WIN - 2 ? ' critical' : ''}`}
+            className={`combat-hud-elims${hud.lost >= DRAW_MODE_ELIMINATIONS_TO_WIN - 2 ? ' critical' : ''}`}
             title={`Personnages perdus. À ${DRAW_MODE_ELIMINATIONS_TO_WIN}, ce camp perd la partie.`}
           >
-            ☠ {lost}/{DRAW_MODE_ELIMINATIONS_TO_WIN}
+            ☠ {hud.lost}/{DRAW_MODE_ELIMINATIONS_TO_WIN}
           </span>
         )}
-        <span title="Personnages encore en jeu">
-          {alive}/{total} perso
+        <span className="combat-hud-roster" title="Personnages encore en jeu">
+          {hud.alive}/{hud.total}
         </span>
-        {isTheirTurn && <span className="nameplate-turn-pill">joue</span>}
-      </span>
+      </div>
+      {vitals ? (
+        // Le liseré bleu autour de la jauge matérialise le bouclier : une réserve à manger
+        // AVANT les PV, donc dessinée autour d'eux plutôt qu'à côté.
+        <div
+          className={`combat-hud-hp${vitals.shieldTotal > 0 ? ' shielded' : ''}`}
+          style={{ ['--hp-hue' as string]: Math.round(vitals.pct * 1.2) }}
+          title={vitals.shieldTotal > 0 ? `${vitals.shieldTotal} points de bouclier` : undefined}
+        >
+          <div className={`combat-hud-hp-fill${vitals.pct <= 25 ? ' low' : ''}`} style={{ width: `${vitals.pct}%` }} />
+          <span className="combat-hud-hp-text">
+            {vitals.currentHP} / {char!.currentMaxHP}
+            {vitals.shieldTotal > 0 && <em className="combat-hud-shield">+{vitals.shieldTotal} 🛡</em>}
+          </span>
+        </div>
+      ) : (
+        <div className="combat-hud-hp empty" />
+      )}
     </div>
   );
 }
@@ -216,50 +237,54 @@ function ActiveSlot({
   side,
   targeting,
   state,
-  commands,
+  actions,
   impact,
+  hud,
 }: {
   char: CharacterInstance | undefined;
   badges?: CharacterBadge[];
   side: 'self' | 'opponent';
   targeting: BoardTargeting | null;
   state: GameState;
-  /** Panneau d'actions logé dans la carte elle-même -- côté joueur uniquement. */
-  commands?: ReactNode;
+  /** Colonne de commandes dressée à droite de la carte -- côté joueur uniquement. */
+  actions?: ReactNode;
   impact?: CharacterImpact;
+  hud: CombatantHud;
 }) {
-  if (!char) {
-    // Le slot vide garde la classe `commanded` : sinon le plateau se réorganiserait d'un
-    // coup entre la mort d'un actif et l'arrivée de son remplaçant.
-    return (
-      <div className={`active-slot empty ${side}${commands ? ' commanded' : ''}`}>Aucun personnage actif</div>
-    );
-  }
   return (
-    <div className={`active-slot ${side}${commands ? ' commanded' : ''}`}>
-      {/* La clé est indispensable ici : le slot garde sa place dans l'arbre quand l'actif
-          change, donc sans elle React réutilise le même CharacterCard et son compteur de
-          dégâts compare les PV de deux personnages différents -- le nouvel arrivant
-          récoltait un « -N » et un flash de dégâts qu'il n'a jamais subis. */}
-      <CharacterCard
-        key={char.instanceId}
-        char={char}
-        isActive
-        isKOable
-        size="large"
-        orientation="landscape"
-        badges={badges}
-        targetable={targeting?.options.has(char.instanceId)}
-        targeted={targeting?.selected.includes(char.instanceId)}
-        onTarget={() => targeting?.toggle(char.instanceId)}
-        attachedObjects={attachedObjectsOf(state, char)}
-        state={state}
-        commands={commands}
-        impact={impact}
-        // L'ennemi est toujours en face : le joueur bondit vers la droite, l'adversaire
-        // vers la gauche.
-        facing={side === 'self' ? 'right' : 'left'}
-      />
+    <div className={`active-slot ${side}${actions ? ' commanded' : ''}`}>
+      <CombatHud hud={hud} char={char} side={side} />
+      <div className="active-stage">
+        {char ? (
+          /* La clé est indispensable ici : le slot garde sa place dans l'arbre quand l'actif
+             change, donc sans elle React réutilise le même CharacterCard et son compteur de
+             dégâts compare les PV de deux personnages différents -- le nouvel arrivant
+             récoltait un « -N » et un flash de dégâts qu'il n'a jamais subis. */
+          <CharacterCard
+            key={char.instanceId}
+            char={char}
+            isActive
+            isKOable
+            size="large"
+            orientation="portrait"
+            badges={badges}
+            targetable={targeting?.options.has(char.instanceId)}
+            targeted={targeting?.selected.includes(char.instanceId)}
+            onTarget={() => targeting?.toggle(char.instanceId)}
+            attachedObjects={attachedObjectsOf(state, char)}
+            state={state}
+            impact={impact}
+            // L'ennemi est toujours en face : le joueur bondit vers la droite, l'adversaire
+            // vers la gauche.
+            facing={side === 'self' ? 'right' : 'left'}
+            hideName
+            hideVitals
+          />
+        ) : (
+          <div className="active-slot-empty">Aucun personnage actif</div>
+        )}
+        {actions}
+      </div>
     </div>
   );
 }
@@ -690,20 +715,6 @@ export function Board({ conn }: { conn: GameConnection }) {
             <TerrainSlot player={me} side="self" />
           </div>
 
-          <div className="zone zone-plate-self">
-            <Nameplate
-              label={`${me.displayName || 'Vous'} (vous)`}
-              lost={drawMode ? me.charactersLost : null}
-              alive={aliveOf(me)}
-              // Dénominateur pris sur le roster complet, pas sur vivants+cimetière : pendant
-              // la mise en place personne n'est encore sur le plateau et le compteur
-              // affichait un « 0/0 » qui ne veut rien dire.
-              total={Object.keys(me.characters).length}
-              isSelf
-              isTheirTurn={myTurn}
-            />
-          </div>
-
           <div className="zone zone-active-self">
             <ActiveSlot
               char={activeOf(me)}
@@ -712,7 +723,17 @@ export function Board({ conn }: { conn: GameConnection }) {
               targeting={targeting}
               state={state}
               impact={impactsByCharacter.get(me.activeCharacterInstanceId ?? '')}
-              commands={
+              hud={{
+                label: `${me.displayName || 'Vous'} (vous)`,
+                lost: drawMode ? me.charactersLost : null,
+                alive: aliveOf(me),
+                // Dénominateur pris sur le roster complet, pas sur vivants+cimetière :
+                // pendant la mise en place personne n'est encore sur le plateau et le
+                // compteur affichait un « 0/0 » qui ne veut rien dire.
+                total: Object.keys(me.characters).length,
+                isTheirTurn: myTurn,
+              }}
+              actions={
                 <CommandPanel state={state} you={you} conn={conn} onStartSwitch={() => setSwitchMode(true)} />
               }
             />
@@ -734,22 +755,18 @@ export function Board({ conn }: { conn: GameConnection }) {
               targeting={targeting}
               state={state}
               impact={impactsByCharacter.get(opponent.activeCharacterInstanceId ?? '')}
+              hud={{
+                label: opponentName,
+                lost: drawMode ? opponent.charactersLost : null,
+                alive: aliveOf(opponent),
+                total: Object.keys(opponent.characters).length,
+                isTheirTurn: !myTurn,
+              }}
             />
           </div>
 
           <div className="zone zone-terrain-opp">
             <TerrainSlot player={opponent} side="opponent" />
-          </div>
-
-          <div className="zone zone-plate-opp">
-            <Nameplate
-              label={opponentName}
-              lost={drawMode ? opponent.charactersLost : null}
-              alive={aliveOf(opponent)}
-              total={Object.keys(opponent.characters).length}
-              isSelf={false}
-              isTheirTurn={!myTurn}
-            />
           </div>
 
           <div className="rail rail-opp">

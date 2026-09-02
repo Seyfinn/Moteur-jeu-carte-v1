@@ -915,22 +915,26 @@ input::placeholder {
   /* Banc élargi de 20 %. La HAUTEUR, elle, baisse : la vignette ne porte plus les PV (le
      bloc `.bench-vitals` les reprend sous elle), et cinq réservistes doivent tenir entre
      le cimetière et la main sans passer sous la ligne de flottaison. */
-  --bench-card-w: clamp(168px, 22.8vh, 250px);
+  --bench-card-w: clamp(150px, 19vh, 214px);
   --bench-card-h: clamp(50px, 6.9vh, 78px);
   --gy-card-w: clamp(96px, 13vh, 132px);
   --card-pile-w: clamp(54px, 7.5vh, 82px);
   /* Le terrain a quitté le rail pour la ligne centrale : il y a la place d'en montrer
      enfin l'illustration. Borné en hauteur, comme l'actif, pour ne pas gonfler la rangée. */
-  --terrain-card-w: clamp(86px, 12.5vh, 138px);
+  --terrain-card-w: clamp(78px, 10.4vh, 122px);
   --card-opp-hand-w: clamp(34px, 4.5vh, 56px);
   /* Les deux actifs sont les pièces maîtresses du plateau : ils prennent nettement plus
      de place que tout le reste. Largeur bornée par la fenêtre (la colonne de la grille
      les rétrécit d'elle-même si les rails prennent trop de place), hauteur bornée par la
      hauteur d'écran pour ne jamais pousser la main ou le banc hors du cadre.
-     Cotes relevées de 30 % : le panneau de commandes a quitté la rangée du dessous pour
-     la colonne d'infos de la carte, et cette place rendue va au face-à-face. */
-  --active-card-w: clamp(416px, 39vw, 702px);
-  --active-card-h: clamp(195px, 34vh, 364px);
+     Format PORTRAIT géant : c'est la HAUTEUR qui commande (la largeur en découle, cf.
+     `.active-slot .tcg-card-large`), pour que deux portraits de PV différents fassent
+     exactement la même taille et que la ligne centrale reste symétrique. */
+  --active-card-h: clamp(280px, min(46vh, 26vw), 480px);
+  /* Largeur de la colonne de commandes. Partagée, parce que le bandeau de combat doit se
+     décaler d'exactement autant pour rester aligné sur la CARTE et non sur l'ensemble
+     carte + colonne. */
+  --cmd-col-w: clamp(84px, 7.4vw, 118px);
   position: relative;
   /* Un écran large n'a aucune raison de laisser deux bandes noires sur les côtés pendant
      que les cartes se serrent au milieu. */
@@ -1108,10 +1112,27 @@ input::placeholder {
   --capsule-fg: #ffd98a;
 }
 .board-turn-capsule.theirs {
-  --capsule-line: rgba(224, 116, 70, 0.7);
-  --capsule-bg-top: rgba(88, 44, 30, 0.45);
-  --capsule-bg-bottom: rgba(36, 20, 16, 0.5);
-  --capsule-fg: #ffb08a;
+  --capsule-line: rgba(226, 74, 74, 0.8);
+  --capsule-bg-top: rgba(92, 28, 28, 0.5);
+  --capsule-bg-bottom: rgba(36, 14, 14, 0.55);
+  --capsule-fg: #ff9d9d;
+  animation: capsule-alert 2s ease-in-out infinite;
+}
+/* Alerte discrète : c'est le tour de l'adversaire, l'information doit se voir sans
+   clignoter agressivement pendant qu'on attend. */
+@keyframes capsule-alert {
+  0%,
+  100% {
+    box-shadow: 0 0 14px -6px var(--capsule-line), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  }
+  50% {
+    box-shadow: 0 0 26px -2px var(--capsule-line), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .board-turn-capsule.theirs {
+    animation: none;
+  }
 }
 .board-turn-number {
   font-size: 0.7rem;
@@ -1403,7 +1424,7 @@ input::placeholder {
    l'éventail et resterait de travers en gros plan. */
 .hand-card:hover {
   z-index: 60;
-  transform: rotate(0deg) translateY(-100px) scale(1.4);
+  transform: rotate(0deg) translateY(-120px) scale(1.5);
 }
 /* ... et le reste de la main s'efface derrière elle. `:has` cible le survol d'UNE carte,
    là où `.hand-fan:hover` se serait déclenché dans les trous entre les cartes. */
@@ -1540,13 +1561,12 @@ input::placeholder {
      actif au lieu de se faire face en diagonale.
      La ligne centrale se lit en miroir de part et d'autre du « VS » :
      [terrain joueur] [actif joueur] VS [actif adverse] [terrain adverse]. */
-  grid-template-columns: auto auto minmax(0, 1fr) auto minmax(0, 1fr) auto auto;
-  grid-template-rows: auto auto;
-  grid-template-areas:
-    'railS terrS plateS  vs plateO  terrO railO'
-    'railS terrS activeS vs activeO terrO railO';
+  grid-template-columns: auto auto min-content auto min-content auto auto;
+  grid-template-rows: auto;
+  grid-template-areas: 'railS terrS activeS vs activeO terrO railO';
   align-content: center;
-  column-gap: 14px;
+  justify-content: center;
+  column-gap: 10px;
   row-gap: 6px;
 }
 .rail-self {
@@ -1555,19 +1575,11 @@ input::placeholder {
 .rail-opp {
   grid-area: railO;
 }
-.zone-plate-self {
-  grid-area: plateS;
-  align-self: end;
-}
 .zone-active-self {
   grid-area: activeS;
 }
 .zone-active-opp {
   grid-area: activeO;
-}
-.zone-plate-opp {
-  grid-area: plateO;
-  align-self: end;
 }
 /* Les deux terrains encadrent le duel, centrés sur la hauteur des deux rangées. */
 .zone-terrain-self {
@@ -1796,107 +1808,230 @@ input::placeholder {
   opacity: 0.75;
 }
 
-/* Plaque de nom de chaque camp, posée du côté « extérieur » de son personnage actif. */
-.nameplate {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 5px 10px;
-  border-radius: var(--radius-sm);
-  background: var(--panel);
-  border: 1px solid var(--border);
-  font-size: 0.74rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-dim);
-}
-.nameplate.self {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.nameplate.active-turn {
-  box-shadow: 0 0 0 1px var(--accent-soft), 0 0 16px -6px var(--accent-glow);
-}
-.nameplate-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.nameplate-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  font-size: 0.68rem;
-}
-.nameplate-turn-pill {
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  border: 1px solid var(--accent-glow);
-}
 
 /* Les deux actifs se font face au milieu du plateau. */
+/* ==========================================================================
+   Arène centrale : deux portraits géants qui se font face, chacun coiffé de son bandeau
+   de combat et flanqué (côté joueur) de sa colonne de commandes.
+
+   La carte est en portrait et de HAUTEUR fixe : c'est elle qui commande, l'illustration
+   remplit ce qu'il reste (`flex: 1` sur l'art, dont l'image est en absolu depuis la refonte
+   du paysage). Sans hauteur fixe, un ratio 3/4 aurait donné des cartes de tailles
+   différentes selon le nombre de statuts affichés dessous.
+   ========================================================================== */
 .active-slot {
-  --landscape-w: var(--active-card-w);
-  --landscape-h: var(--active-card-h);
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
 }
-/* Typographie remise à l'échelle de la carte : agrandir le cadre sans toucher au texte
-   aurait juste donné une grande carte aux statistiques minuscules. */
-.active-slot .tcg-card-landscape .tcg-card-name-banner {
-  font-size: clamp(1rem, 2vh, 1.45rem);
-  padding: 9px 14px;
+.active-slot.self {
+  align-items: flex-end;
 }
-.active-slot .tcg-card-landscape .tcg-card-body {
-  gap: 6px;
-  padding: 8px 14px 10px;
+.active-slot.opponent {
+  align-items: flex-start;
 }
-/* Jauges franchement épaisses sur l'actif : à cette taille de carte, les 7 px du banc
-   n'étaient plus qu'un trait, alors que ce sont les deux chiffres qu'on lit en continu. */
-.active-slot .hp-bar {
-  height: 16px;
+/* La carte et la colonne de commandes, côte à côte sur le même axe horizontal. */
+.active-stage {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
 }
-.active-slot .shield-bar {
-  height: 10px;
+.active-slot .tcg-card-large {
+  width: calc(var(--active-card-h) * 0.68);
+  height: var(--active-card-h);
 }
-.active-slot .hp-text {
-  font-size: clamp(0.78rem, 1.55vh, 1.1rem);
+.active-slot .tcg-card-large .tcg-card-art {
+  flex: 1;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+.active-slot .tcg-card-large .tcg-card-body {
+  flex: 0 0 auto;
+  padding: 5px 8px 7px;
 }
 .active-slot .status-badge {
   font-size: clamp(0.62rem, 1.2vh, 0.84rem);
   padding: 2px 7px;
 }
-/* La colonne d'infos accueille désormais les commandes : l'illustration lui laisse de la
-   place plutôt que de tenir la moitié de la carte pour elle. */
-.active-slot .tcg-card-landscape .tcg-card-art {
-  flex: 0 0 42%;
-}
-.active-slot.commanded .tcg-card-landscape .tcg-card-art {
-  flex: 0 0 36%;
-}
-/* Les commandes vivant dans la carte, la colonne d'infos empile de haut en bas (jauges
-   puis boutons) au lieu de centrer trois lignes dans le vide. */
-.active-slot.commanded .tcg-card-landscape .tcg-card-body {
-  justify-content: flex-start;
-}
-.active-slot.self {
-  justify-content: flex-end;
-}
-.active-slot.opponent {
-  justify-content: flex-start;
-}
-.active-slot.empty {
-  align-items: center;
-  justify-content: center;
-  min-height: var(--active-card-h);
+.active-slot-empty {
+  display: grid;
+  place-items: center;
+  width: calc(var(--active-card-h) * 0.68);
+  height: var(--active-card-h);
   border: 2px dashed var(--border);
   border-radius: var(--radius-md);
   color: var(--text-dim);
   font-size: 0.78rem;
+  text-align: center;
+}
+
+/* ==========================================================================
+   Bandeau de combat : nom du camp à gauche, jauge de PV à droite. Il remplace l'ancienne
+   plaque de nom ET les jauges qui vivaient dans la carte -- au format portrait, ce texte
+   mangeait l'illustration.
+   ========================================================================== */
+.combat-hud {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: calc(var(--active-card-h) * 0.68);
+  max-width: 100%;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, rgba(38, 46, 62, 0.82), rgba(18, 23, 33, 0.78));
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+/* Le bandeau s'aligne sur la CARTE, pas sur l'ensemble carte + colonne de commandes :
+   sans ce décalage, il se retrouvait posé au-dessus des touches d'arcade. */
+.active-slot.self.commanded .combat-hud {
+  margin-right: calc(var(--cmd-col-w) + 10px);
+}
+.combat-hud.active-turn {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm), 0 0 18px -8px var(--accent-glow);
+}
+.combat-hud-identity {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+/* Diode de tour : éteinte, elle reste un point sombre -- la place ne bouge pas d'un tour
+   à l'autre, seule la lumière change. */
+.combat-hud-diode {
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #2a3140;
+  box-shadow: inset 0 0 3px rgba(0, 0, 0, 0.8);
+}
+.combat-hud.active-turn .combat-hud-diode {
+  background: var(--accent);
+  box-shadow: 0 0 10px 2px var(--accent-glow), inset 0 0 3px rgba(255, 255, 255, 0.6);
+  animation: hud-diode-pulse 1.6s ease-in-out infinite;
+}
+@keyframes hud-diode-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 8px 1px var(--accent-glow), inset 0 0 3px rgba(255, 255, 255, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 16px 4px var(--accent-glow), inset 0 0 3px rgba(255, 255, 255, 0.8);
+  }
+}
+.combat-hud-name {
+  font-family: 'Manrope', 'Inter', system-ui, sans-serif;
+  font-size: clamp(0.72rem, 1.4vh, 0.94rem);
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.combat-hud.self .combat-hud-name {
+  color: #cfe0ff;
+}
+.combat-hud.opponent .combat-hud-name {
+  color: #ffd2c4;
+}
+.combat-hud-roster,
+.combat-hud-elims {
+  flex-shrink: 0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.combat-hud-elims.critical {
+  color: var(--danger);
+}
+/* Jauge de PV du bandeau : épaisse, dégradée en continu (`--hp-hue`, posée en JS), et le
+   chiffre POSÉ DESSUS plutôt qu'à côté -- c'est ce qui la rend lisible d'un coup d'œil. */
+.combat-hud-hp {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #0b0e13;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.7);
+}
+.combat-hud-hp-fill {
+  height: 100%;
+  background: linear-gradient(180deg, hsl(var(--hp-hue, 120) 72% 52%), hsl(var(--hp-hue, 120) 78% 34%));
+  box-shadow: inset 0 1px 0 hsl(var(--hp-hue, 120) 90% 72% / 0.6);
+  transition: width 0.3s var(--ease), background 0.3s var(--ease);
+}
+.combat-hud-hp-fill.low {
+  animation: hud-hp-critical 0.9s ease-in-out infinite;
+}
+@keyframes hud-hp-critical {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.5);
+  }
+}
+.combat-hud-hp-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+  pointer-events: none;
+}
+.combat-hud-shield {
+  font-style: normal;
+  color: #b6e6ff;
+}
+/* Bouclier : liseré métallique bleu autour de la jauge. Il ENTOURE les PV parce que c'est
+   exactement ce qu'il fait -- il faut le percer avant de les entamer. */
+.combat-hud-hp.shielded {
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.7),
+    inset 0 0 0 2px rgba(154, 220, 255, 0.85),
+    0 0 14px -2px rgba(127, 199, 242, 0.85);
+  animation: hud-shield-shine 2.4s ease-in-out infinite;
+}
+@keyframes hud-shield-shine {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 2px 4px rgba(0, 0, 0, 0.7),
+      inset 0 0 0 2px rgba(154, 220, 255, 0.7),
+      0 0 10px -3px rgba(127, 199, 242, 0.7);
+  }
+  50% {
+    box-shadow:
+      inset 0 2px 4px rgba(0, 0, 0, 0.7),
+      inset 0 0 0 2px rgba(200, 240, 255, 1),
+      0 0 20px 0 rgba(154, 220, 255, 0.95);
+  }
+}
+.combat-hud-hp.empty {
+  background: repeating-linear-gradient(135deg, #14181f 0 6px, #0d1016 6px 12px);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.7);
+}
+@media (prefers-reduced-motion: reduce) {
+  .combat-hud.active-turn .combat-hud-diode,
+  .combat-hud-hp-fill.low,
+  .combat-hud-hp.shielded {
+    animation: none;
+  }
 }
 
 /* En-tête de sous-famille dans le deck-builder et le panneau de deck : sépare les objets
@@ -3009,16 +3144,16 @@ input::placeholder {
   animation: impact-dash var(--dash-dur, 320ms) cubic-bezier(0.22, 1.4, 0.36, 1) both;
 }
 .tcg-card.impact-dash.impact-light {
-  --dash-dist: 12px;
-  --dash-dur: 260ms;
+  --dash-dist: 30px;
+  --dash-dur: 280ms;
 }
 .tcg-card.impact-dash.impact-medium {
-  --dash-dist: 26px;
-  --dash-dur: 320ms;
+  --dash-dist: 55px;
+  --dash-dur: 340ms;
 }
 .tcg-card.impact-dash.impact-heavy {
-  --dash-dist: 46px;
-  --dash-dur: 380ms;
+  --dash-dist: 80px;
+  --dash-dur: 400ms;
 }
 .tcg-card.impact-dash-left {
   --dash-sign: -1;
@@ -3646,107 +3781,80 @@ input::placeholder {
 }
 
 /* ==========================================================================
-   Panneau de commandes « façon Pokémon ». Il ne vit plus dans une grille posée SOUS le
-   personnage actif : il est logé dans la colonne d'infos de la carte elle-même
-   (`.card-commands`, cf. CharacterCard), sous les jauges de PV et de bouclier. Les objets
-   et les terrains n'y sont pas : ils se jouent depuis la main, en bas.
-   ========================================================================== */
+   Colonne de commandes, dressée à DROITE du portrait actif du joueur : quatre touches de
+   borne d'arcade (attaque / capacité / switch / passer) empilées sur la hauteur de la
+   carte. Elle a quitté l'intérieur de la carte -- au format portrait, l'illustration prend
+   toute la place et n'a plus de colonne d'infos où loger quoi que ce soit.
 
-/* Le bloc pousse les commandes en bas de la colonne d'infos, quel que soit le nombre de
-   statuts affichés au-dessus -- sinon les boutons remontaient et redescendaient à chaque
-   brûlure posée ou dissipée. */
-.card-commands {
-  margin-top: auto;
-  padding-top: 6px;
-  cursor: default;
-}
+   Les objets et les terrains ne sont pas ici : ils se jouent depuis la main, en bas.
+   ========================================================================== */
 .cmd-panel {
-  width: 100%;
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  width: var(--cmd-col-w);
 }
-/* Rubrique ouverte : elle prend la place des quatre boutons dans la carte, donc elle se
-   détache du fond pour qu'on voie qu'on est « entré » dans une liste. */
-.cmd-panel-open {
-  background: rgba(0, 0, 0, 0.28);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 6px;
-}
-.cmd-panel-attack {
-  border-color: #d0606a;
-}
-.cmd-panel-ability {
-  border-color: #9b7ce0;
-}
-.cmd-panel-switch {
-  border-color: #4fbf95;
-}
-/* Même encombrement pendant le tour adverse : sans ça la carte active changeait de
-   hauteur à chaque changement de tour. */
+/* Même encombrement pendant le tour adverse : sans ça, la carte active se décalait à
+   chaque changement de main. */
 .cmd-panel-waiting {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: clamp(52px, 9vh, 76px);
+  padding: 10px 6px;
   border: 1px dashed var(--border);
   border-radius: var(--radius-sm);
+  text-align: center;
 }
 .cmd-waiting-label {
   color: var(--text-dim);
-  font-size: 0.76rem;
+  font-size: 0.68rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 .cmd-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  grid-template-rows: repeat(4, 1fr);
+  gap: 8px;
+  width: 100%;
 }
-/* La colonne d'infos de la carte est étroite : sans `min-width: 0`, un élément de grille
-   refuse de descendre sous la largeur de son propre texte et les quatre boutons
-   débordaient du cadre au lieu de se contenter de leur moitié. */
-.cmd-grid > * {
-  min-width: 0;
-}
-/* Boutons « façon console » : coins biseautés (le biseau est une découpe, donc le liseré
-   est un box-shadow interne et non une bordure -- une bordure serait coupée en diagonale),
-   arête claire en haut, ombre portée en bas, et enfoncement de 2 px au clic.
-   Le halo de survol passe par `drop-shadow` : un `box-shadow` externe serait rogné par le
-   `clip-path`, donc invisible. */
+/* Touches de borne : coins biseautés (une découpe, donc le liseré est un box-shadow
+   interne -- une bordure serait tranchée en diagonale), arête claire en haut, ombre
+   portée en bas, enfoncement de 2 px au clic. Le halo de survol passe par `drop-shadow` :
+   un `box-shadow` externe serait rogné par le `clip-path`, donc invisible. */
 .cmd-button {
   position: relative;
-  /* Pastille icône-au-dessus-du-libellé plutôt que ligne icône-puis-texte : la colonne
-     d'infos d'une carte fait la moitié de la largeur de l'ancien panneau, et « Capacité »
-     posé à côté de son icône s'y coupait en « C… ». */
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1px;
-  padding: clamp(6px, 1.1vh, 9px) 6px;
+  gap: 3px;
+  padding: clamp(8px, 1.4vh, 14px) 6px;
   text-align: center;
-  font-size: clamp(0.68rem, 1.25vh, 0.84rem);
+  font-size: clamp(0.66rem, 1.2vh, 0.82rem);
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   border: none;
   border-radius: 0;
-  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+  clip-path: polygon(11px 0, 100% 0, 100% calc(100% - 11px), calc(100% - 11px) 100%, 0 100%, 0 11px);
   background: var(--cmd-bg, var(--panel-alt));
   color: var(--cmd-fg, var(--text));
   box-shadow:
     inset 0 0 0 1px var(--cmd-border, var(--border)),
     inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    inset 0 -3px 0 rgba(0, 0, 0, 0.34);
+    inset 0 -3px 0 rgba(0, 0, 0, 0.36);
   transition:
     transform 0.1s var(--ease),
     filter 0.18s var(--ease),
     box-shadow 0.18s var(--ease);
 }
-/* `background` est redéclaré : la règle générique `button:hover` repeindrait le bouton
-   en gris et effacerait le code couleur de la rubrique. */
+/* `background` est redéclaré : la règle générique `button:hover` repeindrait la touche en
+   gris et effacerait le code couleur de la rubrique. */
 .cmd-button:hover:not(:disabled) {
   background: var(--cmd-bg, var(--panel-raised));
-  filter: brightness(1.15) drop-shadow(0 0 9px var(--cmd-glow, var(--accent-glow)));
+  filter: brightness(1.18) drop-shadow(0 0 12px var(--cmd-glow, var(--accent-glow)));
   transform: translateY(-1px);
 }
 .cmd-button:active:not(:disabled) {
@@ -3754,14 +3862,18 @@ input::placeholder {
   filter: brightness(0.9);
   box-shadow:
     inset 0 0 0 1px var(--cmd-border, var(--border)),
-    inset 0 3px 7px rgba(0, 0, 0, 0.55);
+    inset 0 3px 8px rgba(0, 0, 0, 0.6);
+}
+/* Rubrique ouverte : la touche reste allumée pendant qu'on lit son panneau. */
+.cmd-button-active {
+  filter: brightness(1.25) drop-shadow(0 0 14px var(--cmd-glow, var(--accent-glow)));
 }
 .cmd-button:disabled {
   cursor: not-allowed;
 }
 .cmd-button-icon {
-  font-size: clamp(0.95rem, 1.8vh, 1.25rem);
-  line-height: 1.1;
+  font-size: clamp(1.05rem, 2vh, 1.45rem);
+  line-height: 1.05;
 }
 .cmd-button-label {
   max-width: 100%;
@@ -3769,21 +3881,19 @@ input::placeholder {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Le compte d'options part dans le coin : en ligne, il volait au libellé la largeur qui
-   lui manquait déjà. */
 .cmd-button-count {
   position: absolute;
-  top: 2px;
-  right: 4px;
+  top: 3px;
+  right: 5px;
   min-width: 15px;
   padding: 0 4px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.42);
+  background: rgba(0, 0, 0, 0.45);
   font-size: 0.6rem;
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
 }
-/* Rubrique vide ou entièrement bloquée : le bouton reste lisible, mais il n'attire plus. */
+/* Rubrique vide ou entièrement bloquée : la touche reste lisible, mais elle n'attire plus. */
 .cmd-button-blocked {
   filter: saturate(0.3);
 }
@@ -3791,36 +3901,80 @@ input::placeholder {
   --cmd-bg: linear-gradient(180deg, #b5434c, #8e2f37);
   --cmd-border: #d0606a;
   --cmd-fg: #ffe9ea;
-  --cmd-glow: rgba(208, 96, 106, 0.85);
+  --cmd-glow: rgba(226, 74, 88, 0.95);
 }
 .cmd-ability {
   --cmd-bg: linear-gradient(180deg, #6a4bb5, #4a3187);
   --cmd-border: #9b7ce0;
   --cmd-fg: #ece4ff;
-  --cmd-glow: rgba(155, 124, 224, 0.85);
+  --cmd-glow: rgba(168, 120, 255, 0.95);
 }
 .cmd-switch {
   --cmd-bg: linear-gradient(180deg, #2f7d63, #21604a);
   --cmd-border: #4fbf95;
   --cmd-fg: #dffaef;
-  --cmd-glow: rgba(79, 191, 149, 0.85);
+  --cmd-glow: rgba(79, 224, 149, 0.95);
 }
 .cmd-pass {
   --cmd-bg: linear-gradient(180deg, #4a5262, #363d4a);
   --cmd-border: #69738a;
   --cmd-fg: #dfe4ee;
-  --cmd-glow: rgba(105, 115, 138, 0.85);
+  --cmd-glow: rgba(150, 162, 186, 0.9);
 }
+
+/* Panneau contextuel d'une rubrique : il tombe SOUS la colonne, aligné sur son bord droit.
+   Les deux autres placements évidents masquent une carte de personnage -- à gauche celle du
+   joueur, à droite celle de l'adversaire, puisque la colonne est coincée entre les deux.
+   La bande sous les portraits, elle, est vide. */
+.cmd-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 26;
+  width: max(240px, 19vw);
+  max-height: 30vh;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  background: rgba(20, 25, 35, 0.96);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  animation: cmd-popover-in 0.16s var(--ease);
+}
+@keyframes cmd-popover-in {
+  from {
+    opacity: 0;
+    translate: 0 -8px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+.cmd-popover-attack {
+  border-color: #d0606a;
+}
+.cmd-popover-ability {
+  border-color: #9b7ce0;
+}
+
 .cmd-sub-head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   margin-bottom: 6px;
 }
 .cmd-back {
-  padding: 2px 9px;
-  font-size: 0.95rem;
-  line-height: 1.3;
+  padding: 0 8px;
+  font-size: 1rem;
+  line-height: 1.4;
+  color: var(--text-dim);
+  background: transparent;
+  border-color: var(--border-soft);
 }
 .cmd-sub-title {
   font-size: 0.72rem;
@@ -3829,13 +3983,12 @@ input::placeholder {
   letter-spacing: 0.08em;
   color: var(--text-dim);
 }
-/* La liste vit maintenant dans la carte, qui est en `overflow: hidden` : sans plafond
-   propre elle serait rognée au lieu de défiler. */
+/* Le panneau ne dépasse jamais la hauteur du portrait : au-delà, la liste défile. */
 .cmd-options {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: clamp(96px, 19vh, 216px);
+  min-height: 0;
   overflow-y: auto;
 }
 .cmd-option {
@@ -4400,14 +4553,6 @@ textarea {
   align-items: center;
   gap: 3px;
 }
-/* Compteur d'éliminations du Mode Pioche : discret, puis alarmant à l'approche du seuil. */
-.nameplate-eliminations {
-  font-variant-numeric: tabular-nums;
-}
-.nameplate-eliminations.critical {
-  color: #ff6b6b;
-  font-weight: 600;
-}
 .board-header-piles {
   font-variant-numeric: tabular-nums;
   opacity: 0.8;
@@ -4891,27 +5036,20 @@ textarea {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: none;
     grid-template-areas:
-      'plateO'
       'activeO'
       'terrO'
       'railO'
       'vs'
       'railS'
       'terrS'
-      'activeS'
-      'plateS';
+      'activeS';
     row-gap: 6px;
-  }
-  .zone-plate-self,
-  .zone-plate-opp,
-  .zone-terrain-self,
-  .zone-terrain-opp {
-    align-self: auto;
   }
   /* Empilé, le terrain se pose sous (ou sur) son actif plutôt qu'à côté : la ligne
      centrale en miroir n'a plus de sens sur une colonne unique. */
   .zone-terrain-self,
   .zone-terrain-opp {
+    align-self: auto;
     justify-self: center;
   }
   .rail-self,
@@ -4920,7 +5058,7 @@ textarea {
   }
   .active-slot.self,
   .active-slot.opponent {
-    justify-content: center;
+    align-items: center;
   }
   /* Empilé, le « versus » n'est plus une colonne mais la ligne de partage horizontale
      entre les deux moitiés du plateau. */
@@ -5015,8 +5153,7 @@ textarea {
     --gy-card-w: 104px;
     --card-pile-w: 58px;
     --card-opp-hand-w: 38px;
-    --active-card-w: min(94vw, 442px);
-    --active-card-h: 177px;
+    --active-card-h: min(58vh, 340px);
   }
   .tcg-card-landscape .tcg-card-name-banner {
     font-size: 0.82rem;
@@ -5507,6 +5644,34 @@ textarea {
   background: radial-gradient(circle at 26px 50%, rgba(255, 255, 255, 0.95), rgba(255, 216, 128, 0.6) 45%, transparent 72%);
   animation: proc-hit-flash 0.75s ease-out forwards;
 }
+/* Onde de choc : un anneau qui part de la roue et se dilate en s'effaçant, calé sur le
+   même instant que le flash. Deux calques auraient demandé un pseudo-élément de plus, donc
+   il vit sur le cadran plutôt que sur la pastille. */
+.proc-wheel.hit .proc-wheel-dial::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 224, 150, 0.95);
+  pointer-events: none;
+  animation: proc-shockwave 0.75s ease-out forwards;
+}
+@keyframes proc-shockwave {
+  0%,
+  62% {
+    opacity: 0;
+    scale: 1;
+  }
+  70% {
+    opacity: 1;
+    scale: 1;
+  }
+  100% {
+    opacity: 0;
+    scale: 2.6;
+  }
+}
+
 @keyframes proc-hit-flash {
   0% {
     opacity: 0;
