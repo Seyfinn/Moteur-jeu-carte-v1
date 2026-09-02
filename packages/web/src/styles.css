@@ -1038,13 +1038,13 @@ input::placeholder {
   /* Banc élargi de 20 %. La HAUTEUR, elle, baisse : la vignette ne porte plus les PV (le
      bloc `.bench-vitals` les reprend sous elle), et cinq réservistes doivent tenir entre
      le cimetière et la main sans passer sous la ligne de flottaison. */
-  --bench-card-w: clamp(150px, 12.4vw, 215px);
-  --bench-card-h: clamp(58px, 4.9vw, 86px);
+  --bench-card-w: clamp(170px, 14vw, 340px);
+  --bench-card-h: clamp(66px, min(6.4vw, 8.4vh), 150px);
   --gy-card-w: clamp(96px, 13vh, 132px);
   --card-pile-w: clamp(54px, 7.5vh, 82px);
   /* Le terrain a quitté le rail pour la ligne centrale : il y a la place d'en montrer
      enfin l'illustration. Borné en hauteur, comme l'actif, pour ne pas gonfler la rangée. */
-  --terrain-card-w: clamp(110px, 11vw, 230px);
+  --terrain-card-w: clamp(104px, 9.4vw, 250px);
   --card-opp-hand-w: clamp(34px, 4.5vh, 56px);
   /* Les deux actifs sont les pièces maîtresses du plateau : ils prennent nettement plus
      de place que tout le reste. Largeur bornée par la fenêtre (la colonne de la grille
@@ -1053,7 +1053,7 @@ input::placeholder {
      Format PORTRAIT géant : c'est la HAUTEUR qui commande (la largeur en découle, cf.
      `.active-slot .tcg-card-large`), pour que deux portraits de PV différents fassent
      exactement la même taille et que la ligne centrale reste symétrique. */
-  --active-card-h: clamp(200px, 36.5vh, 460px);
+  --active-card-w: clamp(190px, min(16.5vw, 42vh), 430px);
   /* Largeur de la colonne de commandes. Partagée, parce que le bandeau de combat doit se
      décaler d'exactement autant pour rester aligné sur la CARTE et non sur l'ensemble
      carte + colonne. */
@@ -1723,11 +1723,10 @@ input::placeholder {
      actif au lieu de se faire face en diagonale.
      La ligne centrale se lit en miroir de part et d'autre du « VS » :
      [terrain joueur] [actif joueur] VS [actif adverse] [terrain adverse]. */
-  grid-template-columns: auto auto min-content auto min-content auto auto;
+  grid-template-columns: minmax(0, 1fr) auto min-content auto min-content auto minmax(0, 1fr);
   grid-template-rows: auto;
   grid-template-areas: 'railS terrS activeS vs activeO terrO railO';
   align-content: center;
-  justify-content: center;
   column-gap: 10px;
 }
 
@@ -1803,11 +1802,9 @@ input::placeholder {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
 }
-.rail-self {
-  align-items: flex-start;
-}
+.rail-self,
 .rail-opp {
-  align-items: flex-end;
+  align-items: center;
 }
 .graveyard-pile-zone,
 .terrain-slot-zone {
@@ -2005,7 +2002,7 @@ input::placeholder {
    dessous -- `cover` et `contain` se rejoignent, donc ni zoom ni bande vide. */
 .active-slot .tcg-card-large {
   height: auto;
-  width: calc(var(--active-card-h) * 0.714);
+  width: var(--active-card-w);
   /* La carte se montre nue : ni cadre, ni fond, ni ombre ajoutée autour d'elle. */
   border: none;
   background: transparent;
@@ -2066,7 +2063,7 @@ input::placeholder {
   display: grid;
   place-items: center;
   aspect-ratio: 600 / 840;
-  width: calc(var(--active-card-h) * 0.714);
+  width: var(--active-card-w);
   border: 2px dashed var(--border);
   border-radius: var(--radius-md);
   color: var(--text-dim);
@@ -2086,7 +2083,7 @@ input::placeholder {
   flex-direction: column;
   align-items: stretch;
   gap: 5px;
-  width: calc(var(--active-card-h) * 0.714);
+  width: var(--active-card-w);
   max-width: 100%;
   padding: 7px 12px 8px;
   border-radius: var(--radius-sm);
@@ -2383,7 +2380,7 @@ input::placeholder {
   min-width: 0;
 }
 .bench-vitals .hp-bar {
-  height: 13px;
+  height: 15px;
 }
 .bench-vitals .shield-bar {
   height: 6px;
@@ -2391,7 +2388,7 @@ input::placeholder {
 }
 .bench-vitals .hp-text {
   flex: 0 0 auto;
-  font-size: clamp(0.66rem, 1.16vh, 0.82rem);
+  font-size: clamp(0.72rem, 1.3vh, 0.92rem);
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text);
@@ -2404,14 +2401,14 @@ input::placeholder {
   opacity: 1;
   filter: grayscale(0.8) opacity(0.5);
 }
-/* Une carte de banc en paysage est très basse : nom et PV doivent tenir sur une ligne
-   chacun, sinon la colonne enfle et pousse tout le rail hors de l'écran. */
+/* Couchée et grande, la carte de banc peut enfin donner de la place à son illustration :
+   c'est elle qui la rend reconnaissable d'un coup d'oeil. */
 .bench-column .tcg-card-landscape .tcg-card-art {
-  flex: 0 0 32%;
+  flex: 0 0 42%;
 }
 .bench-column .tcg-card-landscape .tcg-card-name-banner {
-  font-size: clamp(0.66rem, 1.2vh, 0.88rem);
-  padding: 4px 7px 2px;
+  font-size: clamp(0.74rem, 1.5vh, 1.02rem);
+  padding: 6px 9px 3px;
 }
 .bench-column .tcg-card-landscape .tcg-card-body {
   gap: 3px;
@@ -4510,7 +4507,7 @@ input::placeholder {
   right: 0;
   z-index: 26;
   width: max(240px, 19vw);
-  max-height: 30vh;
+  max-height: 32vh;
   display: flex;
   flex-direction: column;
   padding: 8px;
@@ -5747,7 +5744,7 @@ textarea {
     --gy-card-w: 104px;
     --card-pile-w: 58px;
     --card-opp-hand-w: 38px;
-    --active-card-h: min(58vh, 340px);
+    --active-card-w: min(62vw, 240px);
   }
   .tcg-card-landscape .tcg-card-name-banner {
     font-size: 0.82rem;
