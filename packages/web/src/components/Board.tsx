@@ -635,7 +635,7 @@ export function Board({ conn }: { conn: GameConnection }) {
     // au gros coup suivant de rejouer l'animation, une classe restée en place ne
     // redémarrerait rien.
     <div
-      className={`board${targeting ? ' targeting' : ''}${ambience ? ` ${ambience}` : ''}${boardQuake ? ' board-quake' : ''}`}
+      className={`board${targeting ? ' targeting' : ''}${ambience ? ` ${ambience}` : ''}${boardQuake ? ` board-quake board-quake-${boardQuake.tier}` : ''}`}
     >
       {/* HUD flottant : trois blocs en grille pour que la capsule de tour soit centrée sur
           la fenêtre et non sur ce qui reste entre ses voisins -- avec `space-between`, elle
@@ -695,12 +695,10 @@ export function Board({ conn }: { conn: GameConnection }) {
         <OpponentHand player={opponent} />
 
         <div className="battlefield">
-          <div className="rail rail-self">
-            {drawMode && <CharacterHand player={me} isSelf max={DRAW_MODE_MAX_CHARACTER_HAND} />}
-            <GraveyardPile player={me} title="Votre cimetière" orientation="landscape" />
+          <div className="zone zone-bench-opp">
             <BenchRow
-              player={me}
-              isSelf
+              player={opponent}
+              isSelf={false}
               badgesByCharacter={badgesByCharacter}
               state={state}
               you={you}
@@ -709,6 +707,12 @@ export function Board({ conn }: { conn: GameConnection }) {
               targeting={targeting}
               impactsByCharacter={impactsByCharacter}
             />
+          </div>
+
+          <div className="battle-line">
+          <div className="rail rail-self">
+            {drawMode && <CharacterHand player={me} isSelf max={DRAW_MODE_MAX_CHARACTER_HAND} />}
+            <GraveyardPile player={me} title="Votre cimetière" orientation="landscape" />
           </div>
 
           <div className="zone zone-terrain-self">
@@ -772,9 +776,14 @@ export function Board({ conn }: { conn: GameConnection }) {
           <div className="rail rail-opp">
             {drawMode && <CharacterHand player={opponent} isSelf={false} max={DRAW_MODE_MAX_CHARACTER_HAND} />}
             <GraveyardPile player={opponent} title="Cimetière adverse" orientation="landscape" />
+          </div>
+
+          </div>
+
+          <div className="zone zone-bench-self">
             <BenchRow
-              player={opponent}
-              isSelf={false}
+              player={me}
+              isSelf
               badgesByCharacter={badgesByCharacter}
               state={state}
               you={you}

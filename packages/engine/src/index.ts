@@ -68,7 +68,7 @@ export {
 } from './cards/registry.js';
 
 export * from './cards/demo/index.js';
-export type { ClientMessage, ServerMessage } from './protocol.js';
+export type { ClientMessage, RoomSummary, ServerMessage } from './protocol.js';
 export { DECK_LIMITS, evolutionEntries, listDeckPool, validateRoster } from './deck.js';
 export {
   RANDOM_POOL_SIZE,

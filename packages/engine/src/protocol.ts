@@ -29,6 +29,22 @@ export type ClientMessage =
    */
   | { type: 'cancel-choice' };
 
+/**
+ * Un salon ouvert tel que le lobby le liste (`GET /api/rooms`). Il vit ici, avec le reste
+ * du protocole, pour que le serveur qui le construit et le client qui l'affiche partagent
+ * la même forme. Volontairement maigre : rien de ce qui s'y trouve n'est secret, la liste
+ * étant servie à n'importe qui ouvre la page.
+ */
+export interface RoomSummary {
+  code: string;
+  /** Nom du créateur du salon -- c'est à ça qu'on reconnaît le salon d'un ami. */
+  hostName: string;
+  /** Fixé par l'hôte et subi par celui qui rejoint : il doit donc être visible avant le clic. */
+  mode: GameMode;
+  /** Création du salon (epoch ms) : sert au tri, et à afficher son temps d'attente. */
+  createdAt: number;
+}
+
 export type ServerMessage =
   /** `sessionToken` is the credential for `resume-session`; the client persists it. */
   | { type: 'room-created'; roomCode: string; you: PlayerId; sessionToken: string }

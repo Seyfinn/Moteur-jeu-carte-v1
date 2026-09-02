@@ -9,7 +9,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
-import { CardPreviewPanel, type PreviewCard } from './CardPreviewPanel';
+import type { PreviewCard } from './CardPreviewPanel';
 import { CardFrame } from './CardFrame';
 import type { HoverHandlers } from './CardFrame';
 import { usePointerCoarse } from '../hooks/usePointerCoarse';
@@ -52,16 +52,14 @@ interface HoverCardApi {
 
 const HoverCardCtx = createContext<HoverCardApi | null>(null);
 
-const POPOVER_WIDTH = 320;
-const POPOVER_MAX_HEIGHT = 420;
 /**
- * Encombrement de la bulle d'aperçu (carte + texte, cf. `.card-preview`). Sert uniquement
- * à décider de quel côté de la carte survolée elle s'ouvre : les deux nombres doivent
- * rester alignés sur la CSS, sinon la bulle est placée comme si elle était plus grosse
- * qu'elle ne l'est et bascule à gauche sans raison.
+ * Encombrement du panneau d'inspection. Sert uniquement à décider de quel côté de la carte
+ * survolée il s'ouvre : les deux nombres doivent rester alignés sur la CSS, sinon le
+ * panneau est placé comme s'il était plus gros qu'il ne l'est et bascule à gauche sans
+ * raison.
  */
-const PREVIEW_WIDTH = 490;
-const PREVIEW_MAX_HEIGHT = 380;
+const PANEL_WIDTH = 340;
+const PANEL_MAX_HEIGHT = 460;
 /**
  * Délai par défaut avant l'aperçu au survol : celui du deck-builder, où l'on parcourt une
  * grille de cartes pour les lire. Le plateau le remonte à `COMBAT_PREVIEW_DELAY_MS` via
@@ -82,24 +80,27 @@ interface PinnedState {
   payload: HoverPayload;
 }
 
-function anchoredStyle(rect: DOMRect, wide: boolean): CSSProperties {
-  const width = wide ? PREVIEW_WIDTH : POPOVER_WIDTH;
-  const maxHeight = wide ? PREVIEW_MAX_HEIGHT : POPOVER_MAX_HEIGHT;
+function anchoredStyle(rect: DOMRect): CSSProperties {
   const spaceRight = window.innerWidth - rect.right;
-  const left = spaceRight > width + 16 ? rect.right + 10 : Math.max(8, rect.left - width - 10);
-  const top = Math.min(Math.max(8, rect.top), Math.max(8, window.innerHeight - maxHeight - 8));
+  const left = spaceRight > PANEL_WIDTH + 16 ? rect.right + 12 : Math.max(8, rect.left - PANEL_WIDTH - 12);
+  const top = Math.min(Math.max(8, rect.top), Math.max(8, window.innerHeight - PANEL_MAX_HEIGHT - 8));
   return { left, top };
 }
 
-function payloadBody(payload: HoverPayload): ReactNode {
-  if (payload.card) {
-    return <CardPreviewPanel card={payload.card} title={payload.title} subtitle={payload.subtitle} body={payload.body} />;
-  }
+/**
+ * Le panneau ne redessine PLUS la carte à côté de son texte : au survol, la carte est déjà
+ * sous le curseur, et sa vignette en doublon volait la moitié de la largeur au texte, qui
+ * est justement ce qu'on vient lire. Le deck-builder, lui, garde la vignette
+ * (`CardPreviewPanel`) -- là-bas la carte n'est pas forcément visible.
+ */
+function panelBody(payload: HoverPayload): ReactNode {
   return (
     <>
-      <div className="hover-card-title">{payload.title}</div>
-      {payload.subtitle && <div className="hover-card-subtitle">{payload.subtitle}</div>}
-      <div className="hover-card-content">{payload.body}</div>
+      <header className="ins-head">
+        <h3 className="ins-name">{payload.title}</h3>
+        {payload.subtitle && <p className="ins-subtitle">{payload.subtitle}</p>}
+      </header>
+      <div className="ins-body">{payload.body}</div>
     </>
   );
 }
@@ -209,12 +210,12 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
 
       {anchored && (
         <div
-          className={anchored.payload.card ? 'card-preview' : 'hover-card-popover'}
-          style={anchoredStyle(anchored.rect, Boolean(anchored.payload.card))}
+          className="ins-panel"
+          style={anchoredStyle(anchored.rect)}
           onMouseEnter={cancelHide}
           onMouseLeave={hide}
         >
-          {payloadBody(anchored.payload)}
+          {panelBody(anchored.payload)}
         </div>
       )}
 
@@ -224,7 +225,7 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
         // l'illustration -- le doubler d'un pavé de description à côté ne ferait que voler
         // la place qui la rend lisible. Un payload sans carte (cas rare : une fiche
         // purement textuelle) retombe sur l'ancien encart.
-        <div className={pinned.payload.card ? 'card-inspect' : 'hover-card-popover pinned'}>
+        <div className={pinned.payload.card ? 'card-inspect' : 'ins-panel pinned'}>
           <button className="hover-card-close" onClick={() => setPinned(null)} aria-label="Fermer">
             ×
           </button>
@@ -237,7 +238,7 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
               unique={pinned.payload.card.unique}
             />
           ) : (
-            payloadBody(pinned.payload)
+            panelBody(pinned.payload)
           )}
           {pinned.payload.actionLabel && (
             <button

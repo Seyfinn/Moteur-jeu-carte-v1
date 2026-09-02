@@ -5,7 +5,14 @@ import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { registerDemoCards, validateRoster, type ClientMessage, type PlayerId, type ServerMessage } from 'engine';
+import {
+  registerDemoCards,
+  validateRoster,
+  type ClientMessage,
+  type PlayerId,
+  type RoomSummary,
+  type ServerMessage,
+} from 'engine';
 import { randomUUID } from 'node:crypto';
 import { generateRoomCode, Room } from './room.js';
 import { loadDecks, saveDeck } from './supabase.js';
@@ -110,15 +117,31 @@ async function readJsonBody(req: import('node:http').IncomingMessage): Promise<u
 }
 
 /**
- * Cloud deck storage. REST rather than a WebSocket message: the deck builder has no
- * live room connection (sockets only open on create-room/join-room), so a one-off
- * fetch is simpler than standing up a socket just to save/load a deck.
+ * Endpoints hors partie (stockage des decks, liste des salons ouverts). REST plutôt que
+ * des messages WebSocket : le lobby et le deck-builder n'ont pas de connexion vivante --
+ * les sockets ne s'ouvrent qu'à la création/l'entrée dans un salon -- donc un `fetch`
+ * ponctuel est plus simple que de monter une socket rien que pour ça.
  */
 async function handleApiRequest(
   req: import('node:http').IncomingMessage,
   res: import('node:http').ServerResponse,
   url: URL
 ): Promise<boolean> {
+  // Salons ouverts, pour que le lobby les propose d'un clic au lieu d'obliger à se faire
+  // dicter un code. REST comme /api/decks, et pour la même raison : la page du lobby n'a
+  // pas encore de socket (elle n'en ouvre une qu'en créant/rejoignant), et un salon
+  // n'existe de toute façon que le temps que le serveur tourne.
+  if (url.pathname === '/api/rooms' && req.method === 'GET') {
+    const open: RoomSummary[] = [];
+    for (const room of rooms.values()) {
+      if (room.isOpen) open.push(room.summary);
+    }
+    // Le plus récent en tête : c'est celui dont l'hôte est encore devant son écran.
+    open.sort((a, b) => b.createdAt - a.createdAt);
+    sendJson(res, 200, { rooms: open });
+    return true;
+  }
+
   if (url.pathname === '/api/decks' && req.method === 'GET') {
     const userName = url.searchParams.get('userName');
     if (!userName) {

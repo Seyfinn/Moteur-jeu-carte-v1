@@ -581,6 +581,129 @@ input::placeholder {
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.14), transparent);
 }
 
+/* -- Salons ouverts : rejoindre d'un clic plutôt qu'en tapant un code ----- */
+
+.lobby-rooms {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lobby-rooms-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #808ca5;
+}
+.lobby-rooms-refresh {
+  padding: 3px 9px;
+  border-radius: 7px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #9aa6bd;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.lobby-rooms-refresh:hover:not(:disabled) {
+  color: var(--text);
+  border-color: rgba(130, 170, 255, 0.5);
+}
+.lobby-rooms-empty {
+  margin: 0;
+  padding: 12px 13px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.lobby-room-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* Une poignée de salons tient à l'écran ; au-delà la liste défile plutôt que de
+     repousser le champ de code hors de vue. */
+  max-height: 232px;
+  overflow-y: auto;
+}
+.lobby-room {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 11px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: var(--text);
+  transition: transform 0.16s var(--ease), border-color 0.16s var(--ease), background-color 0.16s var(--ease);
+}
+.lobby-room:hover:not(:disabled) {
+  transform: translateX(2px);
+  background: rgba(79, 140, 255, 0.14);
+  border-color: rgba(130, 170, 255, 0.55);
+}
+.lobby-room-code {
+  flex-shrink: 0;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-family: 'Manrope', 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-indent: 0.2em;
+  color: #cfe0ff;
+}
+.lobby-room-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.lobby-room-info strong {
+  font-size: 0.9rem;
+  font-weight: 700;
+  /* Un nom de joueur est libre : il ne doit pas pouvoir pousser le bouton hors de la carte. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lobby-room-meta {
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  /* Le panneau est étroit : sur deux lignes, l'unité de la durée se retrouvait seule. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lobby-room-go {
+  flex-shrink: 0;
+  padding-right: 2px;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: #6d778d;
+  transition: color 0.16s var(--ease), transform 0.16s var(--ease);
+}
+.lobby-room:hover:not(:disabled) .lobby-room-go {
+  color: #9ec1ff;
+  transform: translateX(2px);
+}
+
 /* Action secondaire : même famille visuelle que le bouton principal, en sourdine. */
 .lobby-join {
   display: flex;
@@ -909,19 +1032,19 @@ input::placeholder {
 
 /* Board */
 .board {
-  --card-hand-w: clamp(66px, 5.4vw, 112px);
+  --card-hand-w: clamp(56px, 4.4vw, 94px);
   /* Le banc occupe toute la largeur du rail latéral : ce sont des cartes qu'on doit
      pouvoir lire (PV, statuts) sans ouvrir de fiche. */
   /* Banc élargi de 20 %. La HAUTEUR, elle, baisse : la vignette ne porte plus les PV (le
      bloc `.bench-vitals` les reprend sous elle), et cinq réservistes doivent tenir entre
      le cimetière et la main sans passer sous la ligne de flottaison. */
-  --bench-card-w: clamp(152px, 11.5vw, 220px);
-  --bench-card-h: clamp(54px, 4vw, 80px);
+  --bench-card-w: clamp(140px, 12.5vw, 240px);
+  --bench-card-h: clamp(50px, 4.4vw, 84px);
   --gy-card-w: clamp(96px, 13vh, 132px);
   --card-pile-w: clamp(54px, 7.5vh, 82px);
   /* Le terrain a quitté le rail pour la ligne centrale : il y a la place d'en montrer
      enfin l'illustration. Borné en hauteur, comme l'actif, pour ne pas gonfler la rangée. */
-  --terrain-card-w: clamp(96px, 6.6vw, 132px);
+  --terrain-card-w: clamp(110px, 11vw, 230px);
   --card-opp-hand-w: clamp(34px, 4.5vh, 56px);
   /* Les deux actifs sont les pièces maîtresses du plateau : ils prennent nettement plus
      de place que tout le reste. Largeur bornée par la fenêtre (la colonne de la grille
@@ -930,21 +1053,24 @@ input::placeholder {
      Format PORTRAIT géant : c'est la HAUTEUR qui commande (la largeur en découle, cf.
      `.active-slot .tcg-card-large`), pour que deux portraits de PV différents fassent
      exactement la même taille et que la ligne centrale reste symétrique. */
-  --active-card-h: clamp(300px, min(56vh, 26.5vw), 520px);
+  --active-card-h: clamp(200px, 36.5vh, 460px);
   /* Largeur de la colonne de commandes. Partagée, parce que le bandeau de combat doit se
      décaler d'exactement autant pour rester aligné sur la CARTE et non sur l'ensemble
      carte + colonne. */
-  --cmd-col-w: clamp(78px, 6.4vw, 112px);
+  --cmd-col-w: clamp(62px, 4.8vw, 88px);
   position: relative;
-  /* Un écran large n'a aucune raison de laisser deux bandes noires sur les côtés pendant
-     que les cartes se serrent au milieu. */
-  max-width: 1760px;
+  /* Le combat tient dans l'écran, un point c'est tout : pas de largeur maximale (elle
+     laissait deux bandes noires sur les côtés) et pas de débordement (la molette ne doit
+     rien avoir à faire défiler pendant une partie). */
+  width: 100%;
   height: 100dvh;
-  margin: 0 auto;
-  padding: 10px 16px;
+  max-height: 100dvh;
+  overflow: hidden;
+  margin: 0;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   min-height: 0;
   /* Arène : vignettage profond avec un spot de lumière au centre, là où les deux actifs
      se font face. Les deux calques posés par-dessus (grille holographique, ambiance de
@@ -1580,8 +1706,18 @@ input::placeholder {
 /* Une seule grille pour les deux camps : les lignes sont dimensionnées sur le contenu
    des DEUX colonnes, ce qui aligne exactement les deux personnages actifs sur la ligne
    du milieu sans mesurer quoi que ce soit en JavaScript. */
+/* Trois bandes empilées : banc adverse, ligne de combat, banc du joueur. Les bancs sont
+   HORS de la grille -- en la traversant, ils lui imposaient leur largeur et écartaient les
+   terrains des cartes actives. */
 .battlefield {
-  flex: 1 0 auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+.battle-line {
   display: grid;
   /* Le panneau de commandes ayant rejoint la carte, la rangée du dessous n'a plus rien à
      porter : deux rangées suffisent, et les deux plaques de nom coiffent chacune leur
@@ -1594,7 +1730,13 @@ input::placeholder {
   align-content: center;
   justify-content: center;
   column-gap: 10px;
-  row-gap: 6px;
+}
+/* Les bancs : une rangée horizontale de cartes paysage. Cinq réservistes empilés
+   mangeaient toute la hauteur du plateau ; alignés, ils n'en coûtent presque rien -- et
+   peuvent donc être bien plus grands. */
+.zone-bench-self,
+.zone-bench-opp {
+  flex: 0 0 auto;
 }
 .rail-self {
   grid-area: railS;
@@ -1864,14 +2006,60 @@ input::placeholder {
   align-items: stretch;
   gap: 10px;
 }
+/* Ratio de l'illustration source (600 x 840) : `cover` ne rogne alors plus rien, et il
+   n'y a pas non plus de bande vide -- les deux se rejoignent exactement à ce ratio. */
 .active-slot .tcg-card-large {
-  width: calc(var(--active-card-h) * 0.66);
   height: var(--active-card-h);
+  width: auto;
+  aspect-ratio: 600 / 840;
+  /* La carte se montre nue : ni cadre, ni fond, ni ombre ajoutée autour d'elle. */
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: var(--radius-sm);
+}
+.active-slot .tcg-card-large.highlight {
+  border: none;
+  box-shadow: none;
+}
+/* Arrivée au poste actif : la carte glisse depuis son banc. La clé de `ActiveSlot` change
+   à chaque nouvel actif, donc l'animation rejoue exactement sur un switch, un remplacement
+   après KO ou la mise en place -- sans une ligne de plomberie. */
+.active-slot.self .tcg-card-large {
+  animation: active-enter-self 0.42s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+.active-slot.opponent .tcg-card-large {
+  animation: active-enter-opp 0.42s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+@keyframes active-enter-self {
+  from {
+    opacity: 0;
+    translate: -40px 34px;
+    scale: 0.88;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
+}
+@keyframes active-enter-opp {
+  from {
+    opacity: 0;
+    translate: 40px -34px;
+    scale: 0.88;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
 }
 .active-slot .tcg-card-large .tcg-card-art {
   flex: 1;
   min-height: 0;
   aspect-ratio: auto;
+  border-radius: var(--radius-sm);
 }
 .active-slot .tcg-card-large .tcg-card-body {
   flex: 0 0 auto;
@@ -1884,7 +2072,7 @@ input::placeholder {
 .active-slot-empty {
   display: grid;
   place-items: center;
-  width: calc(var(--active-card-h) * 0.66);
+  aspect-ratio: 600 / 840;
   height: var(--active-card-h);
   border: 2px dashed var(--border);
   border-radius: var(--radius-md);
@@ -1905,7 +2093,7 @@ input::placeholder {
   flex-direction: column;
   align-items: stretch;
   gap: 5px;
-  width: calc(var(--active-card-h) * 0.66);
+  width: calc(var(--active-card-h) * 0.714);
   max-width: 100%;
   padding: 7px 12px 8px;
   border-radius: var(--radius-sm);
@@ -2159,8 +2347,11 @@ input::placeholder {
   --landscape-w: var(--bench-card-w);
   --landscape-h: var(--bench-card-h);
   display: flex;
-  flex-direction: column;
-  gap: 5px;
+  flex-direction: row;
+  justify-content: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
   min-height: 40px;
 }
 .bench-column-empty {
@@ -2240,12 +2431,14 @@ input::placeholder {
   font-size: clamp(0.5rem, 0.88vh, 0.64rem);
   padding: 0 4px;
 }
-/* Mini-menu d'un personnage de réserve, ouvert vers le haut (le banc du joueur est en
-   bas de sa colonne). */
+/* Mini-menu d'un personnage de réserve. Le banc du joueur est la rangée du BAS : le menu
+   monte donc au-dessus de la carte, là où il y a de la place, plutôt qu'à côté d'elle où
+   il recouvrirait les réservistes voisins. */
 .bench-menu {
   position: absolute;
-  top: 0;
-  left: calc(100% + 8px);
+  bottom: calc(100% + 8px);
+  left: 50%;
+  translate: -50% 0;
   z-index: 25;
   min-width: 208px;
   max-width: min(280px, 80vw);
@@ -3143,13 +3336,21 @@ input::placeholder {
     opacity: 0.72;
     filter: grayscale(0.75) brightness(0.8) blur(1px);
   }
-  /* 48 → 100 % : le vol. Elle file vers la pile de son camp en rétrécissant. */
+  /* 48 → 72 % : le noir et blanc s'installe et la lumière tombe. */
+  72% {
+    translate: calc(var(--ko-dx, 0px) * 0.35) calc(var(--ko-dy, 0px) * 0.35);
+    rotate: -9deg;
+    scale: 0.62;
+    opacity: 0.5;
+    filter: grayscale(1) brightness(0.3) blur(2px);
+  }
+  /* 72 → 100 % : le vol. Elle file vers la pile de son camp, éteinte, en rétrécissant. */
   100% {
     translate: var(--ko-dx, 0) var(--ko-dy, 0);
     rotate: -22deg;
-    scale: 0.12;
+    scale: 0.1;
     opacity: 0;
-    filter: grayscale(1) brightness(0.5) blur(3px);
+    filter: grayscale(1) brightness(0.08) blur(4px);
   }
 }
 @keyframes ko-ash {
@@ -3189,13 +3390,21 @@ input::placeholder {
   --dash-dist: 30px;
   --dash-dur: 280ms;
 }
-.tcg-card.impact-dash.impact-medium {
-  --dash-dist: 55px;
-  --dash-dur: 340ms;
-}
 .tcg-card.impact-dash.impact-heavy {
-  --dash-dist: 80px;
+  --dash-dist: 70px;
+  --dash-dur: 360ms;
+}
+.tcg-card.impact-dash.impact-brutal {
+  --dash-dist: 100px;
   --dash-dur: 400ms;
+}
+.tcg-card.impact-dash.impact-devastating {
+  --dash-dist: 130px;
+  --dash-dur: 440ms;
+}
+.tcg-card.impact-dash.impact-cataclysm {
+  --dash-dist: 170px;
+  --dash-dur: 500ms;
 }
 .tcg-card.impact-dash-left {
   --dash-sign: -1;
@@ -3235,13 +3444,21 @@ input::placeholder {
   --shake: 3px;
   --shake-dur: 200ms;
 }
-.tcg-card.impact-hit.impact-medium {
-  --shake: 7px;
-  --shake-dur: 280ms;
-}
 .tcg-card.impact-hit.impact-heavy {
-  --shake: 14px;
-  --shake-dur: 400ms;
+  --shake: 10px;
+  --shake-dur: 340ms;
+}
+.tcg-card.impact-hit.impact-brutal {
+  --shake: 16px;
+  --shake-dur: 420ms;
+}
+.tcg-card.impact-hit.impact-devastating {
+  --shake: 24px;
+  --shake-dur: 520ms;
+}
+.tcg-card.impact-hit.impact-cataclysm {
+  --shake: 34px;
+  --shake-dur: 640ms;
 }
 @keyframes impact-shake {
   0%,
@@ -3264,19 +3481,47 @@ input::placeholder {
     translate: calc(var(--shake) * -0.2) 0;
   }
 }
-/* Gros coup : la carte vire au rouge en plus de trembler. */
-.tcg-card.impact-hit.impact-heavy {
+/* À partir du gros coup, la carte encaisse aussi une décharge lumineuse -- de plus en plus
+   violente, jusqu'au blanc pur du cataclysme. */
+.tcg-card.impact-hit.impact-heavy,
+.tcg-card.impact-hit.impact-brutal,
+.tcg-card.impact-hit.impact-devastating,
+.tcg-card.impact-hit.impact-cataclysm {
   animation:
     impact-shake var(--shake-dur) ease-out both,
-    impact-red-flash 420ms ease-out both;
+    impact-blast var(--blast-dur, 420ms) ease-out both;
 }
-@keyframes impact-red-flash {
+.tcg-card.impact-hit.impact-heavy {
+  --blast: #ff5a5a;
+  --blast-peak: 1.45;
+  --blast-spread: 40px;
+  --blast-dur: 420ms;
+}
+.tcg-card.impact-hit.impact-brutal {
+  --blast: #ff7a2e;
+  --blast-peak: 1.75;
+  --blast-spread: 62px;
+  --blast-dur: 520ms;
+}
+.tcg-card.impact-hit.impact-devastating {
+  --blast: #ffc23c;
+  --blast-peak: 2.2;
+  --blast-spread: 88px;
+  --blast-dur: 620ms;
+}
+.tcg-card.impact-hit.impact-cataclysm {
+  --blast: #ffffff;
+  --blast-peak: 3;
+  --blast-spread: 130px;
+  --blast-dur: 760ms;
+}
+@keyframes impact-blast {
   0% {
-    box-shadow: 0 0 0 2px #ff4d4d, 0 0 40px 6px rgba(255, 60, 60, 0.9);
-    filter: brightness(1.5) saturate(1.4);
+    box-shadow: 0 0 0 3px var(--blast), 0 0 var(--blast-spread) 10px var(--blast);
+    filter: brightness(var(--blast-peak)) saturate(1.5);
   }
   100% {
-    box-shadow: var(--shadow-sm);
+    box-shadow: none;
     filter: none;
   }
 }
@@ -3303,6 +3548,49 @@ input::placeholder {
   background: linear-gradient(90deg, transparent, #fff 38%, #ff6b6b 62%, transparent);
   filter: drop-shadow(0 0 12px rgba(255, 90, 90, 1));
 }
+.fx-impact-brutal .fx-impact-slash {
+  height: 22px;
+  rotate: -24deg;
+  background: linear-gradient(90deg, transparent, #fff 34%, #ff8a2e 66%, transparent);
+  filter: drop-shadow(0 0 18px rgba(255, 140, 50, 1));
+}
+.fx-impact-devastating .fx-impact-slash,
+.fx-impact-cataclysm .fx-impact-slash {
+  height: 30px;
+  rotate: -18deg;
+  background: linear-gradient(90deg, transparent, #fff 30%, #ffc23c 70%, transparent);
+  filter: drop-shadow(0 0 26px rgba(255, 200, 80, 1));
+}
+/* Déflagration : un anneau de souffle qui part du point d'impact. Réservé aux deux plus
+   gros paliers -- en dessous, la griffure suffit et l'écran resterait lisible. */
+.fx-impact-devastating::after,
+.fx-impact-cataclysm::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 40%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border-radius: 50%;
+  border: 3px solid var(--blast-ring, #ffd27a);
+  animation: fx-impact-ring 0.6s cubic-bezier(0.1, 0.7, 0.2, 1) both;
+}
+.fx-impact-cataclysm::after {
+  --blast-ring: #ffffff;
+  border-width: 5px;
+  animation-duration: 0.85s;
+}
+@keyframes fx-impact-ring {
+  0% {
+    opacity: 1;
+    scale: 0.2;
+  }
+  100% {
+    opacity: 0;
+    scale: 3.4;
+  }
+}
 @keyframes fx-impact-slash {
   0% {
     opacity: 0;
@@ -3320,28 +3608,66 @@ input::placeholder {
 
 /* Secousse de la table entière, réservée aux gros coups. Elle est posée sur `.board`, qui
    ne porte aucune autre transformation -- `transform` est donc libre ici. */
+/* Secousse de la table entière. Une seule série d'images-clés, dont l'amplitude et la
+   durée sont des variables : le palier n'a qu'à les régler. */
 .board-quake {
-  animation: board-quake 300ms ease-out;
+  animation: board-quake var(--quake-dur, 300ms) ease-out;
+}
+.board-quake-heavy {
+  --quake: 5px;
+  --quake-dur: 280ms;
+}
+.board-quake-brutal {
+  --quake: 9px;
+  --quake-dur: 400ms;
+}
+.board-quake-devastating {
+  --quake: 15px;
+  --quake-dur: 560ms;
+}
+.board-quake-cataclysm {
+  --quake: 24px;
+  --quake-dur: 820ms;
 }
 @keyframes board-quake {
   0%,
   100% {
     transform: translate(0, 0) rotate(0deg);
   }
-  15% {
-    transform: translate(-7px, 3px) rotate(-0.25deg);
+  12% {
+    transform: translate(calc(var(--quake, 6px) * -1), calc(var(--quake, 6px) * 0.4)) rotate(-0.3deg);
   }
-  32% {
-    transform: translate(6px, -4px) rotate(0.22deg);
+  26% {
+    transform: translate(calc(var(--quake, 6px) * 0.85), calc(var(--quake, 6px) * -0.55)) rotate(0.26deg);
   }
-  50% {
-    transform: translate(-4px, 2px) rotate(-0.14deg);
+  42% {
+    transform: translate(calc(var(--quake, 6px) * -0.6), calc(var(--quake, 6px) * 0.3)) rotate(-0.18deg);
   }
-  70% {
-    transform: translate(3px, -1px) rotate(0.08deg);
+  60% {
+    transform: translate(calc(var(--quake, 6px) * 0.42), calc(var(--quake, 6px) * -0.18)) rotate(0.1deg);
   }
-  86% {
-    transform: translate(-1px, 1px) rotate(0deg);
+  80% {
+    transform: translate(calc(var(--quake, 6px) * -0.2), calc(var(--quake, 6px) * 0.08)) rotate(0deg);
+  }
+}
+/* Voile lumineux plein écran sur les deux plus gros paliers : c'est lui qui fait qu'un
+   coup à 150 ne ressemble pas à un coup à 100 en plus secoué. */
+.board-quake-devastating::after,
+.board-quake-cataclysm::after {
+  opacity: 1;
+  background: radial-gradient(circle at 50% 46%, rgba(255, 210, 130, 0.3), transparent 62%);
+  animation: board-blast-veil 0.6s ease-out forwards;
+}
+.board-quake-cataclysm::after {
+  background: radial-gradient(circle at 50% 46%, rgba(255, 255, 255, 0.55), rgba(255, 170, 60, 0.25) 40%, transparent 70%);
+  animation-duration: 0.9s;
+}
+@keyframes board-blast-veil {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
   }
 }
 
@@ -3646,19 +3972,6 @@ input::placeholder {
 .atk-text.down {
   color: #ff8189;
 }
-/* Même code couleur dans la fiche, sur l'étiquette d'ATK de chaque attaque. */
-.hover-card-tag.atk-up {
-  color: #ffc46b;
-  font-weight: 700;
-}
-.hover-card-tag.atk-down {
-  color: #ff8189;
-  font-weight: 700;
-}
-.hover-card-tag-base {
-  color: var(--text-dim);
-  font-weight: 500;
-}
 .statuses {
   display: flex;
   flex-wrap: wrap;
@@ -3711,19 +4024,291 @@ input::placeholder {
   color: var(--text-dim);
 }
 
-/* Hover detail popover */
-.hover-card-popover {
+/* ==========================================================================
+   Panneau d'inspection : le contenu d'une carte, lisible. Il ne redessine plus la carte à
+   côté du texte (au survol elle est déjà sous le curseur, et la vignette en doublon volait
+   la moitié de la largeur) -- c'est un panneau de verre dépoli, hiérarchisé en trois
+   étages : identité, statuts, blocs d'attaques et de talents.
+   ========================================================================== */
+.ins-panel {
   position: fixed;
   z-index: 50;
-  width: 320px;
-  max-height: 420px;
-  overflow-y: auto;
-  background: linear-gradient(165deg, var(--panel-raised), var(--panel) 60%);
-  border: 1px solid var(--accent);
+  width: 340px;
+  max-height: 460px;
+  display: flex;
+  flex-direction: column;
   border-radius: var(--radius-md);
-  padding: 12px 14px;
-  box-shadow: var(--shadow-lg), 0 0 0 1px var(--accent-soft);
-  animation: fade-slide-in 0.12s var(--ease);
+  background: linear-gradient(165deg, rgba(38, 46, 63, 0.82), rgba(16, 21, 31, 0.88));
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  border: 1px solid rgba(150, 175, 220, 0.28);
+  box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transform-origin: top left;
+  animation: ins-panel-in 0.16s cubic-bezier(0.25, 1, 0.5, 1);
+}
+@keyframes ins-panel-in {
+  from {
+    opacity: 0;
+    scale: 0.95;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ins-panel {
+    animation: none;
+  }
+}
+
+.ins-head {
+  flex: 0 0 auto;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid rgba(150, 175, 220, 0.16);
+}
+.ins-name {
+  margin: 0;
+  font-family: 'Manrope', 'Inter', system-ui, sans-serif;
+  font-size: 1.12rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.ins-subtitle {
+  margin: 3px 0 0;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* Le corps défile seul, avec une barre fine et discrète plutôt que celle du système. */
+.ins-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(150, 175, 220, 0.35) transparent;
+}
+.ins-body::-webkit-scrollbar {
+  width: 6px;
+}
+.ins-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ins-body::-webkit-scrollbar-thumb {
+  background: rgba(150, 175, 220, 0.32);
+  border-radius: 999px;
+}
+.ins-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 175, 220, 0.55);
+}
+
+/* Jauge de PV : même dégradé continu que sur le plateau, chiffre posé dessus. */
+.ins-hp {
+  position: relative;
+  height: 26px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: #0b0e13;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.7);
+}
+.ins-hp.shielded {
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.7),
+    inset 0 0 0 2px rgba(154, 220, 255, 0.8),
+    0 0 12px -3px rgba(127, 199, 242, 0.8);
+}
+.ins-hp-fill {
+  height: 100%;
+  background: linear-gradient(180deg, hsl(var(--hp-hue, 120) 72% 52%), hsl(var(--hp-hue, 120) 78% 34%));
+  box-shadow: inset 0 1px 0 hsl(var(--hp-hue, 120) 90% 72% / 0.6);
+}
+.ins-hp-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.84rem;
+  font-weight: 800;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+}
+.ins-hp-shield {
+  font-style: normal;
+  color: #b6e6ff;
+}
+
+/* Pilules de statut : la teinte vient de la même table que les badges du plateau, pour
+   qu'un même effet ait partout la même couleur. */
+.ins-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ins-pill {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  color: var(--pill-fg, var(--text));
+  background: var(--pill-bg, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--pill-line, var(--border));
+}
+.ins-pill.tone-poison {
+  --pill-fg: #d7b3f5;
+  --pill-bg: rgba(155, 89, 182, 0.18);
+  --pill-line: rgba(176, 126, 222, 0.55);
+}
+.ins-pill.tone-burn {
+  --pill-fg: #ffc08a;
+  --pill-bg: rgba(255, 138, 61, 0.18);
+  --pill-line: rgba(255, 138, 61, 0.55);
+}
+.ins-pill.tone-bleed {
+  --pill-fg: #ff9d9d;
+  --pill-bg: rgba(224, 85, 85, 0.18);
+  --pill-line: rgba(224, 85, 85, 0.55);
+}
+.ins-pill.tone-freeze {
+  --pill-fg: #a5e6fa;
+  --pill-bg: rgba(95, 208, 240, 0.16);
+  --pill-line: rgba(95, 208, 240, 0.5);
+}
+.ins-pill.tone-buff {
+  --pill-fg: #96e8c2;
+  --pill-bg: rgba(79, 211, 154, 0.16);
+  --pill-line: rgba(79, 211, 154, 0.5);
+}
+.ins-pill.tone-debuff {
+  --pill-fg: #ffb3b3;
+  --pill-bg: rgba(255, 107, 107, 0.16);
+  --pill-line: rgba(255, 107, 107, 0.5);
+}
+.ins-pill.tone-neutral {
+  --pill-fg: #f6cadd;
+  --pill-bg: rgba(240, 183, 208, 0.14);
+  --pill-line: rgba(240, 183, 208, 0.45);
+}
+
+/* Attaques et talents dans deux blocs franchement séparés, chacun avec sa couleur de
+   famille : on repère ce qu'on cherche avant même d'avoir lu le titre. */
+.ins-block {
+  padding: 10px 12px 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--block-line, var(--border-soft));
+  border-left-width: 3px;
+  background: rgba(0, 0, 0, 0.22);
+}
+.ins-block-attack {
+  --block-line: rgba(224, 96, 96, 0.5);
+  --block-title: #ff9d8a;
+}
+.ins-block-talent {
+  --block-line: rgba(96, 178, 224, 0.5);
+  --block-title: #8fd0ff;
+}
+.ins-block h4 {
+  margin: 0 0 8px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--block-title, var(--text-dim));
+}
+.ins-entry {
+  padding-bottom: 10px;
+}
+.ins-entry + .ins-entry {
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+.ins-entry-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.ins-entry-name {
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.ins-entry-note {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.ins-entry-text {
+  margin: 5px 0 0;
+  font-size: 0.83rem;
+  line-height: 1.5;
+  color: #cdd4e0;
+}
+
+/* Badges de valeur : les dégâts en rouge/orange, la nature d'un talent en violet (actif)
+   ou cyan (passif). */
+.ins-badge {
+  flex-shrink: 0;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--badge-fg);
+  background: var(--badge-bg);
+  border: 1px solid var(--badge-line);
+}
+.ins-badge-atk {
+  --badge-fg: #ffd0a8;
+  --badge-bg: linear-gradient(180deg, rgba(214, 88, 58, 0.4), rgba(160, 48, 40, 0.42));
+  --badge-line: rgba(255, 138, 80, 0.7);
+}
+/* ATK modifié par un buff ou un malus : la couleur dit le sens, le détail chiffré est
+   juste en dessous (.ins-entry-note). */
+.ins-badge-atk.up {
+  --badge-fg: #b8f5cf;
+  --badge-bg: linear-gradient(180deg, rgba(46, 150, 100, 0.4), rgba(28, 104, 70, 0.42));
+  --badge-line: rgba(79, 211, 154, 0.75);
+}
+.ins-badge-atk.down {
+  --badge-fg: #cfd6e2;
+  --badge-bg: linear-gradient(180deg, rgba(90, 100, 118, 0.4), rgba(56, 64, 78, 0.42));
+  --badge-line: rgba(140, 152, 172, 0.6);
+}
+.ins-badge-active {
+  --badge-fg: #e0d0ff;
+  --badge-bg: linear-gradient(180deg, rgba(122, 88, 200, 0.4), rgba(76, 52, 138, 0.42));
+  --badge-line: rgba(168, 126, 240, 0.7);
+}
+.ins-badge-passive {
+  --badge-fg: #b8ecff;
+  --badge-bg: linear-gradient(180deg, rgba(48, 132, 176, 0.4), rgba(30, 88, 122, 0.42));
+  --badge-line: rgba(110, 200, 245, 0.7);
+}
+
+/* Ouvert au doigt (pas de curseur fiable) : centré et dimensionné sur la fenêtre. */
+.ins-panel.pinned {
+  left: 50% !important;
+  top: 50% !important;
+  right: auto !important;
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+  width: min(92vw, 380px);
+  max-height: 82vh;
 }
 
 /* Full-screen scrim behind a tap-opened ("pinned") popover -- catches the tap-outside
@@ -3732,26 +4317,16 @@ input::placeholder {
   position: fixed;
   inset: 0;
   z-index: 49;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
   animation: fade-slide-in 0.12s var(--ease);
-}
-
-/* Tap-opened popovers/previews are centered and sized to the viewport instead of
-   anchored next to the card, since a touch tap has no reliable cursor position and the
-   card itself is often near a screen edge. */
-.hover-card-popover.pinned,
-.card-preview.pinned {
-  left: 50% !important;
-  top: 50% !important;
-  right: auto !important;
-  transform: translate(-50%, -50%);
-  width: min(92vw, 360px);
-  max-height: 82vh;
 }
 .hover-card-close {
   position: absolute;
   top: 6px;
   right: 6px;
+  z-index: 2;
   width: 26px;
   height: 26px;
   line-height: 24px;
@@ -3773,6 +4348,9 @@ input::placeholder {
   border: none;
   border-radius: var(--radius-sm);
 }
+
+/* Titres encore utilisés par le panneau de deck (CardPreviewPanel), qui garde lui la
+   vignette à côté du texte -- là-bas la carte n'est pas forcément sous les yeux. */
 .hover-card-title {
   font-weight: 700;
   font-size: 1rem;
@@ -3782,44 +4360,6 @@ input::placeholder {
   font-size: 0.78rem;
   margin-top: 2px;
   font-weight: 600;
-}
-.hover-card-hp {
-  font-size: 0.8rem;
-  color: var(--text-dim);
-  margin: 6px 0;
-  font-variant-numeric: tabular-nums;
-}
-.hover-card-content p {
-  margin: 4px 0 0;
-  font-size: 0.85rem;
-  color: var(--text);
-  line-height: 1.35;
-}
-.hover-card-section {
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-}
-.hover-card-section h4 {
-  margin: 0 0 4px;
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-dim);
-}
-.hover-card-entry {
-  margin-bottom: 8px;
-}
-.hover-card-entry-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-}
-.hover-card-tag {
-  font-size: 0.7rem;
-  color: var(--accent);
-  white-space: nowrap;
 }
 
 /* ==========================================================================
@@ -4896,18 +5436,6 @@ textarea {
 }
 .card-preview .hover-card-subtitle {
   font-size: 0.7rem;
-}
-.card-preview .hover-card-content p {
-  font-size: 0.76rem;
-  line-height: 1.3;
-}
-.card-preview .hover-card-section {
-  margin-top: 7px;
-  padding-top: 6px;
-}
-.card-preview .hover-card-hp {
-  font-size: 0.72rem;
-  margin: 4px 0;
 }
 
 /* « Voir la carte » : l'illustration seule, aussi grande que l'écran le permet. Pas de
