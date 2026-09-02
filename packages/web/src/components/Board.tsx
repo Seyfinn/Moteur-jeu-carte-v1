@@ -103,7 +103,8 @@ function ActionErrorBanner({ message, onDismiss }: { message: string; onDismiss:
   );
 }
 
-function TerrainSlot({ player }: { player: PlayerState }) {
+/** Carte de terrain d'un camp, posée au centre du plateau contre son personnage actif. */
+function TerrainSlot({ player, side }: { player: PlayerState; side: 'self' | 'opponent' }) {
   const terrainId = player.activeTerrainInstanceId;
   const terrain = terrainId ? player.terrains[terrainId] : undefined;
   const name = terrain ? terrainName(terrain.cardId) : 'Aucun terrain';
@@ -114,14 +115,14 @@ function TerrainSlot({ player }: { player: PlayerState }) {
   });
 
   return (
-    <div className="terrain-slot-zone">
-      <span className="zone-label">Magie active</span>
+    <div className={`terrain-slot-zone ${side}`}>
+      <span className="zone-label">Terrain</span>
       {terrain ? (
         <CardFrame
           cardId={terrain.cardId}
           kind="terrain"
           name={name}
-          size="small"
+          size="normal"
           {...inspect}
           // La durée restante d'un terrain commande la plupart des décisions autour de
           // lui, et elle n'était lisible qu'en comptant les tours à la main.
@@ -134,7 +135,14 @@ function TerrainSlot({ player }: { player: PlayerState }) {
           }
         />
       ) : (
-        <span className="terrain-badge empty">Aucun</span>
+        // Emplacement vide dessiné aux cotes d'une vraie carte : la ligne centrale garde
+        // sa symétrie, terrain posé ou non, au lieu de se décaler à chaque pose.
+        <div className="terrain-slot-empty">
+          <span className="terrain-slot-empty-icon" aria-hidden="true">
+            🗺️
+          </span>
+          <span className="terrain-slot-empty-label">Aucun Terrain</span>
+        </div>
       )}
     </div>
   );
@@ -548,37 +556,53 @@ export function Board({ conn }: { conn: GameConnection }) {
   const errorMessage = conn.error ?? localError;
   const showInitiativeWheel = !wheelDone && state.phase === 'setup';
 
+  // Ambiance de fond : le terrain que le joueur a posé teinte tout le plateau. La classe
+  // est dérivée de l'id de carte, pas d'une liste tenue à la main -- ajouter une ambiance
+  // à un nouveau terrain est alors une règle CSS et rien d'autre, et un terrain sans règle
+  // dédiée retombe simplement sur le fond neutre.
+  const myTerrainId = me.activeTerrainInstanceId;
+  const myTerrainCardId = myTerrainId ? me.terrains[myTerrainId]?.cardId : undefined;
+  const ambience = myTerrainCardId ? `board-terrain board-terrain-${myTerrainCardId}` : '';
+
   return (
     // `targeting` allume les cibles légales et éteint le reste du plateau : c'est la
     // classe qui porte cette mise en avant, côté CSS.
-    <div className={`board${targeting ? ' targeting' : ''}`}>
+    <div className={`board${targeting ? ' targeting' : ''}${ambience ? ` ${ambience}` : ''}`}>
+      {/* HUD flottant : trois blocs en grille pour que la capsule de tour soit centrée sur
+          la fenêtre et non sur ce qui reste entre ses voisins -- avec `space-between`, elle
+          se décalait dès que le Mode Pioche ajoutait son compteur de piles. */}
       <header className={`board-header${myTurn ? ' my-turn' : ''}`}>
-        <span className="board-header-room">
-          Salon <strong>{conn.roomCode}</strong>
-        </span>
-        <span className="board-header-turn">
-          Tour {state.turnNumber} · <strong>{myTurn ? 'à vous de jouer' : `${opponentName} joue`}</strong>
-        </span>
-        {drawMode && (
-          <span
-            className="board-header-piles"
-            title="Cartes restantes dans les piles. Celle des terrains est commune aux deux joueurs."
-          >
-            🂠 {me.drawPiles.characterCardIds.length} · 🎒 {me.drawPiles.objectCardIds.length} · 🗺️{' '}
-            {state.sharedTerrainPile.length}
+        <div className="board-header-side left">
+          <span className="board-header-room">
+            Salon <strong>{conn.roomCode}</strong>
           </span>
-        )}
-        <span className="board-header-budget" title="Cartes encore jouables pendant votre tour">
-          🎒 {Math.max(0, maxObjects - me.objectsPlayedThisTurn)} · 🗺️{' '}
-          {Math.max(0, maxTerrains - me.terrainsPlayedThisTurn)}
-        </span>
-        <EffectsGlossaryButton />
-        {/* Leaving was only possible from the result screen: a player whose opponent
-            never comes back had no way out short of reloading. */}
-        <ForfeitButton onForfeit={conn.forfeit} />
-        <button className="board-leave" onClick={conn.leave} title="Quitter la partie et revenir au lobby">
-          Quitter
-        </button>
+          {drawMode && (
+            <span
+              className="board-header-piles"
+              title="Cartes restantes dans les piles. Celle des terrains est commune aux deux joueurs."
+            >
+              🂠 {me.drawPiles.characterCardIds.length} · 🎒 {me.drawPiles.objectCardIds.length} · 🗺️{' '}
+              {state.sharedTerrainPile.length}
+            </span>
+          )}
+        </div>
+        <div className={`board-turn-capsule${myTurn ? ' mine' : ' theirs'}`}>
+          <span className="board-turn-number">Tour {state.turnNumber}</span>
+          <strong className="board-turn-state">{myTurn ? 'À vous de jouer' : `${opponentName} joue`}</strong>
+        </div>
+        <div className="board-header-side right">
+          <span className="board-header-budget" title="Cartes encore jouables pendant votre tour">
+            🎒 {Math.max(0, maxObjects - me.objectsPlayedThisTurn)} · 🗺️{' '}
+            {Math.max(0, maxTerrains - me.terrainsPlayedThisTurn)}
+          </span>
+          <EffectsGlossaryButton />
+          {/* Leaving was only possible from the result screen: a player whose opponent
+              never comes back had no way out short of reloading. */}
+          <ForfeitButton onForfeit={conn.forfeit} />
+          <button className="board-leave" onClick={conn.leave} title="Quitter la partie et revenir au lobby">
+            Quitter
+          </button>
+        </div>
       </header>
 
       {conn.opponentDisconnected && <p className="warning">L'adversaire s'est déconnecté.</p>}
@@ -603,19 +627,20 @@ export function Board({ conn }: { conn: GameConnection }) {
           <div className="rail rail-self">
             {drawMode && <CharacterHand player={me} isSelf max={DRAW_MODE_MAX_CHARACTER_HAND} />}
             <GraveyardPile player={me} title="Votre cimetière" orientation="landscape" />
-            <div className="rail-row">
-              <BenchRow
-                player={me}
-                isSelf
-                badgesByCharacter={badgesByCharacter}
-                state={state}
-                you={you}
-                conn={conn}
-                turnGate={turnGate}
-                targeting={targeting}
-              />
-              <TerrainSlot player={me} />
-            </div>
+            <BenchRow
+              player={me}
+              isSelf
+              badgesByCharacter={badgesByCharacter}
+              state={state}
+              you={you}
+              conn={conn}
+              turnGate={turnGate}
+              targeting={targeting}
+            />
+          </div>
+
+          <div className="zone zone-terrain-self">
+            <TerrainSlot player={me} side="self" />
           </div>
 
           <div className="zone zone-plate-self">
@@ -663,6 +688,10 @@ export function Board({ conn }: { conn: GameConnection }) {
             />
           </div>
 
+          <div className="zone zone-terrain-opp">
+            <TerrainSlot player={opponent} side="opponent" />
+          </div>
+
           <div className="zone zone-plate-opp">
             <Nameplate
               label={opponentName}
@@ -677,19 +706,16 @@ export function Board({ conn }: { conn: GameConnection }) {
           <div className="rail rail-opp">
             {drawMode && <CharacterHand player={opponent} isSelf={false} max={DRAW_MODE_MAX_CHARACTER_HAND} />}
             <GraveyardPile player={opponent} title="Cimetière adverse" orientation="landscape" />
-            <div className="rail-row">
-              <BenchRow
-                player={opponent}
-                isSelf={false}
-                badgesByCharacter={badgesByCharacter}
-                state={state}
-                you={you}
-                conn={conn}
-                turnGate={turnGate}
-                targeting={targeting}
-              />
-              <TerrainSlot player={opponent} />
-            </div>
+            <BenchRow
+              player={opponent}
+              isSelf={false}
+              badgesByCharacter={badgesByCharacter}
+              state={state}
+              you={you}
+              conn={conn}
+              turnGate={turnGate}
+              targeting={targeting}
+            />
           </div>
         </div>
       </div>

@@ -919,6 +919,9 @@ input::placeholder {
   --bench-card-h: clamp(50px, 6.9vh, 78px);
   --gy-card-w: clamp(96px, 13vh, 132px);
   --card-pile-w: clamp(54px, 7.5vh, 82px);
+  /* Le terrain a quitté le rail pour la ligne centrale : il y a la place d'en montrer
+     enfin l'illustration. Borné en hauteur, comme l'actif, pour ne pas gonfler la rangée. */
+  --terrain-card-w: clamp(86px, 12.5vh, 138px);
   --card-opp-hand-w: clamp(34px, 4.5vh, 56px);
   /* Les deux actifs sont les pièces maîtresses du plateau : ils prennent nettement plus
      de place que tout le reste. Largeur bornée par la fenêtre (la colonne de la grille
@@ -939,49 +942,230 @@ input::placeholder {
   flex-direction: column;
   gap: 8px;
   min-height: 0;
+  /* Arène : vignettage profond avec un spot de lumière au centre, là où les deux actifs
+     se font face. Les deux calques posés par-dessus (grille holographique, ambiance de
+     terrain) sont des pseudo-éléments en `z-index: -1` ; `isolation: isolate` crée le
+     contexte d'empilement qui les garde derrière le contenu tout en les laissant devant
+     ce fond -- sans lui, ils passeraient derrière la page entière. */
+  isolation: isolate;
+  background: radial-gradient(circle at 50% 46%, rgba(30, 41, 59, 1) 0%, rgba(15, 23, 42, 1) 72%);
 }
+/* Grille holographique : volontairement à la limite du perceptible -- elle donne une
+   texture à la table sans entrer en concurrence avec les cartes. */
+.board::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image:
+    linear-gradient(to right, #dbeafe 1px, transparent 1px),
+    linear-gradient(to bottom, #dbeafe 1px, transparent 1px);
+  background-size: 46px 46px;
+}
+/* Calque d'ambiance, allumé par la classe `board-terrain-<cardId>` que pose Board.tsx.
+   Éteint par défaut : un terrain sans règle dédiée ne teinte rien. */
+.board::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.8s var(--ease), background 0.8s var(--ease);
+}
+.board-terrain::after {
+  animation: terrain-ambience 6s ease-in-out infinite;
+}
+@keyframes terrain-ambience {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .board-terrain::after {
+    animation: none;
+    opacity: 0.8;
+  }
+}
+/* Autel Démoniaque : rouge écarlate, menaçant, monté du bas comme un brasier. */
+.board-terrain-autel-demoniaque::after {
+  background:
+    radial-gradient(ellipse 120% 70% at 50% 108%, rgba(190, 30, 45, 0.4), transparent 62%),
+    radial-gradient(circle at 50% 46%, rgba(140, 20, 32, 0.18), transparent 70%);
+}
+/* Hôpital : halo émeraude/cyan apaisant, diffusé depuis le centre. */
+.board-terrain-hopital::after {
+  background:
+    radial-gradient(circle at 50% 46%, rgba(45, 200, 160, 0.22), transparent 66%),
+    radial-gradient(ellipse 130% 60% at 50% 0%, rgba(60, 190, 220, 0.16), transparent 60%);
+}
+/* Faille dimensionnelle : violet/indigo cosmique, en écharpe à travers la table. */
+.board-terrain-faille-dimensionnelle::after {
+  background:
+    radial-gradient(ellipse 90% 90% at 22% 30%, rgba(126, 68, 224, 0.26), transparent 62%),
+    radial-gradient(ellipse 90% 90% at 78% 70%, rgba(64, 76, 220, 0.24), transparent 62%);
+}
+/* ==========================================================================
+   HUD du haut : un panneau flottant, pas une barre collée aux bords. Verre dépoli, coins
+   biseautés et liseré néon qui respire -- bleu par défaut, doré quand c'est notre tour.
+   Le biseau étant une découpe (`clip-path`), le liseré passe par un `box-shadow` interne :
+   une vraie bordure serait tranchée en diagonale aux quatre coins.
+   ========================================================================== */
 .board-header {
   flex-shrink: 0;
-  display: flex;
+  width: 95%;
+  margin: 6px auto 2px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 10px;
-  justify-content: space-between;
-  padding: 10px 18px;
-  background: linear-gradient(180deg, var(--panel-raised), var(--panel));
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
+  padding: 9px 20px;
   font-weight: 500;
+  --hud-neon: rgba(79, 140, 255, 0.55);
+  --hud-glow: rgba(79, 140, 255, 0.3);
+  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+  background: linear-gradient(180deg, rgba(32, 40, 56, 0.72), rgba(16, 21, 32, 0.62));
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+  box-shadow:
+    inset 0 0 0 1px var(--hud-neon),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 8px 26px -12px rgba(0, 0, 0, 0.9);
+  animation: hud-neon-breathe 4.5s ease-in-out infinite;
+}
+/* Unmissable "it's on you" state -- the single most-asked question mid-game. */
+.board-header.my-turn {
+  --hud-neon: rgba(224, 176, 78, 0.72);
+  --hud-glow: rgba(224, 176, 78, 0.42);
+}
+@keyframes hud-neon-breathe {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 0 1px var(--hud-neon),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      0 8px 26px -12px rgba(0, 0, 0, 0.9);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 1px var(--hud-neon),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      inset 0 0 22px -6px var(--hud-glow),
+      0 8px 26px -12px rgba(0, 0, 0, 0.9);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .board-header {
+    animation: none;
+  }
 }
 .board-header strong {
   color: var(--accent);
 }
-/* Unmissable "it's on you" state -- the single most-asked question mid-game. */
-.board-header.my-turn {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-sm), 0 0 0 1px var(--accent-soft), 0 0 18px -6px var(--accent-glow);
+.board-header-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.board-header-side.right {
+  justify-content: flex-end;
 }
 .board-header-room,
 .board-header-budget {
-  white-space: nowrap;
-}
-.board-header-turn {
-  text-align: center;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .board-header-budget {
   font-variant-numeric: tabular-nums;
   color: var(--text-dim);
 }
-.board-leave {
-  padding: 2px 10px;
-  font-size: 0.78rem;
+
+/* Capsule de tour : la réponse à « c'est à qui ? », lisible d'un coup d'œil depuis
+   n'importe quel coin de l'écran. Chaude quand c'est à nous, en alerte sinon. */
+.board-turn-capsule {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 18px;
+  border-radius: 999px;
+  white-space: nowrap;
+  border: 1px solid var(--capsule-line);
+  background: linear-gradient(180deg, var(--capsule-bg-top), var(--capsule-bg-bottom));
+  box-shadow:
+    0 0 18px -4px var(--capsule-line),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+.board-turn-capsule.mine {
+  --capsule-line: rgba(232, 186, 92, 0.85);
+  --capsule-bg-top: rgba(96, 74, 30, 0.55);
+  --capsule-bg-bottom: rgba(40, 30, 12, 0.5);
+  --capsule-fg: #ffd98a;
+}
+.board-turn-capsule.theirs {
+  --capsule-line: rgba(224, 116, 70, 0.7);
+  --capsule-bg-top: rgba(88, 44, 30, 0.45);
+  --capsule-bg-bottom: rgba(36, 20, 16, 0.5);
+  --capsule-fg: #ffb08a;
+}
+.board-turn-number {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--text-dim);
-  background: transparent;
-  border-color: var(--border-soft);
+}
+.board-turn-state {
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--capsule-fg);
+  text-shadow: 0 0 12px var(--capsule-line);
+}
+
+/* Boutons du HUD : liseré néon fin, reflet qui glisse au survol, enfoncement de 1 px au
+   clic. `overflow: hidden` cadre le reflet, qui est un pseudo-élément balayé de gauche
+   à droite plutôt qu'un dégradé animé (moins coûteux, et net sur toute la largeur). */
+.board-header button {
+  position: relative;
+  overflow: hidden;
+  padding: 4px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  transition:
+    color 0.18s var(--ease),
+    border-color 0.18s var(--ease),
+    transform 0.1s var(--ease),
+    box-shadow 0.18s var(--ease);
+}
+.board-header button::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 -60%;
+  width: 55%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  transition: translate 0.5s var(--ease);
+  pointer-events: none;
+}
+.board-header button:hover:not(:disabled)::after {
+  translate: 300% 0;
+}
+.board-header button:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--hud-neon);
+  box-shadow: 0 0 12px -3px var(--hud-glow);
+}
+.board-header button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 .board-leave:hover:not(:disabled) {
   color: var(--danger);
@@ -1067,7 +1251,9 @@ input::placeholder {
 }
 .recycler-zone {
   position: absolute;
-  left: 0;
+  /* Décalé de la largeur de la pastille du journal, qui occupe le coin bas-gauche : les
+     deux se recouvraient et le bouton « Recycler » passait sous le 📜. */
+  left: 64px;
   bottom: 6px;
   z-index: 6;
   display: flex;
@@ -1351,12 +1537,14 @@ input::placeholder {
   display: grid;
   /* Le panneau de commandes ayant rejoint la carte, la rangée du dessous n'a plus rien à
      porter : deux rangées suffisent, et les deux plaques de nom coiffent chacune leur
-     actif au lieu de se faire face en diagonale. */
-  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr) auto;
+     actif au lieu de se faire face en diagonale.
+     La ligne centrale se lit en miroir de part et d'autre du « VS » :
+     [terrain joueur] [actif joueur] VS [actif adverse] [terrain adverse]. */
+  grid-template-columns: auto auto minmax(0, 1fr) auto minmax(0, 1fr) auto auto;
   grid-template-rows: auto auto;
   grid-template-areas:
-    'railS plateS  vs plateO  railO'
-    'railS activeS vs activeO railO';
+    'railS terrS plateS  vs plateO  terrO railO'
+    'railS terrS activeS vs activeO terrO railO';
   align-content: center;
   column-gap: 14px;
   row-gap: 6px;
@@ -1380,6 +1568,15 @@ input::placeholder {
 .zone-plate-opp {
   grid-area: plateO;
   align-self: end;
+}
+/* Les deux terrains encadrent le duel, centrés sur la hauteur des deux rangées. */
+.zone-terrain-self {
+  grid-area: terrS;
+  align-self: center;
+}
+.zone-terrain-opp {
+  grid-area: terrO;
+  align-self: center;
 }
 
 /* Ligne de front : une colonne à part entière au milieu de la grille, donc toujours
@@ -1437,16 +1634,6 @@ input::placeholder {
 }
 .rail-opp {
   align-items: flex-end;
-}
-/* La colonne du banc et la carte de terrain, côte à côte sous le cimetière. */
-.rail-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-/* Miroir : chez l'adversaire, le terrain passe à gauche de la colonne du banc. */
-.rail-opp .rail-row {
-  flex-direction: row-reverse;
 }
 .graveyard-pile-zone,
 .terrain-slot-zone {
@@ -1569,20 +1756,44 @@ input::placeholder {
   color: var(--text-dim);
 }
 
-.terrain-badge {
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--panel-alt);
-  border: 1px solid var(--border-soft);
-  font-size: 0.78rem;
-}
-.terrain-badge.empty {
-  color: var(--text-dim);
-  border-style: dashed;
-}
+/* Terrain : plus une vignette rangée dans un rail latéral, mais une carte de plein droit
+   posée au centre du plateau, contre l'actif de son camp. */
 .terrain-slot-zone .tcg-card {
-  width: var(--card-pile-w);
+  width: var(--terrain-card-w);
+}
+.terrain-slot-zone .tcg-card-name-banner {
+  font-size: 0.72rem;
+  padding: 3px 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Emplacement vide dessiné aux cotes exactes d'une carte : sans lui, poser ou perdre un
+   terrain décalait toute la ligne centrale. */
+.terrain-slot-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: var(--terrain-card-w);
+  aspect-ratio: 3 / 4;
+  border: 1px dashed rgba(79, 191, 149, 0.45);
+  border-radius: var(--radius-sm);
+  background: rgba(12, 26, 22, 0.35);
+}
+.terrain-slot-empty-icon {
+  font-size: 1.7rem;
+  opacity: 0.22;
+  line-height: 1;
+}
+.terrain-slot-empty-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  opacity: 0.75;
 }
 
 /* Plaque de nom de chaque camp, posée du côté « extérieur » de son personnage actif. */
@@ -3230,38 +3441,52 @@ input::placeholder {
 /* Journal de combat : fenêtre flottante, déplaçable par son en-tête et réductible en
    pastille de notification. Tant qu'elle n'a pas été déplacée sa position vient d'ici
    (coin bas-gauche) ; le premier glisser fige des coordonnées explicites en ligne. */
-.event-log.floating {
+/* Journal : pastille en bas à gauche, tiroir coulissant depuis le bord gauche.
+   Le tiroir reste monté fermé (translaté hors écran) pour que l'ouverture soit une vraie
+   glissade, et non une apparition sèche. */
+.event-log-drawer {
   position: fixed;
-  left: 10px;
+  left: 0;
   bottom: 10px;
   z-index: 9;
-  width: 300px;
-  max-width: calc(100vw - 20px);
+  width: 320px;
+  min-width: 240px;
+  /* `resize` a besoin d'un `overflow` non-visible pour que la poignée apparaisse. */
+  max-width: min(90vw, 640px);
   display: flex;
   flex-direction: column;
-  background: var(--panel);
+  resize: horizontal;
+  overflow: auto;
+  background: rgba(21, 26, 36, 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-left: none;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
   box-shadow: var(--shadow-lg);
-  overflow: hidden;
+  translate: -102% 0;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    translate 0.28s var(--ease),
+    opacity 0.28s var(--ease),
+    visibility 0.28s;
+}
+.event-log-drawer.open {
+  translate: 0 0;
+  opacity: 1;
+  visibility: visible;
 }
 .event-log-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
+  padding: 7px 9px;
   background: linear-gradient(180deg, var(--panel-raised), var(--panel));
   border-bottom: 1px solid var(--border-soft);
-  cursor: grab;
   user-select: none;
-  /* Sans ça, un glisser au doigt fait défiler la page au lieu de déplacer la fenêtre. */
-  touch-action: none;
-}
-.event-log-head:active {
-  cursor: grabbing;
 }
 .event-log-grip {
-  color: var(--text-dim);
   font-size: 0.9rem;
 }
 .event-log-head h3 {
@@ -3273,7 +3498,7 @@ input::placeholder {
   letter-spacing: 0.08em;
   font-weight: 700;
 }
-.event-log-minimize {
+.event-log-close {
   padding: 0 8px;
   font-size: 1rem;
   line-height: 1.5;
@@ -3281,7 +3506,7 @@ input::placeholder {
   background: transparent;
   border-color: var(--border-soft);
 }
-.event-log.floating ul {
+.event-log-drawer ul {
   list-style: none;
   margin: 0;
   padding: 6px 8px 8px;
@@ -3289,19 +3514,15 @@ input::placeholder {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 220px;
+  max-height: 46dvh;
   overflow-y: auto;
   scroll-behavior: smooth;
 }
-.event-log.minimized {
-  width: auto;
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  overflow: visible;
-}
 .event-log-pill {
-  position: relative;
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 9;
   width: 46px;
   height: 46px;
   padding: 0;
@@ -3310,8 +3531,11 @@ input::placeholder {
   background: linear-gradient(180deg, var(--panel-raised), var(--panel));
   border: 1px solid var(--border);
   box-shadow: var(--shadow-md);
-  cursor: grab;
-  touch-action: none;
+  transition: transform 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+.event-log-pill:hover {
+  border-color: var(--accent);
+  transform: scale(1.08);
 }
 .event-log-unread {
   position: absolute;
@@ -4213,16 +4437,26 @@ textarea {
     grid-template-areas:
       'plateO'
       'activeO'
+      'terrO'
       'railO'
       'vs'
       'railS'
+      'terrS'
       'activeS'
       'plateS';
     row-gap: 6px;
   }
   .zone-plate-self,
-  .zone-plate-opp {
+  .zone-plate-opp,
+  .zone-terrain-self,
+  .zone-terrain-opp {
     align-self: auto;
+  }
+  /* Empilé, le terrain se pose sous (ou sur) son actif plutôt qu'à côté : la ligne
+     centrale en miroir n'a plus de sens sur une colonne unique. */
+  .zone-terrain-self,
+  .zone-terrain-opp {
+    justify-self: center;
   }
   .rail-self,
   .rail-opp {
@@ -4253,15 +4487,36 @@ textarea {
     padding: 6px 8px 8px;
     gap: 6px;
   }
+  /* Trop étroit pour trois colonnes : le HUD redevient une barre pleine largeur dont les
+     blocs s'enroulent, capsule en tête. En grille, la colonne de droite débordait sous le
+     biseau et « Abandonner » se retrouvait tranché. */
   .board-header {
-    padding: 7px 8px;
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 7px 10px;
     font-size: 0.74rem;
     gap: 6px;
+  }
+  .board-header-side {
+    flex: 1 1 auto;
+    justify-content: center;
+    gap: 6px;
+  }
+  .board-turn-capsule {
+    order: -1;
+    padding: 3px 14px;
+  }
+  .board-turn-state {
+    font-size: 0.84rem;
   }
   .board-header-room {
     display: none; /* the room code matters when inviting, not once both players are in */
   }
-  .board-leave {
+  /* Sélecteur aligné sur `.board-header button` du HUD : `.board-leave` seul perdait
+     l'arbitrage de spécificité et les boutons gardaient leur taille de grand écran. */
+  .board-header button {
     padding: 2px 8px;
     font-size: 0.7rem;
   }
@@ -4348,10 +4603,10 @@ textarea {
   .bench-menu {
     max-width: min(260px, 86vw);
   }
-  .event-log.floating {
+  .event-log-drawer {
     width: min(300px, calc(100vw - 20px));
   }
-  .event-log.floating ul {
+  .event-log-drawer ul {
     max-height: 34dvh;
   }
 
@@ -4383,7 +4638,7 @@ textarea {
   .cmd-options {
     max-height: 172px;
   }
-  .event-log.floating ul {
+  .event-log-drawer ul {
     max-height: 168px;
   }
 }
@@ -4752,14 +5007,22 @@ textarea {
   pointer-events: none;
 }
 .proc-wheel {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 6px 15px 6px 7px;
   border-radius: 999px;
   background: rgba(16, 19, 28, 0.93);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-md);
+  /* Cerclage métallique : le dégradé va en `border-box` sous un fond en `padding-box`,
+     ce qui donne un liseré dégradé là où une `border-color` ne peut être qu'unie. */
+  border: 2px solid transparent;
+  background-image:
+    linear-gradient(rgba(16, 19, 28, 0.95), rgba(16, 19, 28, 0.95)),
+    linear-gradient(135deg, #6b5320, #f0d489 22%, #a3801f 48%, #ffe9ae 72%, #6b5320);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  box-shadow: var(--shadow-md), 0 0 16px -4px rgba(240, 212, 137, 0.5);
   /* Durée de vie alignée sur PROC_ROLL_DURATION_MS (gameEvents.ts) : la roue doit rester
      à l'écran plus longtemps que sa propre rotation, sinon elle disparaît en tournant. */
   animation: proc-wheel-in 1.8s var(--ease) forwards;
@@ -4767,12 +5030,41 @@ textarea {
 .proc-wheel.hit {
   --proc-win: #3fbf7f;
   --proc-lose: #2a3140;
-  border-color: rgba(63, 191, 127, 0.5);
 }
 .proc-wheel.miss {
   --proc-win: #37624f;
   --proc-lose: #552f35;
-  border-color: rgba(224, 85, 95, 0.45);
+  background-image:
+    linear-gradient(rgba(16, 19, 28, 0.95), rgba(16, 19, 28, 0.95)),
+    linear-gradient(135deg, #47262a, #a25a62 30%, #6d3238 60%, #c9767f, #47262a);
+  box-shadow: var(--shadow-md), 0 0 14px -6px rgba(224, 85, 95, 0.55);
+}
+/* Réussite : flash or/blanc qui détonne par-dessus toute la pastille, puis se retire.
+   Posé en pseudo-élément pour ne pas entrer en conflit avec le `background-clip` du
+   cerclage, qui occupe déjà les deux couches de fond de l'élément. */
+.proc-wheel.hit::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 999px;
+  pointer-events: none;
+  background: radial-gradient(circle at 26px 50%, rgba(255, 255, 255, 0.95), rgba(255, 216, 128, 0.6) 45%, transparent 72%);
+  animation: proc-hit-flash 0.75s ease-out forwards;
+}
+@keyframes proc-hit-flash {
+  0% {
+    opacity: 0;
+  }
+  /* Le flash n'arrive pas à l'ouverture : il tombe quand l'aiguille se fige (~0,8 s). */
+  62% {
+    opacity: 0;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 @keyframes proc-wheel-in {
   0% {
@@ -4780,6 +5072,39 @@ textarea {
     transform: translateY(-8px) scale(0.9);
   }
   7%,
+  40% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+}
+/* Réussite : la pastille encaisse un à-coup au moment où l'aiguille se cale. */
+.proc-wheel.hit {
+  animation: proc-wheel-in-hit 1.8s var(--ease) forwards;
+}
+@keyframes proc-wheel-in-hit {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.9);
+  }
+  7%,
+  42% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  46% {
+    transform: translateY(0) scale(1.14);
+  }
+  50% {
+    transform: translateY(0) scale(0.98);
+  }
+  54% {
+    transform: translateY(0) scale(1.06);
+  }
+  60%,
   88% {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -4795,7 +5120,10 @@ textarea {
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.16);
+  border: 2px solid rgba(240, 212, 137, 0.75);
+  box-shadow:
+    inset 0 0 8px rgba(0, 0, 0, 0.7),
+    0 0 10px -3px rgba(240, 212, 137, 0.7);
   /* La part gagnante occupe le pourcentage annoncé : l'aiguille s'arrête donc dans une
      zone qui correspond visuellement à la chance réelle. */
   background: conic-gradient(var(--proc-win) 0deg var(--slice), var(--proc-lose) var(--slice) 360deg);
@@ -4807,19 +5135,42 @@ textarea {
   width: 2px;
   height: 45%;
   border-radius: 1px;
-  background: #fff;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.75);
+  background: linear-gradient(180deg, #fff, #ffe9ae);
+  box-shadow: 0 0 5px rgba(255, 233, 174, 0.9), 0 0 3px rgba(0, 0, 0, 0.8);
   translate: -50% -100%;
   transform-origin: 50% 100%;
   /* 0,8 s exactement : assez lent pour qu'on voie l'aiguille chercher sa part. */
   animation: proc-needle-spin 0.8s cubic-bezier(0.18, 0.74, 0.12, 1) forwards;
 }
+/* Freinage : l'aiguille dépasse sa cible, revient, et vibre de moins en moins avant de se
+   caler. Les écarts sont exprimés en degrés absolus autour de `--spin`, donc indépendants
+   de l'angle d'arrivée -- une roue qui s'arrête à 30° tremble comme une qui s'arrête à
+   330°. Le `cubic-bezier` du freinage reste sur la course, les derniers pourcents font le
+   tremblement. */
 @keyframes proc-needle-spin {
   from {
     rotate: 0deg;
   }
+  74% {
+    rotate: calc(var(--spin) + 9deg);
+  }
+  82% {
+    rotate: calc(var(--spin) - 5deg);
+  }
+  88% {
+    rotate: calc(var(--spin) + 2.5deg);
+  }
+  94% {
+    rotate: calc(var(--spin) - 1.2deg);
+  }
   to {
     rotate: var(--spin);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .proc-wheel.hit::after {
+    animation: none;
+    opacity: 0;
   }
 }
 .proc-wheel-text {
