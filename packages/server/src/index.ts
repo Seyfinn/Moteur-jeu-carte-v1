@@ -1,3 +1,4 @@
+import './env.js';
 import { createServer } from 'node:http';
 import { createReadStream, existsSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
@@ -7,6 +8,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { registerDemoCards, validateRoster, type ClientMessage, type PlayerId, type ServerMessage } from 'engine';
 import { randomUUID } from 'node:crypto';
 import { generateRoomCode, Room } from './room.js';
+import { loadDecks, saveDeck } from './supabase.js';
 
 registerDemoCards();
 
@@ -95,7 +97,104 @@ async function serveStatic(req: import('node:http').IncomingMessage, res: import
   return true;
 }
 
+function sendJson(res: import('node:http').ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(body));
+}
+
+async function readJsonBody(req: import('node:http').IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(chunk as Buffer);
+  const raw = Buffer.concat(chunks).toString('utf-8');
+  return raw ? JSON.parse(raw) : null;
+}
+
+/**
+ * Cloud deck storage. REST rather than a WebSocket message: the deck builder has no
+ * live room connection (sockets only open on create-room/join-room), so a one-off
+ * fetch is simpler than standing up a socket just to save/load a deck.
+ */
+async function handleApiRequest(
+  req: import('node:http').IncomingMessage,
+  res: import('node:http').ServerResponse,
+  url: URL
+): Promise<boolean> {
+  if (url.pathname === '/api/decks' && req.method === 'GET') {
+    const userName = url.searchParams.get('userName');
+    if (!userName) {
+      sendJson(res, 400, { error: 'Missing userName' });
+      return true;
+    }
+    const result = await loadDecks(userName);
+    if (!result.ok) {
+      sendJson(res, 500, { error: result.error });
+      return true;
+    }
+    sendJson(res, 200, { decks: result.decks ?? [] });
+    return true;
+  }
+
+  if (url.pathname === '/api/decks' && req.method === 'POST') {
+    let body: unknown;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      sendJson(res, 400, { error: 'Malformed JSON body' });
+      return true;
+    }
+    if (!body || typeof body !== 'object') {
+      sendJson(res, 400, { error: 'Malformed body' });
+      return true;
+    }
+    const { userName, deckName, roster } = body as Record<string, unknown>;
+    if (typeof userName !== 'string' || typeof deckName !== 'string' || !roster || typeof roster !== 'object') {
+      sendJson(res, 400, { error: 'Missing userName, deckName or roster' });
+      return true;
+    }
+    const check = validateRoster(roster as never);
+    if (!check.ok) {
+      sendJson(res, 400, { error: check.error });
+      return true;
+    }
+    const result = await saveDeck(userName, deckName, roster);
+    if (!result.ok) {
+      sendJson(res, 500, { error: result.error });
+      return true;
+    }
+    sendJson(res, 200, { ok: true });
+    return true;
+  }
+
+  return false;
+}
+
 const httpServer = createServer((req, res) => {
+  const url = new URL(req.url ?? '/', 'http://localhost');
+  if (url.pathname.startsWith('/api/')) {
+    // In dev, the Vite dev server (5173) and this API (8787) are different origins, so the
+    // browser sends a CORS preflight before the real POST. In production the client is
+    // served from this same origin, so these headers are a harmless no-op there. No
+    // credentials/cookies flow through these endpoints -- just a plain-text userName --
+    // so a permissive origin doesn't expose anything session-like.
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'content-type');
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    handleApiRequest(req, res, url)
+      .then((handled) => {
+        if (!handled) sendJson(res, 404, { error: 'Not found' });
+      })
+      .catch((err) => {
+        if (res.headersSent) return;
+        sendJson(res, 500, { error: (err as Error).message });
+      });
+    return;
+  }
+
   serveStatic(req, res)
     .then((served) => {
       if (served) return;

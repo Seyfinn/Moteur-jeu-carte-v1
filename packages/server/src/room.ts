@@ -13,6 +13,7 @@ import {
   type RosterConfig,
   type ServerMessage,
 } from 'engine';
+import { saveGameHistory } from './supabase.js';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I to avoid ambiguity
 const CODE_LENGTH = 2;
@@ -62,6 +63,7 @@ export class Room {
    * Vidé dès qu'une nouvelle partie démarre.
    */
   private rematchVotes = new Set<PlayerId>();
+  private gameSaved = false;
 
   /** The prompt currently on the clock, and the timer that will auto-answer it. */
   private choiceTimer?: ReturnType<typeof setTimeout>;
@@ -206,6 +208,7 @@ export class Room {
     this.unsubscribe = undefined;
     this.clearChoiceTimer();
     this.rematchVotes.clear();
+    this.gameSaved = false;
     this.match = Match.create({
       p1Name: this.playerNames.p1 ?? 'Joueur 1',
       p2Name: this.playerNames.p2 ?? 'Joueur 2',
@@ -218,6 +221,7 @@ export class Room {
     this.unsubscribe = this.match.onChange(() => {
       this.syncChoiceTimer();
       this.broadcastState();
+      this.saveGameIfFinished();
     });
     this.syncChoiceTimer();
     this.broadcastState();
@@ -290,6 +294,22 @@ export class Room {
       const socket = this.sockets[playerId];
       if (socket) send(socket, { type: 'error', message: result.error });
     }
+  }
+
+  private async saveGameIfFinished(): Promise<void> {
+    if (!this.match || this.gameSaved || !this.match.state.result) return;
+    this.gameSaved = true;
+
+    const result = this.match.state.result;
+    await saveGameHistory(
+      this.playerNames.p1 ?? 'Joueur 1',
+      this.playerNames.p2 ?? 'Joueur 2',
+      result.kind === 'win' ? result.winner : null,
+      this.playerRosters.p1,
+      this.playerRosters.p2,
+      this.match.state.log,
+      this.match.state
+    );
   }
 
   /**

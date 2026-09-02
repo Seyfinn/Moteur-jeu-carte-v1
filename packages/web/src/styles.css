@@ -4455,6 +4455,34 @@ input::placeholder {
 .deck-share-box textarea {
   resize: vertical;
 }
+.deck-cloud-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.deck-cloud-bar .field {
+  flex: 1;
+  min-width: 220px;
+  margin: 0;
+}
+.deck-cloud-bar .error {
+  flex-basis: 100%;
+  margin: 0;
+}
+.deck-cloud-save {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.deck-cloud-save-error {
+  font-size: 0.75rem;
+  color: var(--danger, #f87171);
+}
 .deck-import {
   margin-top: 20px;
   padding-top: 16px;
