@@ -195,6 +195,25 @@ const fxMirrorObject: ObjectCardDef = {
   },
 };
 
+/** Test-only mirror of Yugi's "Renvoi total" branch: 100% reflect that ALSO zeroes out what the bearer itself takes from that hit (`data.negatesOriginal`). */
+const fxMirrorNegateObject: ObjectCardDef = {
+  type: 'object',
+  id: 'fx-mirror-negate-object',
+  name: 'Fixture Mirror Negate Object',
+  description: 'Attaches to the owner active; reflects 100% of the next hit back to the attacker AND takes none of it itself.',
+  async execute(ctx) {
+    const active = ctx.getActive(ctx.ownerId);
+    if (!active) return;
+    ctx.attachSelfTo(active.instanceId);
+    ctx.applyStatus(active.instanceId, {
+      statusId: 'damage-reflect',
+      label: 'Fixture Mirror Negate',
+      sourceCardInstanceId: ctx.sourceInstanceId,
+      data: { percent: 100, negatesOriginal: true, objectInstanceId: ctx.sourceInstanceId },
+    });
+  },
+};
+
 /** Test-only mirror of "Adrénaline Ultime": requires >=150 current HP to play, drops it to 10, doubles this turn's (getEffectiveATK-routed) attack damage. */
 const fxAdrenalineObject: ObjectCardDef = {
   type: 'object',
@@ -449,6 +468,7 @@ export function registerTestFixtures(): void {
   registerCard(fxTransformer);
   registerCard(fxPoisonCurse);
   registerCard(fxMirrorObject);
+  registerCard(fxMirrorNegateObject);
   registerCard(fxAdrenalineObject);
   registerCard(fxTicker);
   registerCard(fxEcho);
@@ -488,6 +508,13 @@ export const POISON_CURSE_ROSTER: RosterConfig = {
 export const MIRROR_ROSTER: RosterConfig = {
   characterCardIds: [fxStriker.id, fxTank.id],
   objectCardIds: [fxMirrorObject.id],
+  terrainCardIds: [],
+};
+
+/** Same as MIRROR_ROSTER, with the negating variant instead. */
+export const MIRROR_NEGATE_ROSTER: RosterConfig = {
+  characterCardIds: [fxStriker.id, fxTank.id],
+  objectCardIds: [fxMirrorNegateObject.id],
   terrainCardIds: [],
 };
 

@@ -20,7 +20,7 @@ export type CharacterBadge =
 /**
  * Jet à pourcentage porté par une carte (statut `evasive`/`critical`, modifier d'une
  * capacité ou d'un objet). Le moteur ne les annonce que dans ce cas : le taux de base
- * d'un personnage (5 % d'esquive, 2 % de critique) ne déclenche jamais de mini-roue.
+ * d'un personnage (1 % d'esquive, 1 % de critique) ne déclenche jamais de mini-roue.
  */
 export type ProcRoll = {
   /** 'chance' = jet nommé par la carte elle-même (désarmement, stun, silence...). */

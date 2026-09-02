@@ -82,6 +82,16 @@ import { failleDimensionnelle } from './faille-dimensionnelle.js';
 import { roncesGrimpantes } from './ronces-grimpantes.js';
 import { isaacD6 } from './isaac-d6.js';
 import { livreDeChrollo } from './livre-de-chrollo.js';
+import { salleDeGravite } from './salle-de-gravite.js';
+import { jeuDeLaMort } from './jeu-de-la-mort.js';
+import { toursCompte } from './tours-compte.js';
+import { bombeAveuglante } from './bombe-aveuglante.js';
+import { chasseurDePrime } from './chasseur-de-prime.js';
+import { berserk } from './berserk.js';
+import { yugi } from './yugi.js';
+import { itachi } from './itachi.js';
+import { deidara } from './deidara.js';
+import { soma } from './soma.js';
 
 export {
   aizen,
@@ -166,6 +176,16 @@ export {
   roncesGrimpantes,
   isaacD6,
   livreDeChrollo,
+  salleDeGravite,
+  jeuDeLaMort,
+  toursCompte,
+  bombeAveuglante,
+  chasseurDePrime,
+  berserk,
+  yugi,
+  itachi,
+  deidara,
+  soma,
 };
 
 let registered = false;
@@ -258,6 +278,16 @@ export function registerDemoCards(): void {
   registerCard(roncesGrimpantes);
   registerCard(isaacD6);
   registerCard(livreDeChrollo);
+  registerCard(salleDeGravite);
+  registerCard(jeuDeLaMort);
+  registerCard(toursCompte);
+  registerCard(bombeAveuglante);
+  registerCard(chasseurDePrime);
+  registerCard(berserk);
+  registerCard(yugi);
+  registerCard(itachi);
+  registerCard(deidara);
+  registerCard(soma);
 }
 
 /**
@@ -331,6 +361,10 @@ export const DEMO_ROSTER: RosterConfig = {
     kayn.id,
     gon.id,
     escanor.id,
+    yugi.id,
+    itachi.id,
+    deidara.id,
+    soma.id,
   ],
   objectCardIds: [
     potionForce.id,
@@ -359,6 +393,10 @@ export const DEMO_ROSTER: RosterConfig = {
     critPlus.id,
     absorptionVitale.id,
     coeurAcier.id,
+    toursCompte.id,
+    bombeAveuglante.id,
+    chasseurDePrime.id,
+    berserk.id,
   ],
   terrainCardIds: [
     hopital.id,
@@ -374,5 +412,7 @@ export const DEMO_ROSTER: RosterConfig = {
     roncesGrimpantes.id,
     isaacD6.id,
     livreDeChrollo.id,
+    salleDeGravite.id,
+    jeuDeLaMort.id,
   ],
 };

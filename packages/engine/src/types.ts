@@ -36,7 +36,13 @@ export type BuiltinStatusId =
   | 'death-ward'
   /** Next attack crits at `data.percent`% or deals 0 and disarms the bearer. */
   | 'concentration'
-  /** Reflects `data.percent`% of an incoming hit back at the attacker, once. Optional `data.objectInstanceId` is destroyed with it. */
+  /**
+   * Reflects `data.percent`% of an incoming hit back at the attacker, once. Optional
+   * `data.objectInstanceId` is destroyed with it. Optional `data.negatesOriginal: true`
+   * (Puzzle Millénaire de Yugi) additionally zeroes out what the bearer itself takes from
+   * that same hit -- absent/false (Miroir de Renvoi), the bearer still takes the hit in
+   * full, on top of the reflection.
+   */
   | 'damage-reflect'
   /** Bearer's damage against the enemy BENCH is multiplied by `data.multiplier` (default 2). */
   | 'bench-damage-bonus'
@@ -123,7 +129,52 @@ export type BuiltinStatusId =
    * d'un personnage. L'attaque s'exécute avec le contexte du PORTEUR : son ATK effectif,
    * ses buffs, sa cible en face.
    */
-  | 'borrowed-attack';
+  | 'borrowed-attack'
+  /**
+   * "Tours compté" : le porteur doit tenir `data.ticksRemaining` tours de plus AU POSTE
+   * ACTIF. Résolu par le moteur à la fin du tour du porteur (turn.ts::resolveSurvivalVow),
+   * pas via un trigger de carte -- un objet ne peut réagir à aucun event de lui-même. En
+   * pause (ni décompté ni dégâts) tant que le porteur n'est pas l'actif de son camp, comme
+   * n'importe quel statut sans `ticksOnBench`. Chaque tour qualifiant inflige
+   * `data.damagePercent`% des HP max actuels du porteur (dégâts ordinaires, absorbables).
+   * Une fois `ticksRemaining` à 0 et le porteur toujours en vie, le vœu est tenu :
+   * `data.rewardMaxHPReduction` de réduction définitive (Valeur Lock, donc déjà insensible
+   * au bouclier) sur l'actif adverse du moment, et `data.rewardHeal` de soin pour le
+   * porteur. L'objet équipé (`data.objectInstanceId`) est alors détruit -- son rôle est
+   * rempli. Si un tick tue le porteur avant le dernier, pas de récompense, et l'objet part
+   * au cimetière avec lui (mécanisme déjà générique, cf. CLAUDE.md).
+   */
+  | 'survival-vow'
+  /**
+   * "Chasseur de prime" : `data.count` compte les KO de personnages ADVERSES réalisés par
+   * le porteur depuis qu'il porte l'objet (repart de 0 à l'équipement, ignore les kills
+   * d'avant). Incrémenté par le moteur lui-même dans zones.ts::resolveBountyVow, au seul
+   * endroit qui connaît déjà `killerInstanceId` -- même principe que 'crit-streak'. Un KO
+   * ami (ricochet, Manipulation, Jacob et Essau) ne compte pas. Une fois `data.count` à
+   * `data.threshold`, le porteur gagne `data.bonusATK` ATK (via un `atk-boost` PERMANENT,
+   * indépendant de la survie de l'objet -- comme 'crit-streak') et `data.bonusShield` de
+   * bouclier immédiat ; l'objet équipé (`data.objectInstanceId`) est alors détruit.
+   */
+  | 'bounty-vow'
+  /**
+   * "Berserk" : vœu en attente -- rappelé par le moteur après tout ce qui peut faire
+   * bouger les HP actuels du porteur (zones.ts::resolveBerserkVow, appelé depuis
+   * match.ts::dealDamage, applyValeurLock et resolveObjectInPlay ; un objet ne peut pas se
+   * rappeler tout seul). Dès que le porteur passe sous `data.hpThreshold` HP actuels SANS
+   * mourir, le vœu est tenu : il est remplacé par 'buveur-de-sang' (`data.healPercent`
+   * repris tel quel) et l'objet équipé (`data.objectInstanceId`) est détruit.
+   */
+  | 'berserk-vow'
+  /**
+   * "Berserk" (récompense permanente) : `data.healPercent`% des dégâts HOSTILES infligés
+   * par le porteur lui reviennent en HP -- restauration directe (hp.heal, comme
+   * raiseMaxHP/addShield) qui court-circuite exprès `api.heal()`
+   * (effect-context.ts::dealDamage), PARCE QUE ce même statut bloque justement tout soin
+   * passant par ce canal, y compris pour son propre porteur (match.ts::heal) : "plus aucun
+   * soin externe (alliés, objets) n'a d'effet sur lui". Jamais consommé, indépendant de la
+   * survie de l'objet qui l'a octroyé (comme 'crit-streak').
+   */
+  | 'buveur-de-sang';
 
 export interface RaiseMaxHPOptions {
   /**
@@ -351,6 +402,30 @@ export type GameResult =
   | { kind: 'win'; winner: PlayerId; reason?: 'forfeit' }
   | { kind: 'draw' };
 
+/**
+ * Compteurs de combat accumulés pour UN personnage sur toute la partie (voir `stats.ts`).
+ * Purement informatif -- aucune carte ne les lit, ils n'alimentent que le tableau de fin
+ * de partie côté client.
+ */
+export interface CharacterStats {
+  /** Dégâts nets (après bouclier/réductions) infligés PAR ce personnage, attaques/capacités/DoT confondus. */
+  damageDealt: number;
+  /** Dégâts nets (après bouclier/réductions) subis PAR ce personnage. */
+  damageTaken: number;
+  /** HP effectivement restaurés par les soins PROVENANT de ce personnage (soi-même ou un allié). */
+  healingDone: number;
+  /** Points de bouclier reçus par ce personnage. */
+  shieldGained: number;
+  /** Points de bouclier perdus par ce personnage (absorption de dégâts ou retrait direct). */
+  shieldBroken: number;
+  /** Nombre d'esquives réussies par ce personnage. */
+  evasions: number;
+  /** Nombre de coups critiques infligés par ce personnage. */
+  crits: number;
+  /** Nombre de personnages achevés par ce personnage. */
+  kills: number;
+}
+
 export interface LogEntry {
   id: string;
   turnNumber: number;
@@ -517,6 +592,8 @@ export interface GameState {
   sharedTerrainPile: string[];
   rng: RngState;
   log: LogEntry[];
+  /** Statistiques de combat par personnage (instanceId), des deux camps confondus -- voir `stats.ts`. */
+  characterStats: Record<string, CharacterStats>;
   result?: GameResult;
   pendingChoice?: PendingChoice;
   /**

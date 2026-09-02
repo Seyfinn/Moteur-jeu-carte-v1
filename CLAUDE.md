@@ -441,11 +441,15 @@ autour de l'appel à `evolveCharacter` -- il n'y a volontairement pas de champ d
   carte est en jeu (voir `queries.ts` et le README pour la liste des `QueryName`).
 - **Taux d'esquive / de critique innés** (ex: L'Infini de Gojo, Black Flash de Todo,
   Execution de Caitlyn) : modifier `getEvasionPercent` / `getCriticalPercent` renvoyant
-  `Math.max(current, MON_POURCENTAGE)`. Base : 1 % d'esquive, 5 % de critique ; le statut
+  `Math.max(current, MON_POURCENTAGE)`. Base : 1 % d'esquive, 1 % de critique ; le statut
   `evasive` monte l'esquive à 20 %, `critical` monte le critique à 33 % (`critical` accepte
   un `data.percent` pour un one-shot, cf. Godspeed de Killua à 100 %). Ces bases sont celles
   lues par `getEvasionPercent`/`getCriticalPercent` **avant** un modifier de carte : un taux
   inné comme celui de Gojo (`Math.max`) reste donc intact face à `evasion-locked` ci-dessous.
+  ⚠️ Une carte dont le texte promet « l'effet Esquive » (L'Infini, Sharingan) ne choisit pas
+  son chiffre : elle **importe** `EVASIVE_STATUS_CHANCE_PERCENT` de `statuses.ts`, pour que
+  le rééquilibrage de l'esquive emporte l'innée avec lui. Un nombre recopié finit par mentir
+  au texte.
 - ⚠️ **Un modifier qui porte le texte d'une capacité PASSIVE doit déclarer
   `silencedByPassive: true`.** Un modifier vit tant que la carte est en jeu et ne passe
   jamais par `canUseAbility` : sans ce champ, une passive codée en modifier (L'Infini de
@@ -459,9 +463,11 @@ autour de l'appel à `evolveCharacter` -- il n'y a volontairement pas de champ d
   - `death-ward` : les dégâts classiques ne peuvent plus descendre le porteur sous 1 HP.
   - `atk-boost` / `atk-reduction` (`data.amount`), `atk-multiplier` (`data.multiplier`).
   - `bleed` (`data.stacks`) : voir le détail plus bas.
-  - `damage-reflect` (`data: { percent, objectInstanceId? }`) : renvoie un pourcentage
-    du prochain coup à l'attaquant, une seule fois, puis se consomme (et détruit l'objet
-    porteur s'il est indiqué). Ex : Miroir de Renvoi.
+  - `damage-reflect` (`data: { percent, objectInstanceId?, negatesOriginal? }`) : renvoie
+    un pourcentage du prochain coup à l'attaquant, une seule fois, puis se consomme (et
+    détruit l'objet porteur s'il est indiqué). Ex : Miroir de Renvoi. ⚠️ Par défaut le
+    porteur encaisse quand même le coup en entier EN PLUS du renvoi — `negatesOriginal:
+    true` (Puzzle Millénaire de Yugi) fait en plus tomber ces dégâts à 0 pour lui.
   - `bench-damage-bonus` (`data.multiplier`, défaut 2) : les dégâts infligés au **banc
     adverse** par le CAMP du porteur sont multipliés — pas seulement ceux du porteur
     lui-même : le pipeline de dégâts vérifie si n'importe quel personnage du camp porte
@@ -528,6 +534,42 @@ autour de l'appel à `evolveCharacter` -- il n'y a volontairement pas de champ d
     entre-temps. Seuls les dégâts sont retournés, pas le corps de l'`execute()` de l'attaque
     (qui vise en dur l'actif d'en face). C'est le **seul** moyen de fermer le tour d'un autre
     joueur : `endsTurn` ne ferme que le tour en cours, celui de la carte qui agit.
+  - `survival-vow` (`data: { ticksRemaining, damagePercent, rewardMaxHPReduction, rewardHeal,
+    objectInstanceId }`) : posé par un **objet** (donc sans `trigger` possible — cf. plus
+    haut), résolu entièrement par `turn.ts::resolveSurvivalVow`, appelé depuis `endTurn`
+    plutôt que par le tick générique `tickStatusesAtTurnStart` — d'où l'absence volontaire de
+    `remainingTurns` (le champ est utilisé par ce dernier ; `data.ticksRemaining` fait tout le
+    travail à la main). Ne touche QUE l'actif du joueur dont le tour se termine : en pause
+    (ni tic ni décompte, jamais reset) tant que le porteur n'est pas au poste actif, comme
+    n'importe quel statut sans `ticksOnBench`. Chaque tour qualifiant inflige
+    `damagePercent`% des HP max actuels du porteur (dégâts ordinaires, absorbables) ; un tic
+    qui le tue annule la récompense. `ticksRemaining` à 0 et porteur toujours vivant : le vœu
+    est tenu — `rewardMaxHPReduction` de Valeur Lock sur l'actif adverse du moment (déjà
+    insensible au bouclier par construction) et `rewardHeal` de soin pour le porteur, puis
+    l'objet équipé (`data.objectInstanceId`) est détruit, son rôle rempli. Ex : Tours compté.
+  - `bounty-vow` (`data: { count, threshold, bonusATK, bonusShield, objectInstanceId }`) :
+    posé par un **objet**, `data.count` compte les KO de personnages **adverses** réalisés
+    par le porteur depuis l'équipement (repart de 0, ignore les kills d'avant), incrémenté
+    par le moteur lui-même dans `zones.ts::resolveBountyVow` — appelé juste après
+    `recordKill` dans `koCharacter`, seul endroit qui connaît déjà `killerInstanceId` (même
+    principe que `crit-streak`, qui s'auto-incrémente aussi côté moteur). Un KO allié
+    (ricochet, Manipulation, Jacob et Essau) ne compte pas. `count` à `threshold` : `atk-boost`
+    **permanent** de `bonusATK` (indépendant de la survie de l'objet, comme `crit-streak`) et
+    `bonusShield` de bouclier immédiat, puis l'objet équipé est détruit. Ex : Chasseur de prime.
+  - `berserk-vow` (`data: { hpThreshold, healPercent, objectInstanceId }`) : posé par un
+    **objet**, rappelé par le moteur (`zones.ts::resolveBerserkVow`) après TOUT ce qui peut
+    faire bouger les HP actuels du porteur — `match.ts::dealDamage`, `applyValeurLock`, et
+    juste après la pose de l'objet (pour le cas où le porteur est déjà sous la barre au
+    moment même où on l'équipe). Dès que le porteur passe sous `hpThreshold` HP actuels
+    **sans mourir** (revérifié à chaque appel), le vœu est tenu : remplacé par
+    `buveur-de-sang` (`healPercent` repris tel quel), objet équipé détruit. Ex : Berserk.
+  - `buveur-de-sang` (`data: { healPercent }`) : récompense permanente de `berserk-vow`. Le
+    porteur récupère `healPercent`% des dégâts **hostiles** qu'il inflige (attaque/capacité
+    avec une source résolue, comme `hit-bounty`/`crit-streak` — pas de vol de vie sur un
+    ricochet allié), restaurés en direct via `hp.heal()` (`effect-context.ts::dealDamage`),
+    qui contourne exprès `api.heal()` — parce que ce même statut bloque tout soin passant
+    par ce canal pour son propre porteur, lifesteal compris s'il y passait (`match.ts::heal`,
+    même blocage qu'`unhealable`, y compris le nettoyage de bleed). Jamais consommé.
   - `stun` `disarmed` `silence-active` `silence-passive` `silence-ultimate`
     `evasive` `critical` `burn` `poison`.
 

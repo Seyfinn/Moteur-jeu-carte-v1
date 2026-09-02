@@ -467,7 +467,7 @@ export function rollEvasion(state: GameState, char: CharacterInstance): boolean 
 }
 
 /**
- * Critique: every character has a base 2% chance for an attack/ability they
+ * Critique: every character has a base 1% chance for an attack/ability they
  * deal damage with to double. The 'critical' status raises that to 33% while
  * it's present (replaces the base rate, doesn't stack with it) -- unless the
  * status carries its own `data.percent` (e.g. Killua's Godspeed arming a

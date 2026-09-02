@@ -1,5 +1,6 @@
 import { otherPlayer, type GameState, type PlayerId } from 'engine';
 import type { GameConnection } from '../net/useGameConnection';
+import { MatchStatsTable } from './MatchStatsTable';
 
 /**
  * Fin de partie. Posée par-dessus le plateau plutôt qu'à sa place : le dernier état de la
@@ -72,6 +73,8 @@ export function MatchOverModal({ state, you, conn }: { state: GameState; you: Pl
             {rematchNote}
           </p>
         )}
+
+        <MatchStatsTable state={state} you={you} />
       </div>
     </div>
   );
