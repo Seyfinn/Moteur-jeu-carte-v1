@@ -166,7 +166,7 @@ function HeatHazeFilter() {
           <feTurbulence type="fractalNoise" baseFrequency="0.014 0.05" numOctaves="2" seed="3" result="noise">
             <animate attributeName="baseFrequency" dur="4s" values="0.014 0.05;0.02 0.075;0.014 0.05" repeatCount="indefinite" />
           </feTurbulence>
-          <feDisplacementMap in="SourceGraphic" in2="noise" scale="7" xChannelSelector="R" yChannelSelector="G" />
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="3.5" xChannelSelector="R" yChannelSelector="G" />
         </filter>
       </defs>
     </svg>

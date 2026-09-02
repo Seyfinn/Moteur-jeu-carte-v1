@@ -293,6 +293,12 @@ export function CharacterCard({
     ...statusAmbienceClasses(visibleStatuses),
   ].join(' ');
 
+  const hasFooter =
+    !hideVitals ||
+    visibleStatuses.length > 0 ||
+    Boolean(commands) ||
+    (!attachedObjects && char.attachedObjectInstanceIds.length > 0);
+
   const card = (
     <CardFrame
       cardId={char.cardId}
@@ -343,7 +349,11 @@ export function CharacterCard({
           )}
         </>
       }
+      // Bandeau d'infos rendu SEULEMENT s'il a quelque chose à dire. Sur le portrait
+      // actif, jauges et nom sont partis dans le HUD extérieur : sans ce test, il restait
+      // une bande sombre vide sous l'illustration dès qu'aucun statut n'était posé.
       footer={
+        hasFooter ? (
         <>
           {!hideVitals && <CharacterVitals char={char} state={state} />}
           {visibleStatuses.length > 0 && (
@@ -380,6 +390,7 @@ export function CharacterCard({
             </div>
           )}
         </>
+        ) : undefined
       }
     />
   );

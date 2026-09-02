@@ -137,36 +137,42 @@ function PlayerHandCard({
       className={`hand-card hand-card-${slot.kind}${disabledReason ? ' blocked' : ''}${recycle?.selected ? ' recycle-selected' : ''}`}
       style={fanStyle(index, count)}
     >
-      {/* Un terrain se joue autrement qu'un objet (un seul par tour, il remplace celui en
-          place) : il s'annonce donc sur la carte, et pas seulement par la couleur du halo. */}
-      {slot.kind === 'terrain' && (
-        <span className="hand-type-badge" aria-hidden="true">
-          🗺️ Terrain
-        </span>
-      )}
-      <CardFrame
-        cardId={slot.cardId}
-        kind={slot.kind}
-        name={name}
-        size="normal"
-        // Objets comme terrains restent en portrait : c'est le cadrage pour lequel les
-        // illustrations sont faites, et le paysage est réservé aux personnages en jeu.
-        orientation="portrait"
-        // Au doigt, la carte reste en pleine couleur même injouable : le tap sert d'abord à
-        // la lire, et le libellé « Indisponible » dit déjà qu'elle ne partira pas.
-        dimmed={Boolean(disabledReason) && !coarse}
-        onClick={disabledReason && recycle ? undefined : handleClick}
-        title={disabledReason ?? undefined}
-        hoverProps={
-          coarse
-            ? undefined
-            : {
-                onMouseEnter: (e) => hover.show(payload, e.currentTarget),
-                onMouseLeave: hover.hide,
-              }
-        }
-        footer={<span className={`hand-card-hint${disabledReason ? ' blocked' : ''}`}>{disabledReason ? 'Indisponible' : verb}</span>}
-      />
+      {/* Le mouvement vit sur cette boîte INTÉRIEURE, jamais sur `.hand-card` : c'est
+          `.hand-card` qui reçoit le survol, et une boîte qui bondit de 120 px se dérobait
+          sous le curseur -- le survol se perdait, la carte retombait, le survol revenait,
+          et la carte tremblait en boucle. La zone sensible, elle, ne bouge plus. */}
+      <div className="hand-card-lift">
+        {/* Un terrain se joue autrement qu'un objet (un seul par tour, il remplace celui en
+            place) : il s'annonce donc sur la carte, et pas seulement par la couleur du halo. */}
+        {slot.kind === 'terrain' && (
+          <span className="hand-type-badge" aria-hidden="true">
+            🗺️ Terrain
+          </span>
+        )}
+        <CardFrame
+          cardId={slot.cardId}
+          kind={slot.kind}
+          name={name}
+          size="normal"
+          // Objets comme terrains restent en portrait : c'est le cadrage pour lequel les
+          // illustrations sont faites, et le paysage est réservé aux personnages en jeu.
+          orientation="portrait"
+          // Au doigt, la carte reste en pleine couleur même injouable : le tap sert d'abord à
+          // la lire, et le libellé « Indisponible » dit déjà qu'elle ne partira pas.
+          dimmed={Boolean(disabledReason) && !coarse}
+          onClick={disabledReason && recycle ? undefined : handleClick}
+          title={disabledReason ?? undefined}
+          hoverProps={
+            coarse
+              ? undefined
+              : {
+                  onMouseEnter: (e) => hover.show(payload, e.currentTarget),
+                  onMouseLeave: hover.hide,
+                }
+          }
+          footer={<span className={`hand-card-hint${disabledReason ? ' blocked' : ''}`}>{disabledReason ? 'Indisponible' : verb}</span>}
+        />
+      </div>
     </div>
   );
 }
