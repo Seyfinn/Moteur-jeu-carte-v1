@@ -62,10 +62,9 @@ const STATUS_TICK_LABELS: Record<string, string> = {
   bleed: 'saignement',
 };
 
-/** Innate rates every character has on their attacks/abilities, with no status required.
- * 1 % des deux côtés : le hasard pur reste anecdotique tant qu'aucune carte ne s'en mêle. */
+/** Innate rates every character has on their attacks/abilities, with no status required. */
 export const BASE_EVASION_CHANCE_PERCENT = 1;
-export const BASE_CRITICAL_CHANCE_PERCENT = 1;
+export const BASE_CRITICAL_CHANCE_PERCENT = 5;
 /** Rates while the 'evasive'/'critical' status is present -- replaces the base rate, doesn't stack with it. */
 export const EVASIVE_STATUS_CHANCE_PERCENT = 20;
 export const CRITICAL_STATUS_CHANCE_PERCENT = 33;

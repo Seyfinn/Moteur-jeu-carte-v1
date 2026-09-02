@@ -142,32 +142,50 @@ export function toneForStatus(statusId: string): StatusTone {
   return visualForStatus(statusId).tone;
 }
 
-function Particles({ kind }: { kind: StatusVisual['particles'] }) {
+/** Nombre de gouttes de sang qui coulent, borné pour rester lisible à 10 stacks. */
+const MAX_BLEED_DROPS = 7;
+
+function Particles({ kind, bleedStacks }: { kind: StatusVisual['particles']; bleedStacks: number }) {
   switch (kind) {
     case 'bubbles':
       return (
         <>
-          <span className="fx-bubble" style={{ left: '20%', animationDelay: '0s' }} />
-          <span className="fx-bubble" style={{ left: '50%', animationDelay: '0.5s' }} />
-          <span className="fx-bubble" style={{ left: '75%', animationDelay: '1s' }} />
+          {/* Brume toxique : une nappe qui pulse, plus les bulles qui la traversent. */}
+          <span className="fx-poison-mist" />
+          <span className="fx-bubble" style={{ left: '18%', animationDelay: '0s' }} />
+          <span className="fx-bubble" style={{ left: '38%', animationDelay: '0.4s' }} />
+          <span className="fx-bubble" style={{ left: '58%', animationDelay: '0.8s' }} />
+          <span className="fx-bubble" style={{ left: '78%', animationDelay: '1.2s' }} />
         </>
       );
     case 'embers':
+      // Braises nettement plus denses qu'avant : la distorsion de chaleur seule (posée sur
+      // l'illustration par `statusAmbienceClasses`) se lisait mal sans elles.
       return (
         <>
-          <span className="fx-ember" style={{ left: '25%', animationDelay: '0s' }} />
-          <span className="fx-ember" style={{ left: '55%', animationDelay: '0.3s' }} />
-          <span className="fx-ember" style={{ left: '78%', animationDelay: '0.6s' }} />
+          {[12, 26, 40, 54, 68, 82].map((left, i) => (
+            <span key={left} className="fx-ember" style={{ left: `${left}%`, animationDelay: `${i * 0.18}s` }} />
+          ))}
+          <span className="fx-burn-flames" />
         </>
       );
-    case 'drip':
+    case 'drip': {
+      // Une goutte par stack (plafonnée) : le sang qui coule dit la gravité sans qu'on ait
+      // à lire le badge. La flaque du bas s'épaissit avec elles.
+      const drops = Math.max(1, Math.min(MAX_BLEED_DROPS, bleedStacks));
       return (
         <>
-          <span className="fx-drip" style={{ left: '30%', animationDelay: '0s' }} />
-          <span className="fx-drip" style={{ left: '55%', animationDelay: '0.4s' }} />
-          <span className="fx-drip" style={{ left: '72%', animationDelay: '0.8s' }} />
+          {Array.from({ length: drops }, (_, i) => (
+            <span
+              key={i}
+              className="fx-drip"
+              style={{ left: `${12 + (i * 76) / Math.max(1, drops - 1 || 1)}%`, animationDelay: `${i * 0.26}s` }}
+            />
+          ))}
+          <span className="fx-bleed-pool" style={{ ['--pool' as string]: drops / MAX_BLEED_DROPS }} />
         </>
       );
+    }
     case 'chain':
       return <span className="fx-icon fx-chain-icon">⛓</span>;
     case 'arrow-up':
@@ -199,23 +217,49 @@ function Particles({ kind }: { kind: StatusVisual['particles'] }) {
   }
 }
 
+/** Ce dont les calques ont besoin d'un statut : son id, et son `data` pour les stacks. */
+export interface StatusLike {
+  statusId: string;
+  data?: Record<string, unknown>;
+}
+
+/**
+ * Classes d'ambiance posées sur le CADRE de la carte (et non dans un calque par-dessus) :
+ * elles filtrent l'illustration elle-même ou débordent du cadre, ce qu'un calque rogné par
+ * l'`overflow: hidden` de la carte ne peut pas faire. Une par famille, jamais deux fois.
+ */
+export function statusAmbienceClasses(statuses: StatusLike[]): string[] {
+  const classes = new Set<string>();
+  for (const s of statuses) {
+    const { className } = visualForStatus(s.statusId);
+    if (className === 'fx-burn') classes.add('amb-burn');
+    else if (className === 'fx-poison') classes.add('amb-poison');
+    else if (className === 'fx-stun') classes.add('amb-frozen');
+  }
+  return [...classes];
+}
+
 /** Renders one full-card overlay per distinct status effect currently on the character. */
-export function StatusEffectLayers({ statusIds }: { statusIds: string[] }) {
+export function StatusEffectLayers({ statuses }: { statuses: StatusLike[] }) {
   const seen = new Set<string>();
   const visuals: StatusVisual[] = [];
-  for (const id of statusIds) {
-    const v = visualForStatus(id);
+  for (const s of statuses) {
+    const v = visualForStatus(s.statusId);
     if (!seen.has(v.className)) {
       seen.add(v.className);
       visuals.push(v);
     }
   }
+  // Le nombre de gouttes suit les stacks de saignement, seule information que le calque
+  // tire du `data` d'un statut.
+  const bleedStacks = Number(statuses.find((s) => s.statusId === 'bleed')?.data?.['stacks'] ?? 1);
+
   if (visuals.length === 0) return null;
   return (
     <>
       {visuals.map((v) => (
         <div key={v.className} className={`fx-layer ${v.className}`}>
-          <Particles kind={v.particles} />
+          <Particles kind={v.particles} bleedStacks={bleedStacks} />
         </div>
       ))}
     </>

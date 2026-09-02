@@ -1,4 +1,4 @@
-import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
+import type { KeyboardEvent, MouseEvent, ReactNode, Ref } from 'react';
 import { getObjectCard } from 'engine';
 import { CardArt } from './CardArt';
 
@@ -39,6 +39,8 @@ export function CardFrame({
   onClick,
   hoverProps,
   title,
+  className,
+  rootRef,
 }: {
   cardId: string;
   kind: 'character' | 'object' | 'terrain';
@@ -59,6 +61,14 @@ export function CardFrame({
   onClick?: () => void;
   hoverProps?: HoverHandlers;
   title?: string;
+  /**
+   * Classes que l'appelant ajoute au cadre : mise en scène d'un impact, ambiance d'un
+   * statut... Elles doivent porter sur la CARTE elle-même (son illustration, sa position),
+   * ce qu'un calque d'effet posé par-dessus ne peut pas faire.
+   */
+  className?: string;
+  /** Accès au cadre pour en relever la position (cf. `cardRects.ts`). */
+  rootRef?: Ref<HTMLDivElement>;
 }) {
   const classes = ['tcg-card', `tcg-card-${size}`];
   if (orientation === 'landscape') classes.push('tcg-card-landscape');
@@ -67,6 +77,7 @@ export function CardFrame({
   if (onClick) classes.push('clickable');
   if (targetable) classes.push('targetable');
   if (targeted) classes.push('targeted');
+  if (className) classes.push(className);
 
   // Une carte cliquable est un vrai bouton pour le clavier et les lecteurs d'écran :
   // jouer une carte, ouvrir sa fiche ou le mini-menu d'un banc passait par un `div`, donc
@@ -81,6 +92,7 @@ export function CardFrame({
 
   return (
     <div
+      ref={rootRef}
       className={classes.join(' ')}
       onClick={onClick}
       onKeyDown={onKeyDown}

@@ -1,13 +1,14 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { getCharacterCard, type CharacterInstance, type GameState, type StatusInstance } from 'engine';
 import { CardFrame } from './CardFrame';
 import { useCardInspect, useHoverCard, type HoverPayload } from './HoverCard';
 import { characterDetailBody } from './cardDetails';
-import { StatusEffectLayers, toneForStatus } from './statusEffects';
+import { StatusEffectLayers, statusAmbienceClasses, toneForStatus } from './statusEffects';
 import { AttachedObjectCards, AttachedObjectChips } from './AttachedObjects';
 import { attackReadouts, type AttachedObjectView } from './boardActions';
 import { CharacterActionBadges } from './gameEventBadges';
-import type { CharacterBadge } from './gameEvents';
+import { trackCardRect } from './cardRects';
+import type { CharacterBadge, CharacterImpact } from './gameEvents';
 
 function cardName(cardId: string): string {
   try {
@@ -133,6 +134,8 @@ export function CharacterCard({
   state,
   commands,
   hideVitals,
+  impact,
+  facing,
 }: {
   char: CharacterInstance;
   isActive: boolean;
@@ -177,6 +180,14 @@ export function CharacterCard({
    * ont la place d'être lues (`<CharacterVitals>`). Les statuts, eux, restent sur la carte.
    */
   hideVitals?: boolean;
+  /** Coup en cours : la carte bondit (attaquant) ou encaisse (cible). */
+  impact?: CharacterImpact;
+  /**
+   * Vers où la carte bondit quand elle attaque. Le plateau est un face-à-face gauche/droite :
+   * seul l'appelant sait de quel côté se trouve l'ennemi. Sans lui, pas de dash -- une carte
+   * de banc ou de cimetière n'a personne en face.
+   */
+  facing?: 'left' | 'right';
 }) {
   const hover = useHoverCard();
   const { currentHP } = characterVitals(char);
@@ -258,6 +269,27 @@ export function CharacterCard({
 
   useEffect(() => () => timersRef.current.forEach(clearTimeout), []);
 
+  // Position relevée à chaque rendu : quand ce personnage tombera, sa carte aura déjà été
+  // démontée (le moteur l'envoie au cimetière dans le même état que le KO) et il n'y aura
+  // plus rien à mesurer pour lancer son vol. Cf. `cardRects.ts`.
+  const frameRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    trackCardRect(char.instanceId, frameRef.current);
+  });
+
+  // Mise en scène du coup en cours + ambiance des statuts : deux jeux de classes posés sur
+  // le CADRE, parce qu'ils déplacent la carte et filtrent son illustration -- ce qu'un
+  // calque d'effet, dessiné par-dessus, ne peut pas faire.
+  const frameClasses = [
+    ...(impact
+      ? [
+          `impact-${impact.tier}`,
+          impact.role === 'target' ? 'impact-hit' : facing ? `impact-dash impact-dash-${facing}` : '',
+        ].filter(Boolean)
+      : []),
+    ...statusAmbienceClasses(visibleStatuses),
+  ].join(' ');
+
   const card = (
     <CardFrame
       cardId={char.cardId}
@@ -265,6 +297,8 @@ export function CharacterCard({
       name={name}
       size={size}
       orientation={orientation}
+      rootRef={frameRef}
+      className={frameClasses || undefined}
       highlight={isActive || selected}
       dimmed={dead && isKOable}
       targetable={targetable}
@@ -275,7 +309,14 @@ export function CharacterCard({
       onClick={targetable ? onTarget : (onSelect ?? inspect.onClick)}
       effects={
         <>
-          <StatusEffectLayers statusIds={visibleStatuses.map((s) => s.statusId)} />
+          <StatusEffectLayers statuses={visibleStatuses} />
+          {/* Éclat d'impact au centre de la carte touchée : griffure à partir du coup
+              moyen, éclair rouge plein cadre sur un gros coup. */}
+          {impact?.role === 'target' && impact.tier !== 'light' && (
+            <div className={`fx-layer fx-impact fx-impact-${impact.tier}`}>
+              <span className="fx-impact-slash" />
+            </div>
+          )}
           {shieldTotal > 0 && <div className="fx-layer fx-shield" />}
           {chipAttachments.length > 0 && <AttachedObjectChips objects={chipAttachments} />}
           {badges && <CharacterActionBadges badges={badges} />}
