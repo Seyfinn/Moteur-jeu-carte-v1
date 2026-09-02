@@ -4571,7 +4571,9 @@ textarea {
 .match-over {
   position: relative;
   z-index: 65;
-  width: min(460px, calc(100vw - 32px));
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -4644,4 +4646,64 @@ textarea {
 .match-over-note.urgent {
   color: var(--accent);
   font-weight: 700;
+}
+
+/* Tableau de stats de fin de partie : une section par camp, largeur pleine du panneau
+   (contrairement au reste de la modale, centré et étroit). */
+.match-stats {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+  text-align: left;
+}
+.match-stats-heading {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.match-stats-scroll {
+  overflow-x: auto;
+}
+.match-stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+.match-stats-table th,
+.match-stats-table td {
+  padding: 5px 8px;
+  text-align: center;
+  border-bottom: 1px solid var(--border-soft);
+}
+.match-stats-table th {
+  font-weight: 700;
+  color: var(--text-dim);
+  cursor: default;
+}
+.match-stats-name-col {
+  text-align: left !important;
+  font-weight: 600;
+}
+.match-stats-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.match-stats-table tfoot td {
+  padding-top: 7px;
+  border-top: 1px solid var(--border);
+  border-bottom: none;
+  font-weight: 700;
+  color: var(--text);
+}
+/* Personnage tombé au combat : la ligne reste lisible mais se retire visuellement. */
+.match-stats-row-ko .match-stats-name-col {
+  color: var(--text-dim);
+  font-weight: 500;
 }

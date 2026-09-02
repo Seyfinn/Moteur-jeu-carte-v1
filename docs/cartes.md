@@ -12,10 +12,15 @@ chaque fichier `packages/engine/src/cards/demo/<carte>.ts`.
 
 Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc à répéter :
 
-- Base 5 % d'esquive et 2 % de critique (x2) sur toute attaque/ability hostile ; les statuts
-  `evasive`/`critical` montent la base à 33 %. Esquive et critique ne se jouent qu'entre
-  camps adverses (jamais sur un soin ou un coût que le camp se paie).
-- Poison = 10 HP + 10 % des HP max par tour ; Burn = 50 HP par tour ; Bleed = 10 % des HP
+- Base 1 % d'esquive et 1 % de critique (x2) sur toute attaque/ability hostile ; le statut
+  `evasive` monte l'esquive à **20 %**, le statut `critical` monte le critique à **33 %**
+  (constantes `EVASIVE_STATUS_CHANCE_PERCENT` / `CRITICAL_STATUS_CHANCE_PERCENT`). Une
+  esquive **innée** promise par une carte (L'Infini, Sharingan) vaut le taux de l'effet
+  Esquive, donc 20 % : elle lit la constante, elle ne recopie pas un nombre. Esquive et
+  critique ne se jouent qu'entre camps adverses (jamais sur un soin ou un coût que le camp
+  se paie).
+- Poison = 10 HP + 10 % des HP max par tour, **et il traverse le bouclier** (`ignoreShield`,
+  contrairement à Burn et Bleed qui y sont absorbés) ; Burn = 50 HP par tour ; Bleed = 10 % des HP
   max par stack, une seule fois, puis consommé ; Vulnérable = +50 % de dégâts subis. Ces
   tics ne sont ni esquivables ni critiques. Tout cela est déjà expliqué au joueur par le
   glossaire en partie (`web/components/EffectsGlossary.tsx`).
@@ -255,6 +260,25 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     recharge descend même quand Chopper reste au banc — c'est bien là que la Traque se joue,
     et sans ce champ elle ne revenait jamais.
 
+### Deidara — 240 HP
+
+- **Argile Explosive C1** (60 ATK) — *« applique le statut Bombe d'Argile à la cible. (Une
+  seule cible peut porter ce statut à la fois). »*
+  - Moteur : statut custom `deidara-bombe-argile` (`data.stacks`), posé seulement si les
+    dégâts passent (esquive = pas de bombe posée). Stacke jusqu'à 3 sur la même cible
+    (plafond confirmé avec l'utilisateur — la carte ne décrit que 3 paliers de dégâts). Si
+    un AUTRE ennemi porte déjà la bombe, elle se **déplace** sur la nouvelle cible touchée :
+    l'ancien porteur perd le statut et tous ses stacks (confirmé avec l'utilisateur).
+- **Détonation : Katsu !** (active, utilisable du banc) — *« Deidara fait exploser le
+  personnage adverse qui porte le statut Bombe d'Argile. […] Si la cible est sur le poste
+  actif : […] inflige 50 dégâts pour une bombe, 80 pour 2 bombes, 120 pour 3 bombes. Si la
+  cible est sur le banc : inflige 40 dégâts à la cible ET 20 dégâts à tous ses alliés. »*
+  - Moteur : cible auto-détectée (l'unique porteur adverse de la bombe, pas de prompt de
+    ciblage) ; `condition` refuse l'activation si personne ne la porte. Le statut est retiré
+    dès la détonation, quelle que soit la branche. Branche banc : dégâts fixes (pas de mise
+    à l'échelle avec les stacks), splash sur tous les autres personnages adverses (actif
+    compris).
+
 ### Dio Brando — 200 HP
 
 - **Chair Vampirique** (attaque) — 50 ATK, *« 50% d'appliquer Silence Passif 1 tour »* →
@@ -371,11 +395,13 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   critique. »* → modifier `getCriticalPercent` (au lieu des 2 % de base).
 - **L'Infini** (passive) — *« Gojo bénéficie en permanence de l'effet Esquive, qu'il soit
   actif ou au banc. »*
-  - Moteur : modifier `getEvasionPercent` à 33 %, pas un statut `evasive`. Donc il tient dès
-    le premier coup de la partie, survit à une résurrection, et ne peut être ni dissipé ni
-    volé.
+  - Moteur : modifier `getEvasionPercent` au taux de l'effet Esquive
+    (`EVASIVE_STATUS_CHANCE_PERCENT`, 20 %), pas un statut `evasive`. Donc il tient dès le
+    premier coup de la partie, survit à une résurrection, et ne peut être ni dissipé ni
+    volé. La constante est lue, pas recopiée : rééquilibrer l'esquive emporte l'innée avec
+    elle, comme le promet le texte (« l'effet Esquive »).
   - Le modifier porte `silencedByPassive: true` : c'est une **passive imprimée**, donc un
-    `silence-passive` ou un `silence-ultimate` sur Gojo la coupe et le ramène aux 5 %
+    `silence-passive` ou un `silence-ultimate` sur Gojo la coupe et le ramène au 1 %
     d'esquive de base. Sans ce champ, un modifier ne passe jamais par `canUseAbility` et la
     passive survivait au silence (bug corrigé). Le modifier `getCriticalPercent`, lui, porte
     le texte d'une **attaque** (Blackflash) : le silence passif ne le touche pas.
@@ -454,6 +480,39 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   - Moteur : même montage que Berserk (compteur caché + `getEffectiveATK`). Compte les
     *instances* de dégâts, pas les points : un tic de brûlure vaut autant qu'une grosse
     attaque.
+
+### Itachi — 210 HP
+
+- **Katon (Boule de Feu)** (40 ATK) — *« A 60% d'appliquer Burn pendant un tour »*
+  - Moteur : jet de brûlure seulement si les dégâts passent (comme Heavy Point de Chopper).
+- **Sharingan** (passive, purement descriptive) — *« Bénéficie de l'effet esquive »*
+  - Moteur : modifier `getEvasionPercent` (`Math.max(current, EVASIVE_STATUS_CHANCE_PERCENT)`),
+    exactement le montage de Kakashi / L'Infini de Gojo, avec `silencedByPassive: true`.
+- **Illusion des Corbeaux** (passive, `onAttackDeclared` + `onAbilityUsed`) — *« Des plumes
+  s'accumulent sur les personnages adverses (max 5) : […] 3 plumes : Est réduit au Silence
+  Ultime pendant un tour. 5 plumes (Tsukuyomi) : est Stun pendant 1 tour, puis toutes ses
+  plumes sont consommées. »*
+
+  ⚠️ **Trois points confirmés avec l'utilisateur avant implémentation**, le texte imprimé
+  étant ambigu :
+
+  - **Pas de `usableFromBench`** : la surveillance (attaque sur Itachi = +1 plume, capacité
+    active adverse = +3 plumes, quelle que soit sa cible) ne tourne que quand **Itachi
+    lui-même est actif** (comme Aki / Vision du Futur), pas en permanence comme
+    Guts/Hulk/Kakashi.
+  - **Silence Ultime à 3 plumes ne se redéclenche pas en boucle** : il ne s'applique qu'au
+    moment précis où le compteur franchit 3 depuis un état < 3. Rester à 3-4 plumes ensuite
+    ne fait plus rien tant que 5 n'est pas atteint.
+  - **Priorité à Tsukuyomi si un seul gain franchit les deux seuils d'un coup** (ex : 2 → 5
+    via une capacité active) : seul le stun + reset se déclenche, le palier 3 plumes est
+    ignoré dans ce cas précis.
+
+  Moteur : compteur porté par un statut custom `itachi-corbeaux-plumes` (`data.count`), par
+  personnage adverse (pas un pool partagé) — retiré entièrement (pas remis à 0) par
+  Tsukuyomi. `onAttackDeclared` et `onAbilityUsed` partagent le même champ
+  `event.data.characterInstanceId`, donc une seule ability couvre les deux gains ; le gain
+  "capacité active" n'exige pas que la cible de la capacité soit Itachi (le payload de
+  l'event ne porte pas cette information).
 
 ### Izuku de l'Académie — 280 HP
 
@@ -890,6 +949,29 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   - Moteur : la carte réagit à sa **propre** disparition ; `usableFromBench: true` est
     obligatoire (elle n'est plus l'actif au moment de l'event).
 
+### Soma — 220 HP
+
+- **Couteau de Chef** (40 ATK) — *« Applique 1 de bleed »*
+  - Moteur : statut garanti au contact (pré-jet d'esquive + `skipEvasionRoll`, comme
+    Chainsaw Man / Sukuna) — pas de jet de chance, contrairement à Katon d'Itachi.
+- **Menu Surprise** (active) — *« Ne peut pas être utiliser les 2 prochains tours après
+  avoir été utilisé. Soma cuisine un plat mystérieux et force le personnage sur le poste
+  actif adverse à choisir instantanément entre deux options : Manger le plat […] soigne de
+  80 HP, mais […] Stun 1 tour. Refuser le plat […] subissez 50 dégâts et Silence passif
+  pendant 1 tour »*
+  - Moteur : rechargement = statut de cooldown à `remainingTurns = 2 + 1`, `ticksOnBench:
+    true` (même montage que la Traque de Chopper). Le choix est posé à l'ADVERSAIRE
+    (`chooseOptionFor`) sur son actif du moment — c'est lui qui subit les deux branches, pas
+    Soma.
+- **Sabotage de Recette** (passive, `onObjectPlayed`, banc) — *« Chaque fois que
+  l'adversaire joue une carte Objet Soma réduit immédiatement la recharge de sa capacité
+  Menu Surprise de 1 tour. »*
+  - Moteur : `usableFromBench: true` (continue de réduire la recharge même si Soma est au
+    banc) — lit et réécrit directement `remainingTurns` du statut de cooldown de Menu
+    Surprise (pas d'API "update" : `removeStatus` puis `applyStatus` si le solde est encore
+    positif, sinon la recharge disparaît et Menu Surprise redevient utilisable
+    immédiatement).
+
 ### Soraka — 160 HP — incompatible avec Chopper
 
 - Deck : `incompatibleWith: ['chopper']` — les deux soigneurs du pool ne peuvent pas être
@@ -950,6 +1032,45 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   Réutilisable par toute future carte « immunisé contre X ». Le modifier de Toji vote
   `deny` uniquement pour lui-même (`targetInstanceId === sourceInstanceId`) et pour
   `stun` / `disarmed` / `silence-active` / `silence-passive` / `silence-ultimate`.
+
+### Yugi — 200 HP
+
+- **Appel du Magicien Sombre** — attaque simple, 50 ATK, pas de texte imprimé sur la carte
+  (description implicite, comme Jajanken Ultime de Gon Adulte).
+- **Puzzle Millénaire** (active, 1×/tour) — *« Obtient aléatoirement l'un des effets
+  suivants à qu'il pourra utiliser quand il le souhaite une fois par tour : 40% boost ATK,
+  20% bleed, 15% soin, 4% renvoi total, 1% résurrection, 20% échec. »*
+
+  ⚠️ **Deux points confirmés avec l'utilisateur avant implémentation**, le texte imprimé
+  étant ambigu :
+
+  - **Le tirage se résout IMMÉDIATEMENT à l'activation** (pas un effet mis en réserve pour
+    un moment séparé plus tard) — « qu'il pourra utiliser quand il le souhaite » décrit
+    juste le fait que c'est une capacité **active** (le joueur choisit quand l'activer),
+    pas un mécanisme de stockage. `usesPerTurn: 1` (déjà le défaut moteur, déclaré quand
+    même pour coller au texte).
+  - **Le boost d'ATK (branche 40%) dure le tour EN COURS**, pas le prochain tour de Yugi
+    (`remainingTurns: 1`, sans le `+1` des statuts posés après le tick du porteur — comme
+    Potion force, posé pendant le propre tour de Yugi donc avant son tick suivant).
+  - **Tirage à 6 branches inégales sans roue à l'écran** : `ProcWheel` ne sait montrer
+    qu'un jet binaire (réussi/raté sur UN taux), pas une table à 6 issues. Le tirage utilise
+    donc `randomInt(ctx.state.rng, 100)` comparé à des seuils cumulés (40/60/75/79/80/100),
+    sans wheel trompeuse, et une ligne de journal (`Puzzle Millénaire : <issue>`) dit
+    exactement ce qui a été obtenu.
+  - **Branche 15% (soin)** : choix `select-characters` entre Yugi lui-même (en tête,
+    filet de sécurité si le prompt expire) et chaque allié du banc -- auto-résolu vers
+    Yugi si le banc est vide (pas de prompt inutile pour un choix à une seule issue).
+  - **Branche 4% (renvoi total)** : *« et ne les subit pas »* n'est PAS le comportement du
+    statut générique `damage-reflect` existant (Miroir de Renvoi renvoie un %, mais le
+    porteur encaisse quand même le coup en entier). Nouveau champ optionnel
+    `data.negatesOriginal: true` sur `damage-reflect` (voir CLAUDE.md) : zéro-out
+    `finalAmount` côté porteur en plus du renvoi. Miroir de Renvoi ne pose jamais ce champ,
+    son comportement est inchangé (couvert par `damage-reflect-negate.spec.ts` et l'ancien
+    `miroir-de-renvoi.spec.ts`, tous deux toujours verts).
+  - **Branche 1% (résurrection)** : même filet que l'ancienne Absorption Vitale -- cimetière
+    vide ⇒ soigne Yugi de 100 HP au lieu de ne rien faire. Choix `chooseOption` avec `card`
+    par option (le cimetière n'est pas un personnage sur le plateau, `select-characters` ne
+    peut pas l'afficher). Ressuscité sur le banc à 50% de ses PV max (`Math.floor`).
 
 ### Yumeko — 140 HP
 
@@ -1097,6 +1218,57 @@ Incapable d'utiliser son actif aux 2 prochains tours. »*
   `kayn` lui-même, pas ses formes évoluées (`kayn-assassin` / `rhaast`) — un `cardId`
   distinct chacune.
 
+### Berserk — objet à lier
+
+*« Le porteur doit descendre sous la barre des 30 HP actuels sans mourir. Récompense : Il
+gagne définitivement le passif Buveur de Sang (se soigne de 50 % des dégâts qu'il inflige).
+En contrepartie, plus aucun soin externe (alliés, objets) n'a d'effet sur lui »*
+
+⚠️ **3e objet du lot (avec Chasseur de prime) qui a demandé un ajout moteur** : un
+`ObjectCardDef` n'a pas de champ `abilities`, donc rien ne peut réagir de lui-même à un
+dégât encaissé. Points confirmés avec l'utilisateur avant implémentation :
+
+- **Surveillé après TOUT ce qui peut faire bouger les HP actuels du porteur**, pas
+  seulement les attaques : `zones.ts::resolveBerserkVow` est rappelé depuis
+  `match.ts::dealDamage`, `applyValeurLock`, **et** juste après la pose de l'objet
+  (`resolveObjectInPlay`) — ce dernier appel couvre le cas où le porteur est **déjà** sous
+  la barre au moment même où on l'équipe (déclenchement immédiat, comme demandé), sans quoi
+  il faudrait attendre un dégât futur pour que le vœu se remarque.
+- **« Sans mourir » est vérifié à chaque appel** (`!isCharacterKO(char)`) : un coup qui fait
+  passer sous 30 HP et tue dans le même geste (overkill) ne tient pas le vœu.
+- **Nouveau statut permanent `buveur-de-sang`** (`data.healPercent`), indépendant de la
+  survie de l'objet une fois gagné (comme `crit-streak`). Deux effets, tous deux moteur :
+  - **Lifesteal** : vérifié dans `effect-context.ts::dealDamage` (même famille que
+    `hit-bounty`/`crit-streak`), scopé aux dégâts HOSTILES d'une attaque/capacité avec une
+    source résolue — pas de vol de vie sur un allié touché par ricochet. Restaure via
+    `hp.heal()` **en direct**, en contournant `api.heal()` — condition nécessaire pour ne
+    pas se faire bloquer par l'effet suivant.
+  - **Blocage des soins externes** : `match.ts::heal` refuse tout soin (comme
+    `unhealable`, y compris son nettoyage de bleed) dès que `buveur-de-sang` est présent.
+    Comme le lifesteal ne passe jamais par ce portail, il n'est jamais concerné.
+- Champs `hp` / `attacks` du JSON d'origine : artefacts du créateur de cartes, ignorés.
+
+### Bombe aveuglante
+
+*« Empêche le personnage actif adverse d'attaquer (Désarmé) pendant 1 tour. En contrepartie,
+l'adversaire obtient 1 carte Objet aléatoire dans sa main, et votre personnage sur le poste
+actif subit 40 dégâts. »*
+
+- Aucun ajout moteur : trois effets instantanés indépendants dans un seul `execute()`.
+- **Désarmé posé pendant NOTRE tour** : `remainingTurns: 2` (1 tour voulu + 1, le porteur
+  adverse doit survivre au tick qui ouvre son tour suivant avant de pouvoir agir) — même
+  calcul que le Désarmement de Katarina.
+- **« 1 carte Objet aléatoire »** : tout le registre (`listCards()` filtré sur les objets),
+  comme le reroll d'Isaac D6 — pas seulement les objets du deck construit ou de la réserve
+  du mode en cours. `ctx.createObject(cardId, ctx.opponentId)`.
+- **Les 40 dégâts sur son propre actif sont un coût auto-infligé** (`ignoreShield: true,
+  ignoreDamageReduction: true`), comme le Contrat de Mort de Gon Adulte ou Adrénaline
+  Ultime — confirmé avec l'utilisateur, le texte l'encadre comme un prix à payer plutôt
+  qu'une riposte qu'un bouclier pourrait absorber.
+- Un objet ne fait jamais rouler l'esquive, quoi qu'il cible (`damageSource: 'other'` dans
+  tout `execute()` d'objet ⇒ `canRollAgainst` renvoie toujours faux) : inutile de passer
+  `skipEvasionRoll` nulle part ici.
+
 ### Caméléon
 
 *« Choisissez une carte objet de votre main actuelle, Caméléon devient celle-ci. Possible
@@ -1140,6 +1312,29 @@ mort. Un exemplaire. »*
   tous les switchs. Le défensif prime sur l'offensif.
 - Le remplacement après un KO n'est pas concerné (il ne passe pas par `switchActive`) : un
   personnage mort n'est plus enchaîné.
+
+### Chasseur de prime — objet à lier
+
+*« Le porteur doit mettre KO deux personnages adverses s'il réussis le porteur gagne
+définitivement +40 ATK et 50 de Shield. »*
+
+⚠️ **1er des deux objets du lot qui a demandé un ajout moteur** (avec Berserk) — même
+contrainte : pas de `trigger` possible sur un objet.
+
+- **`data.count` compte les KO adverses réalisés par le porteur DEPUIS l'équipement**,
+  repart de 0 à la pose et ignore tout kill antérieur (confirmé avec l'utilisateur).
+  Incrémenté par `zones.ts::resolveBountyVow`, appelé juste après `recordKill` dans
+  `koCharacter` — le seul endroit qui connaît déjà `killerInstanceId` — même principe que
+  `crit-streak`, qui s'auto-incrémente aussi côté moteur plutôt que via un trigger de carte.
+- **Un KO allié ne compte pas** (`killerOwnerId === victimOwnerId` ⇒ ignoré) : un ricochet
+  (Manipulation de Makima, Jacob et Essau) ne fait pas avancer le compteur — le texte dit
+  explicitement « personnages adverses ».
+- Au 2ᵉ KO : `atk-boost` **permanent** (pas de `remainingTurns`, indépendant de la survie de
+  l'objet une fois gagné, comme `crit-streak`) de +40, et +50 de bouclier immédiat
+  (`api.addShield`). L'objet équipé est alors détruit, son rôle rempli.
+- Le badge sur la carte affiche la progression directement dans le `label` du statut
+  (`Chasseur de prime (1/2)`), mis à jour à chaque incrément — pas besoin de cas spécial
+  dans `statusBadgeText` (même astuce que Ronces grimpantes).
 
 ### Coeur acier — exemplaire unique, objet à lier
 
@@ -1445,6 +1640,47 @@ vos personnages ou sur l'actif ennemi. »*
 - Moteur : ne déplace que des statuts de `BUILTIN_STATUS_IDS` ; un compteur privé à une carte
   serait détruit par le transfert.
 
+### Tours compté — objet à lier
+
+*« Le porteur doit survivre pendant 3 tours de combat au poste actif. A la fin de chacun de
+ces 3 tours tours, le porteur subit 10% HP Max. Récompense : inflige une réduction définitive
+de -150 PV Max au personnage actif adverse et récupère les 50 HP. »*
+
+⚠️ **Premier objet du jeu qui a demandé un vrai ajout au moteur**, pas juste un fichier de
+carte : un `ObjectCardDef` n'a pas de champ `abilities` et ne peut donc réagir à AUCUN event
+de lui-même (cf. CLAUDE.md). Or le texte veut un tic à la FIN de chaque tour du porteur plus
+une récompense unique à l'issue du 3ᵉ -- rien de réutilisable tel quel (poison/burn/bleed
+tiquent au DÉBUT du tour et n'ont pas de récompense finale). Portée et points ambigus
+confirmés avec l'utilisateur avant implémentation :
+
+- **Nouveau statut générique `survival-vow`** (`BuiltinStatusId`), résolu par une fonction
+  dédiée (`turn.ts::resolveSurvivalVow`) appelée depuis `endTurn`, PAS par le tick générique
+  `tickStatusesAtTurnStart` -- d'où l'absence volontaire de `remainingTurns` sur ce statut
+  (`data.ticksRemaining` fait tout le travail à la main, pour ne pas se faire décompter une
+  seconde fois par le tick générique).
+- **Ne touche que l'actif du joueur dont le tour se termine.** Si le porteur n'est plus au
+  poste actif à ce moment-là (switché, ou toujours sur le banc), rien ne se passe : ni tic, ni
+  décompte. **Pause, pas reset** -- `data.ticksRemaining` retient sa valeur telle quelle et
+  reprend son décompte dès que le porteur revient au poste actif, exactement le comportement
+  par défaut d'un statut sans `ticksOnBench` (section 6 de CLAUDE.md), qui se trouve être
+  exactement ce que demande « au poste actif ».
+- **Dégâts de tic = 10 % des HP MAX ACTUELS du porteur**, recalculés à chaque tic (pas figés à
+  la pose). Dégâts ORDINAIRES (`api.dealDamage` sans `ignoreShield`/`ignoreDamageReduction`) :
+  un bouclier ou une réduction de dégâts du porteur s'applique normalement, même traitement
+  que burn/bleed -- pas un coût auto-infligé comme le Contrat de Mort de Gon Adulte.
+- **Un tic qui tue le porteur annule la récompense** (même garde que partout ailleurs :
+  `api.isOnBoard` revérifié après le `dealDamage`). Le vœu n'est tenu que si le porteur est
+  toujours en vie une fois `ticksRemaining` à 0.
+- **Récompense** : `ctx`-free, appels directs à `api.applyValeurLock` (-150 PV max définitifs
+  sur l'actif adverse **du moment**, pas celui d'il y a 3 tours) et `api.heal` (+50 sur le
+  porteur). `applyValeurLock` ignore déjà le bouclier par construction (aucun chemin de code
+  ne l'y fait passer, contrairement à `dealDamage`) -- pas d'option à passer pour ça.
+- **L'objet est détruit une fois le vœu résolu** (`api.destroyObject`, comme la dernière charge
+  de Coeur acier), qu'il ait payé ou non n'a plus d'importance à ce stade : si le porteur est
+  mort avant, l'objet est déjà parti au cimetière avec lui par le mécanisme générique existant.
+- Champs `hp` / `attacks` du JSON d'origine : artefacts du créateur de cartes, ignorés comme
+  d'habitude.
+
 ### Voleur de bouclier
 
 *« Vole le shield ennemi, lui retirant totalement son shield et se l'applique à soit
@@ -1592,6 +1828,39 @@ nouvelle fois au tour suivant. »*
   réponse pendant 120 s est résolu par `defaultChoiceAnswer` — personne ne doit perdre une
   carte par silence.
 
+### Jeu de la mort — 3 tours
+
+*« Pendant 3 tours, à la fin de son tour, les personnage sur le poste actif lance la roue.
+50% : Le personnage actif gagne un bonus de +20 ATK pour son prochain tour.
+50% : Le personnage actif subit 30 dégâts.
+Si vous avez posé le terrain, votre personnage sur le actif gagne 30 de bouclier. »*
+
+⚠️ **Trois points confirmés avec l'utilisateur avant implémentation**, le texte seul étant
+ambigu :
+
+- **Les deux camps lancent la roue**, chacun à la fin de son propre tour (`trigger:
+  'onTurnEnd'`, sans filtre sur `ctx.event.playerId`) — pas seulement le poseur du terrain.
+  Sinon la clause suivante sur le bouclier n'aurait aucune raison de préciser « si vous avez
+  posé le terrain ».
+- **Le bouclier de 30 n'est PAS répété à chaque proc de la roue** : c'est un bonus **unique**,
+  donné une seule fois à la pose du terrain (`trigger: 'onTerrainPlayed'`, filtré sur son
+  propre `terrainInstanceId`), au personnage actif du poseur à ce moment-là. Indépendant du
+  jet de la roue.
+- **Les 30 dégâts de l'échec ne sont jamais esquivables** (`skipEvasionRoll: true`), y compris
+  quand c'est l'actif adverse qui les subit — traité comme un aléa de jeu (la roue), pas comme
+  une attaque, même logique que Salle de Gravité. Pour le camp du poseur lui-même, l'esquive
+  ne se joue de toute façon jamais contre son propre camp (règle générale du moteur).
+- **Le bonus +20 ATK est aussi posé avec `skipEvasionRoll: true`** : le jet de la roue
+  (`ctx.rollChance`) a déjà tranché, il n'y a pas de second jet d'esquive à faire par-dessus
+  un résultat favorable (même raisonnement que Ronces grimpantes).
+- **`remainingTurns: 2` pour le bonus ATK** (« pour son prochain tour » = 1 tour effectif),
+  posé à la fin du tour en cours du bénéficiaire : le prochain tick de ses statuts est le
+  début de son tour SUIVANT, qu'il faut donc laisser passer avant de pouvoir en profiter
+  (même `+1` que le Stun de Vision du Futur d'Aki). `ticksOnBench: true` pour que le
+  décompte avance même si le personnage repasse par le banc avant son prochain tour.
+- Champs `hp` / `attacks` du JSON d'origine : artefacts du créateur de cartes, ignorés comme
+  d'habitude pour un `TerrainCardDef`.
+
 ### Livre de Chrollo — 3 tours
 
 ⚠️ **Carte volontairement réduite par rapport à son texte d'origine.** Le JSON de départ
@@ -1711,6 +1980,28 @@ meurt, seulement pour le joueur concerné. »*
   son propre décompte (détruit, remplacé), et son tick ne tournerait alors plus jamais — le
   badge resterait collé aux personnages pour toute la partie (même bug que celui corrigé sur
   Absorption Vitale).
+
+### Salle de Gravité — 3 tours
+
+*« Chaque fois qu'un joueur effectue un switch , son nouveau personnage qui arrive sur le
+poste actif subit des dégâts . Le poseur du terrain subit 30 dégâts, tandis que l'adversaire
+subit 50 dégâts. (Ne s'applique pas au remplacement d'un personnage KO). »*
+
+- **Une seule ability, `trigger: 'onSwitch'`**, sans filtre sur `reason` : un switch
+  volontaire comme un switch forcé par une carte (Manipulation de Light Yagami, Dieu du
+  Tonnerre Volant…) déclenchent tous les deux les dégâts — le texte ne distingue pas, et
+  seul le remplacement après KO est explicitement exclu, ce qui est déjà acquis puisque ce
+  chemin n'émet pas `onSwitch` (voir CLAUDE.md).
+- **`ctx.event.playerId`** (le camp qui possède le personnage qui arrive au poste actif,
+  posé par `zones.switchActive`) détermine le montant : 30 si c'est le poseur du terrain
+  (`ctx.ownerId`), 50 sinon. Cible : `ctx.event.data.newActiveInstanceId`.
+- **`skipEvasionRoll: true`** : traité comme un aléa d'environnement plutôt que comme une
+  attaque, donc jamais esquivable — y compris pour les 50 dégâts sur le camp adverse (choix
+  demandé explicitement, cohérent avec Autel Démoniaque qui frappe aussi sans jet d'esquive).
+  Les dégâts sur le camp du poseur ne peuvent de toute façon jamais être esquivés par leur
+  propre camp (règle générale du moteur).
+- Champs `hp` / `attacks` du JSON d'origine (artefacts du créateur de cartes, vides ou sans
+  sens pour un terrain) : ignorés, comme d'habitude pour un `TerrainCardDef`.
 
 ---
 

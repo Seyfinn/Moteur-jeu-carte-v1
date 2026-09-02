@@ -6,6 +6,77 @@ import { cardName, playerName } from './names.js';
 import { attacksAvailableTo, canAttack, getEffectiveATK } from './queries.js';
 import { drawAtEndOfTurn, refillBenchFromHand } from './draw-mode.js';
 
+const SURVIVAL_VOW_STATUS_ID = 'survival-vow';
+
+/**
+ * "Tours compté" : un objet ne peut réagir à aucun event de lui-même (cf. CLAUDE.md), donc
+ * ce compte à rebours est résolu ici, à la fin du tour du PORTEUR (`endTurn`), plutôt que
+ * via le trigger d'une carte. Ne touche QUE l'actif du joueur dont le tour se termine : si
+ * le porteur n'est pas (ou plus) au poste actif à ce moment-là, rien ne se passe -- le
+ * compteur est en pause, pas réinitialisé, exactement comme un statut ordinaire sans
+ * `ticksOnBench` (section 6 de CLAUDE.md).
+ */
+async function resolveSurvivalVow(state: GameState, endingPlayer: PlayerId, api: EngineApi): Promise<void> {
+  const player = state.players[endingPlayer];
+  const activeId = player.activeCharacterInstanceId;
+  const active = activeId ? player.characters[activeId] : undefined;
+  if (!activeId || !active) return;
+
+  const vow = getStatus(active, SURVIVAL_VOW_STATUS_ID);
+  if (!vow) return;
+
+  const objectInstanceId = vow.data?.['objectInstanceId'];
+  const damagePercent = Number(vow.data?.['damagePercent'] ?? 0);
+  const amount = Math.round(active.currentMaxHP * (damagePercent / 100));
+  if (amount > 0) {
+    api.log(`${cardName(active.cardId)} subit ${amount} dégâts (Tours compté)`, {
+      kind: 'status-tick',
+      characterInstanceId: activeId,
+      statusId: SURVIVAL_VOW_STATUS_ID,
+      amount,
+    }, endingPlayer);
+    // Dégâts ordinaires (bouclier/réduction s'appliquent), même traitement que burn/bleed.
+    await api.dealDamage(activeId, amount, {
+      source: SURVIVAL_VOW_STATUS_ID,
+      attackerInstanceId: typeof objectInstanceId === 'string' ? objectInstanceId : undefined,
+    });
+  }
+  // Le tick peut tuer le porteur : pas de récompense pour un vœu non tenu.
+  if (!api.isOnBoard(activeId)) return;
+  // Un effet résolu pendant le `await` ci-dessus (soin qui aurait pu couper autre chose,
+  // vol/dissipation de statut) a pu faire disparaître le vœu entre-temps -- ne pas le
+  // redécompter dans ce cas.
+  const stillVow = getStatus(active, SURVIVAL_VOW_STATUS_ID);
+  if (!stillVow) return;
+
+  const ticksRemaining = Number(stillVow.data?.['ticksRemaining'] ?? 1) - 1;
+  if (ticksRemaining > 0) {
+    stillVow.data = { ...stillVow.data, ticksRemaining };
+    return;
+  }
+
+  // Vœu tenu : la récompense tombe, puis l'équipement (et son statut) est consommé.
+  api.removeStatus(activeId, SURVIVAL_VOW_STATUS_ID);
+  if (typeof objectInstanceId === 'string') api.destroyObject(objectInstanceId);
+
+  const rewardMaxHPReduction = Number(stillVow.data?.['rewardMaxHPReduction'] ?? 0);
+  const rewardHeal = Number(stillVow.data?.['rewardHeal'] ?? 0);
+  const opponentId = otherPlayer(endingPlayer);
+  const opponentActiveId = state.players[opponentId].activeCharacterInstanceId;
+  if (opponentActiveId && rewardMaxHPReduction > 0) {
+    api.log(
+      `${cardName(active.cardId)} accomplit Tours compté : réduction définitive de ${rewardMaxHPReduction} PV Max`,
+      { kind: 'status', characterInstanceId: opponentActiveId },
+      endingPlayer
+    );
+    await api.applyValeurLock(opponentActiveId, rewardMaxHPReduction, {
+      attackerInstanceId: activeId,
+      attackerOwnerId: endingPlayer,
+    });
+  }
+  if (rewardHeal > 0) api.heal(activeId, rewardHeal);
+}
+
 /**
  * 'forced-attack' ("Manipulation" de Makima) : l'actif manipulé frappe un personnage de
  * son PROPRE banc, puis son tour s'arrête là. Résolu ici plutôt que par un passive de
@@ -130,6 +201,10 @@ export async function endTurn(state: GameState, api: EngineApi): Promise<void> {
   const endingPlayer = state.activePlayerId;
   state.players[endingPlayer].hasHadFirstTurn = true;
   await api.emitEvent({ name: 'onTurnEnd', playerId: endingPlayer, data: {} });
+  if (state.result) return;
+
+  await resolveSurvivalVow(state, endingPlayer, api);
+  checkWinCondition(state);
   if (state.result) return;
 
   // Mode Pioche : « à la toute fin du tour », donc après les effets de fin de tour et

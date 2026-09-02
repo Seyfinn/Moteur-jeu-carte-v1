@@ -25,7 +25,8 @@ export interface EngineApi {
   applyValeurLock(targetInstanceId: string, amount: number, options?: DealDamageOptions): Promise<void>;
   /** Lets a card's modifier (query 'poisonTicksAsValeurLock') redirect a poison tick into an unhealable max-HP loss instead of ordinary damage -- checked fresh at every tick. */
   poisonTicksAsValeurLock(targetInstanceId: string): boolean;
-  heal(targetInstanceId: string, amount: number): void;
+  /** Returns the HP actually restored (capped by missing HP; 0 if unhealable/off-board) -- used to attribute EffectContext.heal's stats. */
+  heal(targetInstanceId: string, amount: number): number;
   raiseMaxHP(targetInstanceId: string, amount: number, options?: RaiseMaxHPOptions): void;
   addShield(targetInstanceId: string, amount: number): void;
   removeShield(targetInstanceId: string, amount?: number): void;

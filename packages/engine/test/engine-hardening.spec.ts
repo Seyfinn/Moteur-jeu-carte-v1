@@ -305,7 +305,7 @@ describe('modifiers portant une passive imprimee (silencedByPassive)', () => {
   };
 
   it("coupe l'esquive innee sous silence passif comme sous silence ultime", async () => {
-    const { registerDemoCards, BASE_EVASION_CHANCE_PERCENT } = await import('../src/index.js');
+    const { registerDemoCards, BASE_EVASION_CHANCE_PERCENT, EVASIVE_STATUS_CHANCE_PERCENT } = await import('../src/index.js');
     const { getEvasionPercent } = await import('../src/queries.js');
     const { applyStatus, removeStatus } = await import('../src/statuses.js');
     registerDemoCards();
@@ -319,20 +319,21 @@ describe('modifiers portant une passive imprimee (silencedByPassive)', () => {
     const gojo = match.state.players.p1.characters[gojoId]!;
     const kakashi = match.state.players.p1.characters[kakashiId]!;
 
-    expect(getEvasionPercent(match.state, gojo)).toBe(33);
+    // « L'effet Esquive » : le taux inné est celui du statut `evasive`, pas un chiffre à part.
+    expect(getEvasionPercent(match.state, gojo)).toBe(EVASIVE_STATUS_CHANCE_PERCENT);
 
-    // Silence Ultime (celui de Marteau) : la passive tombe, il ne reste que les 5 % de base.
+    // Silence Ultime (celui de Marteau) : la passive tombe, il ne reste que le taux de base.
     applyStatus(gojo, { statusId: 'silence-ultimate', label: 'Silence Ultime' });
     expect(getEvasionPercent(match.state, gojo)).toBe(BASE_EVASION_CHANCE_PERCENT);
     // Et seulement pour le porteur : Kakashi garde le sien.
-    expect(getEvasionPercent(match.state, kakashi)).toBe(33);
+    expect(getEvasionPercent(match.state, kakashi)).toBe(EVASIVE_STATUS_CHANCE_PERCENT);
 
     removeStatus(gojo, 'silence-ultimate');
     applyStatus(gojo, { statusId: 'silence-passive', label: 'Silence Passif' });
     expect(getEvasionPercent(match.state, gojo)).toBe(BASE_EVASION_CHANCE_PERCENT);
 
     removeStatus(gojo, 'silence-passive');
-    expect(getEvasionPercent(match.state, gojo)).toBe(33);
+    expect(getEvasionPercent(match.state, gojo)).toBe(EVASIVE_STATUS_CHANCE_PERCENT);
   });
 
   it("laisse intact un modifier qui porte le texte d'une attaque", async () => {

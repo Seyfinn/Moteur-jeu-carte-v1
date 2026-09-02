@@ -31,6 +31,10 @@ export function statusBadgeText(status: StatusInstance): string {
   if (shieldPool > 0) return `${name} ${shieldPool} 🛡`;
   if (status.remainingTurns !== undefined) return `${name} (${status.remainingTurns})`;
   if (status.statusId === 'bleed') return `${name} x${Number(status.data?.['stacks'] ?? 1)}`;
+  // « Tours compté » : pas de `remainingTurns` (décompte géré par le moteur en dehors du
+  // tick générique, cf. turn.ts::resolveSurvivalVow) -- sans ça, le badge ne dirait pas
+  // combien de tours il reste à tenir.
+  if (status.statusId === 'survival-vow') return `${name} (${Number(status.data?.['ticksRemaining'] ?? 0)})`;
   return name;
 }
 
@@ -135,7 +139,10 @@ export function CharacterCard({
     char.shield,
     char.attachedObjectInstanceIds.length,
     char.statuses
-      .map((s) => `${s.statusId}:${s.remainingTurns ?? ''}:${String(s.data?.['stacks'] ?? '')}:${String(s.data?.['shield'] ?? '')}`)
+      .map(
+        (s) =>
+          `${s.statusId}:${s.remainingTurns ?? ''}:${String(s.data?.['stacks'] ?? '')}:${String(s.data?.['shield'] ?? '')}:${String(s.data?.['ticksRemaining'] ?? '')}`
+      )
       .join(','),
     // Un bonus de dégâts cumulatif (Guts, Hulk) ne se lit ni dans les PV ni dans un statut
     // visible : sans lui, la fiche épinglée resterait sur l'ATK d'il y a trois tours.

@@ -34,6 +34,7 @@ export {
 } from './statuses.js';
 export * from './queries.js';
 export { checkWinCondition, findCharacterOwner } from './zones.js';
+export { getCharacterStats } from './stats.js';
 export { getPlayerView } from './view.js';
 export { defaultChoiceAnswer } from './choices.js';
 export { Match } from './match.js';

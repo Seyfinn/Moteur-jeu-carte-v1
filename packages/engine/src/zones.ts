@@ -2,11 +2,13 @@ import { randomUUID } from './uuid.js';
 import { otherPlayer, type CharacterInstance, type GameState, type PlayerId, type PlayerState, type TerrainInstance } from './types.js';
 import type { EngineApi } from './engine-api.js';
 import { getCharacterCard, getTerrainCard } from './cards/registry.js';
-import { getLinkedPartnerId, hasStatus } from './statuses.js';
+import { applyStatus, getLinkedPartnerId, getStatus, hasStatus, removeStatus } from './statuses.js';
+import { getCurrentHP, isKO as isCharacterKO } from './hp.js';
 // Pas de cycle : queries.ts n'importe pas zones.ts (il ne dépend que de types/registry/statuses).
 import { canSwitchAny, describeDenials } from './queries.js';
 import { hasReachedEliminationGoal, refillBenchFromHand, rescueDraw } from './draw-mode.js';
 import { cardName, playerName } from './names.js';
+import { recordKill } from './stats.js';
 
 export function findCharacterOwner(state: GameState, instanceId: string): PlayerId {
   for (const playerId of ['p1', 'p2'] as PlayerId[]) {
@@ -76,6 +78,95 @@ export function checkWinCondition(state: GameState): void {
   }
 }
 
+const BOUNTY_VOW_STATUS_ID = 'bounty-vow';
+
+/**
+ * "Chasseur de prime" : un objet ne peut réagir à aucun event de lui-même (cf. CLAUDE.md),
+ * donc le compteur de KO ennemis vit ici, au SEUL endroit où le moteur connaît déjà le
+ * tueur (`killerInstanceId`) -- même principe que 'crit-streak', qui s'incrémente lui aussi
+ * directement dans le moteur (effect-context.ts::dealDamage) plutôt que via un trigger.
+ * Ne compte que les KO d'un personnage ADVERSE au porteur -- un allié tué par ricochet
+ * (Manipulation de Makima, Jacob et Essau) ne fait pas avancer le compteur.
+ */
+function resolveBountyVow(state: GameState, victimOwnerId: PlayerId, killerInstanceId: string | undefined, api: EngineApi): void {
+  if (!killerInstanceId) return;
+  const killerOwnerId = safeFindCharacterOwner(state, killerInstanceId);
+  if (!killerOwnerId || killerOwnerId === victimOwnerId) return;
+  const killer = state.players[killerOwnerId].characters[killerInstanceId];
+  if (!killer) return;
+  const vow = getStatus(killer, BOUNTY_VOW_STATUS_ID);
+  if (!vow) return;
+
+  const threshold = Number(vow.data?.['threshold'] ?? 2);
+  const count = Number(vow.data?.['count'] ?? 0) + 1;
+  if (count < threshold) {
+    vow.data = { ...vow.data, count };
+    vow.label = `Chasseur de prime (${count}/${threshold})`;
+    return;
+  }
+
+  const bonusATK = Number(vow.data?.['bonusATK'] ?? 0);
+  const bonusShield = Number(vow.data?.['bonusShield'] ?? 0);
+  const objectInstanceId = vow.data?.['objectInstanceId'];
+  removeStatus(killer, BOUNTY_VOW_STATUS_ID);
+  if (bonusATK > 0) {
+    applyStatus(killer, {
+      statusId: 'atk-boost',
+      label: 'Chasseur de prime',
+      sourceCardInstanceId: killerInstanceId,
+      data: { amount: bonusATK },
+    });
+  }
+  if (bonusShield > 0) api.addShield(killerInstanceId, bonusShield);
+  api.log(
+    `${cardName(killer.cardId)} accomplit son contrat de prime : +${bonusATK} ATK et +${bonusShield} bouclier définitifs`,
+    { kind: 'status', characterInstanceId: killerInstanceId },
+    killerOwnerId
+  );
+  if (typeof objectInstanceId === 'string') api.destroyObject(objectInstanceId);
+}
+
+const BERSERK_VOW_STATUS_ID = 'berserk-vow';
+
+/**
+ * "Berserk" : encore un objet qui ne peut réagir à aucun event de lui-même. Rappelé après
+ * TOUT ce qui peut faire bouger les HP actuels du porteur -- dégâts ordinaires
+ * (match.ts::dealDamage), Valeur Lock (match.ts::applyValeurLock) -- et une fois de plus
+ * juste après qu'un objet vienne de s'équiper (match.ts::resolveObjectInPlay), pour le cas
+ * où le porteur est déjà sous la barre au moment même où Berserk est posé. Appelé sans
+ * condition depuis ces trois points : un no-op immédiat si le statut est absent.
+ */
+export function resolveBerserkVow(state: GameState, characterInstanceId: string | undefined, api: EngineApi): void {
+  if (!characterInstanceId) return;
+  const ownerId = safeFindCharacterOwner(state, characterInstanceId);
+  if (!ownerId) return;
+  const char = state.players[ownerId].characters[characterInstanceId];
+  if (!char) return;
+  const vow = getStatus(char, BERSERK_VOW_STATUS_ID);
+  if (!vow) return;
+  // « sans mourir » : un coup qui l'achève en même temps qu'il passe sous la barre ne
+  // tient pas le vœu.
+  if (isCharacterKO(char)) return;
+  const hpThreshold = Number(vow.data?.['hpThreshold'] ?? 30);
+  if (getCurrentHP(char) >= hpThreshold) return;
+
+  const healPercent = Number(vow.data?.['healPercent'] ?? 0);
+  const objectInstanceId = vow.data?.['objectInstanceId'];
+  removeStatus(char, BERSERK_VOW_STATUS_ID);
+  applyStatus(char, {
+    statusId: 'buveur-de-sang',
+    label: 'Buveur de Sang',
+    sourceCardInstanceId: characterInstanceId,
+    data: { healPercent },
+  });
+  api.log(
+    `${cardName(char.cardId)} bascule en Berserk : Buveur de Sang activé, plus aucun soin externe n'a d'effet sur lui`,
+    { kind: 'status', characterInstanceId },
+    ownerId
+  );
+  if (typeof objectInstanceId === 'string') api.destroyObject(objectInstanceId);
+}
+
 /**
  * Section 5 + section 7: KO sends the character to the graveyard, cascades
  * to destroy any attached objects, and (section 2) forces an immediate free
@@ -99,6 +190,8 @@ export async function koCharacter(
   // Compteur monotone : c'est lui qui décide de la victoire en Mode Pioche, et une
   // résurrection ne doit pas faire reculer la course aux 7 éliminations.
   player.charactersLost += 1;
+  recordKill(state, killerInstanceId);
+  resolveBountyVow(state, ownerId, killerInstanceId, api);
 
   const char = player.characters[characterInstanceId]!;
   for (const objectInstanceId of [...char.attachedObjectInstanceIds]) {

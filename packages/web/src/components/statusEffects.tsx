@@ -115,6 +115,20 @@ const STATUS_VISUALS: Record<string, StatusVisual> = {
   // personnage. Même symbole que les autres marques d'échéance (coeur-acier-mark,
   // light-yagami-marque-nom) -- « condamné », pas encore résolu.
   'sacrifice-revive': { className: 'fx-mark', particles: 'mark', tone: 'debuff' },
+  // « Tours compté » : le compte à rebours avant la récompense (ou la mort). Même symbole
+  // que les autres marques d'échéance -- « en sursis », pas encore résolu.
+  'survival-vow': { className: 'fx-mark', particles: 'mark', tone: 'debuff' },
+  // « Chasseur de prime » : contrat en cours, pas encore rempli -- même famille que les
+  // autres vœux/marques d'échéance, mais en `buff` : c'est une promesse de bonus, pas
+  // un malus (contrairement à sacrifice-revive/survival-vow, qui coûtent quelque chose).
+  'bounty-vow': { className: 'fx-mark', particles: 'mark', tone: 'buff' },
+  // « Berserk » : vœu en attente, pas encore rempli -- même famille que les autres marques
+  // d'échéance.
+  'berserk-vow': { className: 'fx-mark', particles: 'mark', tone: 'debuff' },
+  // « Buveur de Sang » : récompense permanente de Berserk. Le visuel du saignement (goutte
+  // de sang) colle au thème, mais en teinte `buff` -- c'est un bonus pour son porteur, pas
+  // un malus comme le statut `bleed` dont il reprend l'animation.
+  'buveur-de-sang': { className: 'fx-bleed', particles: 'drip', tone: 'buff' },
 };
 
 const DEFAULT_VISUAL: StatusVisual = { className: 'fx-generic', particles: 'sparkle', tone: 'neutral' };

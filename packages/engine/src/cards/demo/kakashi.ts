@@ -1,11 +1,12 @@
 import type { CharacterCardDef } from '../types.js';
 import { getCharacterCard } from '../registry.js';
-import { getStatus } from '../../statuses.js';
+import { EVASIVE_STATUS_CHANCE_PERCENT, getStatus } from '../../statuses.js';
 
 const RAIKIRI_ATK = 60;
 
 const LAST_ENEMY_ATTACK_STATUS_ID = 'kakashi-last-enemy-attack';
-const SHARINGAN_EVASION_PERCENT = 33;
+/** Même lecture que L'Infini de Gojo : « l'effet Esquive », donc le taux du moteur. */
+const SHARINGAN_EVASION_PERCENT = EVASIVE_STATUS_CHANCE_PERCENT;
 
 export const kakashi: CharacterCardDef = {
   type: 'character',

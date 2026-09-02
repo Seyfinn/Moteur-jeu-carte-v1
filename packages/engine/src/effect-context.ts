@@ -1,6 +1,6 @@
 import type { EffectContext } from './cards/types.js';
 import type { EngineApi } from './engine-api.js';
-import { isKO } from './hp.js';
+import { heal as rawHeal, isKO } from './hp.js';
 import {
   canApplyStatus,
   evaluateTransform,
@@ -19,6 +19,7 @@ import { evolutionFormsOf, getCharacterCard } from './cards/registry.js';
 import { findCharacterOwner } from './zones.js';
 import { cardName } from './names.js';
 import { otherPlayer, type EngineEvent, type GameState, type PlayerId } from './types.js';
+import { recordCrit, recordEvasion, recordHealingDone } from './stats.js';
 
 /**
  * Tire un jet à pourcentage porté par une carte **et** l'annonce : le client transforme
@@ -90,7 +91,7 @@ export function buildEffectContext(
   /**
    * Un jet à pourcentage n'est « annoncé » que si son taux ne vient pas du personnage
    * lui-même mais d'une carte : statut `evasive`/`critical`, ou modifier déclaré par une
-   * capacité ou un objet. Au taux de base (5 % d'esquive, 2 % de critique), rien n'est
+   * capacité ou un objet. Au taux de base (1 % d'esquive, 1 % de critique), rien n'est
    * annoncé -- le client en fait une mini-roue à l'écran, et elle tournerait sinon à
    * chaque coup de la partie.
    *
@@ -120,6 +121,7 @@ export function buildEffectContext(
         label: 'Ne peut plus esquiver',
         remainingTurns: EVASION_LOCKOUT_TURNS + 1,
       });
+      recordEvasion(state, targetInstanceId);
     }
     return { evaded, percent, fromCard };
   }
@@ -357,6 +359,7 @@ export function buildEffectContext(
           const multiplier = getCriticalMultiplier(state, sourceInstanceId);
           finalAmount = amount * multiplier;
           didCrit = true;
+          recordCrit(state, source!.instanceId);
           // La Concentration est un objet : son taux vient toujours d'une carte.
           api.log(`${cardName(source!.cardId)} se concentre et fait un critique (x${multiplier}) !`, { kind: 'critical', sourceInstanceId, targetInstanceId: resolvedTargetId, baseAmount: amount, amount: finalAmount, percent, fromCard: true });
         } else {
@@ -369,6 +372,7 @@ export function buildEffectContext(
           const multiplier = getCriticalMultiplier(state, sourceInstanceId);
           finalAmount = amount * multiplier;
           didCrit = true;
+          recordCrit(state, source.instanceId);
           api.log(`${cardName(source.cardId)} inflige un coup critique (x${multiplier}) !`, { kind: 'critical', sourceInstanceId, targetInstanceId: resolvedTargetId, baseAmount: amount, amount: finalAmount, percent, fromCard });
         }
       }
@@ -412,7 +416,10 @@ export function buildEffectContext(
 
       // 'damage-reflect' (e.g. "Miroir de Renvoi"): the bearer bounces a percentage of
       // this hit straight back at the attacker, once, then the status (and the object
-      // carrying it, if any) is consumed.
+      // carrying it, if any) is consumed. Optional `data.negatesOriginal` (Puzzle
+      // Millénaire de Yugi) additionally zeroes out what the bearer itself takes from THIS
+      // hit -- Miroir de Renvoi never sets it, so the bearer keeps taking the full hit on
+      // top of the reflection, exactly as before.
       if (source && finalAmount > 0) {
         const target = findCharacter(state, resolvedTargetId);
         const mirror = getStatus(target, 'damage-reflect');
@@ -430,6 +437,7 @@ export function buildEffectContext(
             });
             await api.dealDamage(source.instanceId, reflected);
           }
+          if (mirror.data?.['negatesOriginal'] === true) finalAmount = 0;
         }
       }
 
@@ -455,6 +463,29 @@ export function buildEffectContext(
         }
       }
 
+      // 'buveur-de-sang' (Berserk) : le porteur récupère un % des dégâts HOSTILES qu'il
+      // vient d'infliger. Restauration directe (hp.heal, comme raiseMaxHP/addShield) qui
+      // contourne délibérément api.heal() -- c'est justement ce que ce statut bloque par
+      // ailleurs pour tout le monde, lui compris, s'il passait par ce canal (match.ts::heal).
+      // Portée aux attaques/capacités avec une source résolue, comme 'crit-streak' -- pas de
+      // vol de vie sur un allié touché par ricochet (Manipulation de Makima).
+      if (source && finalAmount > 0 && findCharacterOwner(state, resolvedTargetId) === opponentId) {
+        const vampirism = getStatus(source, 'buveur-de-sang');
+        if (vampirism && api.isOnBoard(source.instanceId)) {
+          const healPercent = Number(vampirism.data?.['healPercent'] ?? 0);
+          const healAmount = Math.round(finalAmount * (healPercent / 100));
+          if (healAmount > 0) {
+            rawHeal(source, healAmount);
+            recordHealingDone(state, source.instanceId, healAmount);
+            api.log(`${cardName(source.cardId)} se soigne de ${healAmount} HP (Buveur de Sang)`, {
+              kind: 'heal',
+              targetInstanceId: source.instanceId,
+              amount: healAmount,
+            });
+          }
+        }
+      }
+
       // `source` is deliberately undefined for self-inflicted damage (no crit on
       // yourself), so ownership is taken from the effect's owner instead -- a card must
       // still be able to recognise "this damage comes from my own side".
@@ -469,7 +500,11 @@ export function buildEffectContext(
       await api.applyValeurLock(targetInstanceId, amount, { attackerOwnerId: ownerId });
     },
     heal(targetInstanceId, amount) {
-      api.heal(targetInstanceId, amount);
+      const restored = api.heal(targetInstanceId, amount);
+      // Attribué au personnage source de l'effet (soi-même ou un allié soigné) -- un objet
+      // ou un terrain (ex: potion, aura de soin) n'a pas de carte à créditer.
+      const healer = state.players[ownerId].characters[sourceInstanceId];
+      if (healer) recordHealingDone(state, healer.instanceId, restored);
     },
     raiseMaxHP(targetInstanceId, amount, options) {
       api.raiseMaxHP(targetInstanceId, amount, options);

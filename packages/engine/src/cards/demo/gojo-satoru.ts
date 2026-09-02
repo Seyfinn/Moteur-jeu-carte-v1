@@ -1,8 +1,14 @@
 import type { CharacterCardDef } from '../types.js';
+import { EVASIVE_STATUS_CHANCE_PERCENT } from '../../statuses.js';
 
 const BLACKFLASH_ATK = 55;
 const BLACKFLASH_CRIT_PERCENT = 33;
-const INFINI_EVASION_PERCENT = 33;
+/**
+ * « bénéficie en permanence de l'effet Esquive » : c'est le taux de l'effet Esquive du
+ * moteur, pas un taux maison. Lu sur la constante pour qu'un rééquilibrage de l'esquive
+ * emporte l'innée avec lui -- deux nombres recopiés finiraient par diverger.
+ */
+const INFINI_EVASION_PERCENT = EVASIVE_STATUS_CHANCE_PERCENT;
 
 // Ciblé sur l'ennemi pendant le tour de Gojo -> +1 (même correction que le Silence
 // Ultime de Zoé, voir zoe.ts : le premier tick du statut a lieu au tout début du tour

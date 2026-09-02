@@ -53,6 +53,7 @@ import {
 import { endTurn, startTurn } from './turn.js';
 import { getPlayerView } from './view.js';
 import { cardName, playerName } from './names.js';
+import { recordDamageDealt, recordDamageTaken, recordShieldBroken, recordShieldGained } from './stats.js';
 
 export interface RosterConfig {
   characterCardIds: string[];
@@ -307,6 +308,7 @@ export class Match {
       sharedTerrainPile: [],
       rng: createRng(seed),
       log: [],
+      characterStats: {},
     };
     // Le Mode Pioche rebâtit entièrement les deux camps depuis ses piles : il doit passer
     // APRÈS createPlayerState, qui a monté les zones à partir des rosters.
@@ -769,6 +771,11 @@ export class Match {
     const ctx = this.api.buildEffectContext(objectInstanceId, playerId, undefined, 'other'); // object effect, not an attack/ability
     try {
       await def.execute(ctx);
+      // "Berserk" : si l'objet vient de s'équiper sur quelqu'un déjà sous la barre des HP
+      // requise, le vœu est tenu dès la pose -- pas besoin d'attendre un dégât futur.
+      if (obj.attachedToCharacterInstanceId) {
+        zones.resolveBerserkVow(state, obj.attachedToCharacterInstanceId, this.api);
+      }
     } finally {
       // A one-shot object always leaves play, including when its effect threw -- left in
       // `inPlayObjectInstanceIds` it would keep contributing its modifiers for the rest
@@ -1005,6 +1012,7 @@ export class Match {
               absorbed: shieldAbsorbed,
               shieldRemaining: target.shield,
             });
+            recordShieldBroken(state, targetInstanceId, shieldAbsorbed);
           }
         }
 
@@ -1014,11 +1022,17 @@ export class Match {
 
         hp.dealDamage(target, finalAmount);
         api.log(`${cardName(target.cardId)} subit ${finalAmount} dégâts`, { kind: 'damage', targetInstanceId, amount: finalAmount });
+        recordDamageTaken(state, targetInstanceId, finalAmount);
+        recordDamageDealt(state, options?.attackerInstanceId, finalAmount);
         await api.emitEvent({
           name: 'afterDamage',
           data: { targetInstanceId, amount: finalAmount, shieldAbsorbed, ...attribution },
         });
         if (hp.isKO(target)) await api.koCharacter(targetInstanceId, options?.attackerInstanceId);
+        // "Berserk" : un objet ne peut pas se rappeler tout seul à chaque dégât -- ce
+        // rappel vit ici (et dans applyValeurLock ci-dessous), seuls points de passage
+        // uniques de tout ce qui peut faire bouger les HP actuels d'un personnage.
+        else zones.resolveBerserkVow(state, targetInstanceId, api);
 
         // 'linked' (Jacob et Essau): the pair shares every damage instance, whatever its
         // source -- attack, ability, status tick, or a cost the owner pays itself. The
@@ -1057,10 +1071,13 @@ export class Match {
           targetInstanceId,
           amount: finalAmount,
         });
+        recordDamageTaken(state, targetInstanceId, finalAmount);
+        recordDamageDealt(state, options?.attackerInstanceId, finalAmount);
         // Same attribution as ordinary damage: a valeur-lock kill (Mahito's Paume
         // Transfiguratrice, a Sang Maudit poison tick) has to name its killer too,
         // otherwise every "on kill" passive silently misses it.
         if (hp.isKO(target)) await api.koCharacter(targetInstanceId, options?.attackerInstanceId);
+        else zones.resolveBerserkVow(state, targetInstanceId, api);
       },
 
       poisonTicksAsValeurLock(targetInstanceId) {
@@ -1068,15 +1085,18 @@ export class Match {
       },
 
       heal(targetInstanceId, amount) {
-        if (!api.isOnBoard(targetInstanceId)) return;
+        if (!api.isOnBoard(targetInstanceId)) return 0;
         const target = findCharacter(state, targetInstanceId);
         // 'unhealable' (Marque de Mahito) : aucun soin n'a plus d'effet sur le porteur, y
         // compris son côté "guérit le saignement" -- un soin qui ne peut rien restaurer ne
         // devrait pas non plus couper un bleed en cours.
-        if (statusesMod.isUnhealable(target)) return;
+        // 'buveur-de-sang' (Berserk) : même blocage, mais seulement pour CE canal --
+        // effect-context.ts::dealDamage restaure son lifesteal via hp.heal() en direct,
+        // qui ne passe jamais par ici et n'est donc jamais concerné par ce blocage.
+        if (statusesMod.isUnhealable(target) || statusesMod.hasStatus(target, 'buveur-de-sang')) return 0;
         const boosted = evaluateTransform(state, 'getIncomingHealAmount', { targetInstanceId }, amount);
         const finalAmount = Math.max(0, boosted);
-        if (finalAmount <= 0) return;
+        if (finalAmount <= 0) return 0;
         // Report what was actually restored, not what was requested: healing a character
         // that is already (nearly) full otherwise logs a number nothing on the board matches.
         const restored = Math.min(finalAmount, target.damage);
@@ -1090,6 +1110,7 @@ export class Match {
           statusesMod.removeStatus(target, 'bleed');
           api.log(`Le saignement de ${cardName(target.cardId)} est stoppé par le soin`, { kind: 'heal', targetInstanceId });
         }
+        return restored;
       },
 
       raiseMaxHP(targetInstanceId, amount, options) {
@@ -1105,14 +1126,17 @@ export class Match {
         const target = findCharacter(state, targetInstanceId);
         hp.addShield(target, amount);
         api.log(`${cardName(target.cardId)} gagne ${amount} de bouclier`, { kind: 'shield', targetInstanceId, amount, shield: target.shield });
+        recordShieldGained(state, targetInstanceId, amount);
       },
 
       removeShield(targetInstanceId, amount) {
         if (!api.isOnBoard(targetInstanceId)) return;
         const target = findCharacter(state, targetInstanceId);
+        const before = target.shield;
         hp.removeShield(target, amount);
         const lost = amount === undefined ? 'tout son bouclier' : amount + ' de bouclier';
         api.log(`${cardName(target.cardId)} perd ${lost}`, { kind: 'shield', targetInstanceId, amount: amount ?? 'all', shield: target.shield });
+        recordShieldBroken(state, targetInstanceId, before - target.shield);
       },
 
       applyStatus(targetInstanceId, status) {
