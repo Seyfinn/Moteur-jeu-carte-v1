@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   DRAW_MODE_ELIMINATIONS_TO_WIN,
   DRAW_MODE_MAX_CHARACTER_HAND,
@@ -12,7 +12,7 @@ import {
   type PlayerId,
   type PlayerState,
 } from 'engine';
-import { CharacterCard } from './CharacterCard';
+import { CharacterCard, CharacterVitals } from './CharacterCard';
 import { CardFrame } from './CardFrame';
 import { ChoiceCountdownBadge, ChoiceModal } from './ChoiceModal';
 import { switchTargeting, TargetingBar, useBoardTargeting, type BoardTargeting } from './Targeting';
@@ -183,18 +183,25 @@ function ActiveSlot({
   side,
   targeting,
   state,
+  commands,
 }: {
   char: CharacterInstance | undefined;
   badges?: CharacterBadge[];
   side: 'self' | 'opponent';
   targeting: BoardTargeting | null;
   state: GameState;
+  /** Panneau d'actions logé dans la carte elle-même -- côté joueur uniquement. */
+  commands?: ReactNode;
 }) {
   if (!char) {
-    return <div className={`active-slot empty ${side}`}>Aucun personnage actif</div>;
+    // Le slot vide garde la classe `commanded` : sinon le plateau se réorganiserait d'un
+    // coup entre la mort d'un actif et l'arrivée de son remplaçant.
+    return (
+      <div className={`active-slot empty ${side}${commands ? ' commanded' : ''}`}>Aucun personnage actif</div>
+    );
   }
   return (
-    <div className={`active-slot ${side}`}>
+    <div className={`active-slot ${side}${commands ? ' commanded' : ''}`}>
       {/* La clé est indispensable ici : le slot garde sa place dans l'arbre quand l'actif
           change, donc sans elle React réutilise le même CharacterCard et son compteur de
           dégâts compare les PV de deux personnages différents -- le nouvel arrivant
@@ -212,7 +219,22 @@ function ActiveSlot({
         onTarget={() => targeting?.toggle(char.instanceId)}
         attachedObjects={attachedObjectsOf(state, char)}
         state={state}
+        commands={commands}
       />
+    </div>
+  );
+}
+
+/**
+ * Jauges d'un personnage de réserve, posées SOUS sa vignette plutôt que dans son bandeau
+ * d'infos. À la taille d'une carte de banc, ce bandeau ne laissait à la barre de PV que
+ * quelques pixels et au chiffre qu'un corps de 0,58 rem -- or c'est exactement ce qu'on
+ * vient lire sur le banc pour décider qui envoyer au combat.
+ */
+function BenchVitals({ char, state }: { char: CharacterInstance; state: GameState }) {
+  return (
+    <div className="bench-vitals">
+      <CharacterVitals char={char} state={state} />
     </div>
   );
 }
@@ -347,7 +369,9 @@ function SelfBenchCard({
         onTarget={() => targeting?.toggle(char.instanceId)}
         attachedObjects={attachedObjectsOf(state, char)}
         state={state}
+        hideVitals
       />
+      <BenchVitals char={char} state={state} />
       {isOpen && <BenchMenu name={name} options={options} onClose={onClose} onDetails={inspect.onClick} />}
     </div>
   );
@@ -421,7 +445,9 @@ function BenchRow({
               onTarget={() => targeting?.toggle(char.instanceId)}
               attachedObjects={attachedObjectsOf(state, char)}
               state={state}
+              hideVitals
             />
+            <BenchVitals char={char} state={state} />
           </div>
         )
       )}
@@ -613,11 +639,18 @@ export function Board({ conn }: { conn: GameConnection }) {
               side="self"
               targeting={targeting}
               state={state}
+              commands={
+                <CommandPanel state={state} you={you} conn={conn} onStartSwitch={() => setSwitchMode(true)} />
+              }
             />
           </div>
 
-          <div className="zone zone-lower-self">
-            <CommandPanel state={state} you={you} conn={conn} onStartSwitch={() => setSwitchMode(true)} />
+          {/* Ligne de front : elle sépare les deux moitiés du plateau et donne au duel un
+              centre lisible, là où les deux actifs se faisaient face sans repère. */}
+          <div className="zone zone-vs" aria-hidden="true">
+            <span className="vs-line" />
+            <span className="vs-badge">VS</span>
+            <span className="vs-line" />
           </div>
 
           <div className="zone zone-active-opp">

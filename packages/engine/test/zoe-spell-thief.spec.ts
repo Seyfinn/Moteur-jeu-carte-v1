@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { registerCard, type PlayerId, type RosterConfig } from '../src/index.js';
 import { zoe } from '../src/cards/demo/zoe.js';
+import { soma } from '../src/cards/demo/soma.js';
 import { registerTestFixtures, FX_ROSTER } from './fixtures.js';
 import { createReadyMatch, drive } from './test-utils.js';
 
@@ -10,6 +11,7 @@ beforeAll(() => {
   if (!zoeRegistered) {
     zoeRegistered = true;
     registerCard(zoe);
+    registerCard(soma);
   }
 });
 
@@ -18,6 +20,7 @@ function opponentOf(id: PlayerId): PlayerId {
 }
 
 const ZOE_ROSTER: RosterConfig = { characterCardIds: [zoe.id], objectCardIds: [], terrainCardIds: [] };
+const SOMA_ROSTER: RosterConfig = { characterCardIds: [soma.id], objectCardIds: [], terrainCardIds: [] };
 
 describe('Zoé "Spell Thief" (tracks + re-executes the enemy\'s last active ability, Zoé as source)', () => {
   it("re-executes the stolen ability with Zoé as the source (the buff lands on her, not the original caster)", async () => {
@@ -80,5 +83,36 @@ describe('Zoé "Spell Thief" (tracks + re-executes the enemy\'s last active abil
     await drive(match, enemySide, { kind: 'pass' });
     const readyAgain = match.applyAction(zoeSide, { kind: 'use-ability', characterInstanceId: zoeActiveId, abilityId: 'spell-thief' });
     expect(readyAgain.ok).toBe(true);
+  });
+
+  it("records an ability that neutralises Zoé while resolving (Soma's Menu Surprise stuns her)", async () => {
+    // Régression : la mémoire était prise par une passive branchée sur `onAbilityUsed`, émis
+    // APRÈS l'exécution -- une capacité qui stun/silence Zoé en se résolvant se rendait donc
+    // involable. Le moteur note maintenant la capacité avant de l'exécuter.
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: ZOE_ROSTER, p2Roster: SOMA_ROSTER, seed: 84 }
+    );
+    const zoeSide: PlayerId = 'p1';
+    const enemySide: PlayerId = opponentOf(zoeSide);
+    if (match.state.activePlayerId !== enemySide) await drive(match, zoeSide, { kind: 'pass' });
+
+    const enemyActiveId = match.state.players[enemySide].activeCharacterInstanceId!;
+    const zoeActiveId = match.state.players[zoeSide].activeCharacterInstanceId!;
+
+    await drive(match, enemySide, { kind: 'use-ability', characterInstanceId: enemyActiveId, abilityId: 'menu-surprise' });
+    expect(match.state.players[enemySide].lastAbilityUsed).toEqual({
+      characterInstanceId: enemyActiveId,
+      abilityId: 'menu-surprise',
+    });
+
+    // Le plat a stun Zoé : ce tour-là reste bel et bien perdu (le stun ferme les actives).
+    await drive(match, enemySide, { kind: 'pass' });
+    expect(match.applyAction(zoeSide, { kind: 'use-ability', characterInstanceId: zoeActiveId, abilityId: 'spell-thief' }).ok).toBe(false);
+
+    // Mais la mémoire a survécu : une fois le stun tombé, Menu Surprise est volable.
+    await drive(match, zoeSide, { kind: 'pass' });
+    await drive(match, enemySide, { kind: 'pass' });
+    await drive(match, zoeSide, { kind: 'use-ability', characterInstanceId: zoeActiveId, abilityId: 'spell-thief' });
+    expect(match.state.players[zoeSide].characters[zoeActiveId]!.statuses.some((s) => s.statusId === 'zoe-spell-thief-cooldown')).toBe(true);
   });
 });

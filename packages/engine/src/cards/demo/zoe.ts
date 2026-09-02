@@ -1,6 +1,6 @@
-import type { CharacterCardDef } from '../types.js';
+import type { CharacterCardDef, EffectContext } from '../types.js';
 import { getCharacterCard } from '../registry.js';
-import { getStatus, hasStatus } from '../../statuses.js';
+import { hasStatus } from '../../statuses.js';
 
 const BASE_ATK = 50;
 const SILENCE_CHANCE_PERCENT = 33;
@@ -21,8 +21,28 @@ const SILENCE_REMAINING_TURNS = SILENCE_EFFECTIVE_TURNS + 1;
 const SPELL_THIEF_COOLDOWN_EFFECTIVE_TURNS = 3; // posé sur soi-même -> +1
 const SPELL_THIEF_COOLDOWN_REMAINING_TURNS = SPELL_THIEF_COOLDOWN_EFFECTIVE_TURNS + 1;
 
-const LAST_ENEMY_ABILITY_STATUS_ID = 'zoe-last-enemy-ability';
 const SPELL_THIEF_COOLDOWN_STATUS_ID = 'zoe-spell-thief-cooldown';
+
+/**
+ * La capacité active que Zoé peut voler à l'instant T, ou `undefined`. Le moteur retient
+ * lui-même la dernière capacité **activée manuellement** par chaque camp
+ * (`PlayerState.lastAbilityUsed`, écrite avant l'exécution) : une capacité qui stun ou
+ * silence Zoé en se résolvant -- le Menu Surprise de Soma -- ne peut donc plus l'empêcher
+ * d'en prendre note, ce qui la rendait tout simplement involable.
+ *
+ * Les passives à trigger ne passent pas par ce chemin : Spell Thief reste naturellement
+ * limité aux "actifs", sans code de filtrage en plus.
+ */
+function stealableAbility(ctx: EffectContext) {
+  const record = ctx.state.players[ctx.opponentId].lastAbilityUsed;
+  if (!record) return undefined;
+  const caster = ctx.state.players[ctx.opponentId].characters[record.characterInstanceId];
+  if (!caster) return undefined;
+  // Le personnage d'origine a pu changer de forme depuis : on ne vole que ce qu'il porte
+  // encore réellement.
+  const ability = getCharacterCard(caster.cardId).abilities.find((a) => a.id === record.abilityId);
+  return ability ? { ability, casterInstanceId: caster.instanceId } : undefined;
+}
 
 export const zoe: CharacterCardDef = {
   type: 'character',
@@ -77,34 +97,6 @@ export const zoe: CharacterCardDef = {
       },
     },
     {
-      // Bookkeeping pur : mémorise la dernière ability active de l'ennemi pour Spell
-      // Thief ci-dessous. onAbilityUsed n'est émis (voir match.ts::handleUseAbility)
-      // que pour les abilities manuellement activées -- jamais pour les passives à
-      // trigger, qui de toute façon ne peuvent pas être déclenchées manuellement
-      // (voir CLAUDE.md, "Bug du moteur corrigé"). Ça restreint donc naturellement
-      // Spell Thief aux abilities "actives simples", sans code de filtrage en plus.
-      id: 'spell-thief-tracker',
-      name: 'Spell Thief (mémoire)',
-      kind: 'passive',
-      description: "Retient la dernière ability active utilisée par l'ennemi, pour Spell Thief.",
-      trigger: 'onAbilityUsed',
-      usableFromBench: true,
-      usesPerTurn: Infinity,
-      condition(ctx) {
-        return ctx.event?.playerId === ctx.opponentId;
-      },
-      async execute(ctx) {
-        const data = ctx.event!.data as { characterInstanceId: string; abilityId: string };
-        ctx.removeStatus(ctx.sourceInstanceId, LAST_ENEMY_ABILITY_STATUS_ID);
-        ctx.applyStatus(ctx.sourceInstanceId, {
-          statusId: LAST_ENEMY_ABILITY_STATUS_ID,
-          label: 'Spell Thief (mémoire)',
-          hidden: true, // mémoire interne, aucune information utile à afficher sur la carte
-          data: { characterInstanceId: data.characterInstanceId, abilityId: data.abilityId },
-        });
-      },
-    },
-    {
       id: 'spell-thief',
       name: 'Spell Thief',
       kind: 'active',
@@ -112,9 +104,12 @@ export const zoe: CharacterCardDef = {
       condition(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);
         if (hasStatus(self, SPELL_THIEF_COOLDOWN_STATUS_ID)) return false;
-        return !!getStatus(self, LAST_ENEMY_ABILITY_STATUS_ID);
+        return !!stealableAbility(ctx);
       },
       async execute(ctx) {
+        const stolen = stealableAbility(ctx);
+        if (!stolen) return;
+
         ctx.applyStatus(ctx.sourceInstanceId, {
           statusId: SPELL_THIEF_COOLDOWN_STATUS_ID,
           label: 'Spell Thief (recharge)',
@@ -125,18 +120,11 @@ export const zoe: CharacterCardDef = {
           ticksOnBench: true,
         });
 
-        const self = ctx.getCharacter(ctx.sourceInstanceId);
-        const record = getStatus(self, LAST_ENEMY_ABILITY_STATUS_ID);
-        const characterInstanceId = record?.data?.['characterInstanceId'] as string | undefined;
-        const abilityId = record?.data?.['abilityId'] as string | undefined;
-        if (!characterInstanceId || !abilityId) return;
-
-        const stolenCardId = ctx.getCharacter(characterInstanceId).cardId;
-        const stolenAbility = getCharacterCard(stolenCardId).abilities.find((a) => a.id === abilityId);
-        if (!stolenAbility) return; // plus disponible (ex: le personnage d'origine a changé de forme depuis)
-
-        ctx.log(`Spell Thief : Zoé utilise ${stolenAbility.name}`, { abilityId, stolenFrom: characterInstanceId });
-        await stolenAbility.execute(ctx);
+        ctx.log(`Spell Thief : Zoé utilise ${stolen.ability.name}`, {
+          abilityId: stolen.ability.id,
+          stolenFrom: stolen.casterInstanceId,
+        });
+        await stolen.ability.execute(ctx);
       },
     },
   ],

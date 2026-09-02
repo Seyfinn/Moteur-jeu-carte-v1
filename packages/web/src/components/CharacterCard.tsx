@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { getCharacterCard, type CharacterInstance, type GameState, type StatusInstance } from 'engine';
 import { CardFrame } from './CardFrame';
 import { useCardInspect, useHoverCard, type HoverPayload } from './HoverCard';
@@ -39,6 +39,71 @@ export function statusBadgeText(status: StatusInstance): string {
 }
 
 /**
+ * Les chiffres vitaux d'un personnage, dérivés de sa seule instance. Un bouclier peut venir
+ * du moteur (`char.shield`, addShield) ou d'un statut qui porte sa propre réserve dans
+ * `data.shield` (Mana Barrier de Blitzcrank, dont l'absorption est un modifier) : les deux
+ * se lisent pareil sur la carte -- chiffre, segment de barre et halo.
+ */
+export function characterVitals(char: CharacterInstance) {
+  const currentHP = Math.max(0, char.currentMaxHP - char.damage);
+  const shieldTotal =
+    char.shield + char.statuses.reduce((sum, st) => sum + Math.max(0, Number(st.data?.['shield'] ?? 0)), 0);
+  const ratio = (value: number) =>
+    char.currentMaxHP > 0 ? Math.max(0, Math.min(100, (value / char.currentMaxHP) * 100)) : 0;
+  return { currentHP, shieldTotal, pct: ratio(currentHP), shieldPct: ratio(shieldTotal) };
+}
+
+/**
+ * Jauge de PV, jauge de bouclier et ligne chiffrée. Sorti de `CharacterCard` parce que le
+ * banc les affiche SOUS la carte plutôt que dedans : à la taille d'une vignette de banc, le
+ * bandeau d'infos ne laissait à la barre que quelques pixels de haut.
+ */
+export function CharacterVitals({ char, state }: { char: CharacterInstance; state?: GameState }) {
+  const { currentHP, pct, shieldTotal, shieldPct } = characterVitals(char);
+  // Attaques dont l'ATK du moment n'est plus celui imprimé sur la carte : c'est le seul
+  // endroit où le joueur peut lire le vrai chiffre sans ouvrir de fiche, et il n'apparaît
+  // donc que quand il y a quelque chose à corriger.
+  const shifted = (state ? attackReadouts(state, char) : []).filter((r) => r.effective !== r.base);
+
+  return (
+    <>
+      {/* Les deux jauges sont groupées pour que le banc puisse les poser à GAUCHE du
+          chiffre au lieu de l'empiler dessus. Partout ailleurs, `.hp-gauges` est en
+          `display: contents` : la boîte n'existe pas et rien ne bouge. */}
+      <div className="hp-gauges">
+        {/* Le dégradé de la jauge suit les PV en continu (vert plein ➔ ambre ➔ rouge) au
+            lieu de sauter d'une couleur à l'autre à 50 % et 25 % : la teinte est calculée
+            ici et lue par la CSS, qui garde le seuil pour le seul halo d'alerte. */}
+        <div className="hp-bar" style={{ ['--hp-hue' as string]: Math.round(pct * 1.2) }}>
+          <div className={`hp-bar-fill${pct <= 25 ? ' low' : ''}`} style={{ width: `${pct}%` }} />
+        </div>
+        {/* Barre de bouclier : une deuxième jauge, sous celle des PV, dans une autre
+            couleur -- c'est ce qui sera mangé en premier par les dégâts. */}
+        {shieldTotal > 0 && (
+          <div className="shield-bar active" title={`${shieldTotal} points de bouclier`}>
+            <div className="shield-bar-fill" style={{ width: `${shieldPct}%` }} />
+          </div>
+        )}
+      </div>
+      <div className="hp-text">
+        {currentHP} / {char.currentMaxHP} HP
+        {shieldTotal > 0 && <span className="shield-text"> +{shieldTotal} 🛡</span>}
+        {shifted.map((r) => (
+          <span
+            key={r.id}
+            className={`atk-text${r.effective > r.base ? ' up' : ' down'}`}
+            title={`${r.name} : ${r.effective} ATK (imprimé ${r.base})`}
+          >
+            {' '}
+            ⚔ {r.effective}
+          </span>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/**
  * Texte flottant au-dessus de la carte à chaque modification de PV : rouge vif pour ce qui
  * est perdu, vert pour ce qui est rendu. Il est calculé sur les PV effectifs et non sur le
  * journal, ce qui lui fait couvrir *toutes* les sources sans en connaître aucune : coup
@@ -66,6 +131,8 @@ export function CharacterCard({
   onTarget,
   attachedObjects,
   state,
+  commands,
+  hideVitals,
 }: {
   char: CharacterInstance;
   isActive: boolean;
@@ -97,10 +164,22 @@ export function CharacterCard({
    * (cimetière, aperçu hors partie) : la carte se dessine sans ce chiffre.
    */
   state?: GameState;
+  /**
+   * Panneau d'actions logé dans la colonne d'infos de la carte (`size="large"` +
+   * `orientation="landscape"` : le personnage actif du joueur). Le plateau y glisse le
+   * `CommandPanel` -- attaquer, lancer une capacité, changer de personnage ou passer se
+   * fait donc sur la carte elle-même, et plus dans une grille posée en dessous.
+   * Absent partout ailleurs (banc, cimetière, aperçu), où la carte n'a rien à commander.
+   */
+  commands?: ReactNode;
+  /**
+   * Retire les jauges du bandeau d'infos : le banc les redessine SOUS la carte, où elles
+   * ont la place d'être lues (`<CharacterVitals>`). Les statuts, eux, restent sur la carte.
+   */
+  hideVitals?: boolean;
 }) {
   const hover = useHoverCard();
-  const currentHP = Math.max(0, char.currentMaxHP - char.damage);
-  const pct = char.currentMaxHP > 0 ? Math.max(0, Math.min(100, (currentHP / char.currentMaxHP) * 100)) : 0;
+  const { currentHP } = characterVitals(char);
   const dead = currentHP <= 0;
   const name = cardName(char.cardId);
 
@@ -108,16 +187,11 @@ export function CharacterCard({
   // last enemy attack...) carry no information for the player and only crowd the card.
   const visibleStatuses = char.statuses.filter((s) => !s.hidden);
 
-  // Un bouclier peut venir du moteur (`char.shield`, addShield) ou d'un statut qui porte sa
-  // propre réserve dans `data.shield` (Mana Barrier de Blitzcrank, dont l'absorption est un
-  // modifier). Les deux se lisent pareil sur la carte : chiffre, segment de barre et halo.
-  const shieldTotal =
-    char.shield + char.statuses.reduce((sum, st) => sum + Math.max(0, Number(st.data?.['shield'] ?? 0)), 0);
-  const shieldPct = char.currentMaxHP > 0 ? Math.max(0, Math.min(100, (shieldTotal / char.currentMaxHP) * 100)) : 0;
+  const { shieldTotal } = characterVitals(char);
 
-  // Attaques dont l'ATK du moment n'est plus celui imprimé sur la carte : c'est le seul
-  // endroit où le joueur peut lire le vrai chiffre sans ouvrir de fiche, et il n'apparaît
-  // donc que quand il y a quelque chose à corriger.
+  // Attaques dont l'ATK du moment n'est plus celui imprimé sur la carte. Recalculé ici (et
+  // pas seulement dans `<CharacterVitals>`) parce que la clé de rafraîchissement du panneau
+  // épinglé, plus bas, doit le voir changer.
   const shiftedAttacks = (state ? attackReadouts(state, char) : []).filter((r) => r.effective !== r.base);
 
   const inspectPayload: HoverPayload = {
@@ -226,33 +300,7 @@ export function CharacterCard({
       }
       footer={
         <>
-          <div className="hp-bar">
-            <div
-              className={`hp-bar-fill${pct <= 25 ? ' low' : pct <= 50 ? ' mid' : ''}`}
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-          {/* Barre de bouclier : une deuxième jauge, sous celle des PV, dans une autre
-              couleur -- c'est ce qui sera mangé en premier par les dégâts. */}
-          {shieldTotal > 0 && (
-            <div className="shield-bar" title={`${shieldTotal} points de bouclier`}>
-              <div className="shield-bar-fill" style={{ width: `${shieldPct}%` }} />
-            </div>
-          )}
-          <div className="hp-text">
-            {currentHP} / {char.currentMaxHP} HP
-            {shieldTotal > 0 && <span className="shield-text"> +{shieldTotal} 🛡</span>}
-            {shiftedAttacks.map((r) => (
-              <span
-                key={r.id}
-                className={`atk-text${r.effective > r.base ? ' up' : ' down'}`}
-                title={`${r.name} : ${r.effective} ATK (imprimé ${r.base})`}
-              >
-                {' '}
-                ⚔ {r.effective}
-              </span>
-            ))}
-          </div>
+          {!hideVitals && <CharacterVitals char={char} state={state} />}
           {visibleStatuses.length > 0 && (
             <div className="statuses">
               {visibleStatuses.map((s, i) => (
@@ -269,6 +317,22 @@ export function CharacterCard({
           {/* Repli : sans la liste résolue, au moins dire qu'il y a quelque chose. */}
           {!attachedObjects && char.attachedObjectInstanceIds.length > 0 && (
             <div className="attached-objects">{char.attachedObjectInstanceIds.length} objet(s) attaché(s)</div>
+          )}
+          {/* La carte entière est un bouton (fiche au clic) : sans cette coupure, chaque
+              clic sur « Attaque » ou « Passer » ouvrirait la fiche par-dessus le plateau
+              au moment même où l'action part. */}
+          {commands && (
+            <div
+              className="card-commands"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+              // L'aperçu de la carte s'ouvre au survol du cadre : il recouvrirait les
+              // boutons qu'on vient chercher. Entrer dans les commandes le referme (et
+              // annule celui qui était en attente).
+              onMouseEnter={hover.hide}
+            >
+              {commands}
+            </div>
           )}
         </>
       }

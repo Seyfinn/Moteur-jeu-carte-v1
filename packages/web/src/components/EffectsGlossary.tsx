@@ -121,49 +121,6 @@ const ENTRIES: GlossaryEntry[] = [
     text: `${EVASIVE_STATUS_CHANCE_PERCENT}% de chance d'esquiver, annulant totalement l'attaque ennemi.`,
   },
   {
-    id: 'extra-attack',
-    name: 'Attaque supplémentaire',
-    icon: '⇈',
-    tone: 'buff',
-    text:
-      "Le personnage peut attaquer une fois de plus ce tour au lieu de le terminer. " +
-      'La frappe supplémentaire inflige un pourcentage réduit des dégâts.',
-  },
-  {
-    id: 'linked',
-    name: 'Lié',
-    icon: '⛓',
-    tone: 'neutral',
-    text:
-      "Les deux personnages liés attaquent ensemble, subissent chaque instance de dégâts ensemble, " +
-      'et meurent ensemble. Seul celui des deux qui tient le poste actif peut utiliser ses abilities.',
-  },
-  {
-    id: 'borrowed-attack',
-    name: 'Attaque empruntée',
-    icon: '❖',
-    tone: 'neutral',
-    text:
-      "Le personnage gagne une attaque qui n'est pas sur sa carte. Tant que le prêt tient, " +
-      "c'est la seule qu'il puisse porter : ses propres attaques sont fermées.",
-  },
-  {
-    id: 'forced-attack',
-    name: 'Manipulé',
-    icon: '🎯',
-    tone: 'debuff',
-    text:
-      "Au début de son prochain tour, le personnage retourne son attaque contre un allié désigné " +
-      'de son propre banc, puis son tour se termine aussitôt.',
-  },
-  {
-    id: 'unhealable',
-    name: 'Marqué (Mahito)',
-    icon: '❖',
-    tone: 'debuff',
-    text: "Plus aucun soin n'a d'effet sur le personnage, définitivement.",
-  },
-  {
     id: 'evasion-locked',
     name: 'Ne peut plus esquiver',
     icon: '⊘',
