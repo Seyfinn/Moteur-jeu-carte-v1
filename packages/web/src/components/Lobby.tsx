@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   DRAW_MODE_ELIMINATIONS_TO_WIN,
   DRAW_MODE_STARTING_CHARACTERS,
@@ -6,11 +6,28 @@ import {
   RANDOM_POOL_SIZE,
   type DeckPoolEntry,
   type GameMode,
+  type RoomSummary,
 } from 'engine';
 import type { GameConnection } from '../net/useGameConnection';
+import { listOpenRooms } from '../api/rooms';
 import { deckIssue, deckToRoster, loadDecks, type Deck } from '../decks';
 import { DeckContentsPanel, type CardKind } from './DeckContentsPanel';
 import { LobbyBackground } from './LobbyBackground';
+
+const MODE_LABELS: Record<GameMode, string> = {
+  normal: 'Mode Normal',
+  random: 'Mode Aléatoire',
+  draw: 'Mode Pioche',
+};
+
+/** Rafraîchissement de la liste des salons : assez court pour qu'un salon créé à côté apparaisse. */
+const ROOMS_POLL_MS = 5000;
+
+function waitingSince(createdAt: number): string {
+  const seconds = Math.max(0, Math.round((Date.now() - createdAt) / 1000));
+  if (seconds < 60) return `${seconds} s`;
+  return `${Math.floor(seconds / 60)} min`;
+}
 
 export function Lobby({
   conn,
@@ -39,11 +56,38 @@ export function Lobby({
     [pool]
   );
 
+  const [rooms, setRooms] = useState<RoomSummary[]>([]);
+  const [roomsError, setRoomsError] = useState<string | null>(null);
+  /** Uniquement pour le tout premier chargement : un rafraîchissement ne doit pas vider la liste à l'écran. */
+  const [roomsLoading, setRoomsLoading] = useState(true);
+
   useEffect(() => {
     const fresh = loadDecks();
     setDecks(fresh);
     setSelectedDeckId((prev) => (prev && fresh.some((d) => d.id === prev) ? prev : (fresh[0]?.id ?? null)));
   }, []);
+
+  const refreshRooms = useCallback(async () => {
+    const result = await listOpenRooms();
+    setRoomsLoading(false);
+    if (!result.ok) {
+      setRoomsError(result.error ?? 'Erreur serveur');
+      return;
+    }
+    setRoomsError(null);
+    setRooms(result.rooms ?? []);
+  }, []);
+
+  // On ne sonde que depuis le lobby au repos : une fois dans un salon (attente, draft,
+  // partie), la liste n'est plus affichée et continuer à interroger le serveur ne
+  // servirait qu'à réveiller l'hébergeur pour rien.
+  const idle = conn.status === 'idle';
+  useEffect(() => {
+    if (!idle) return;
+    void refreshRooms();
+    const timer = setInterval(() => void refreshRooms(), ROOMS_POLL_MS);
+    return () => clearInterval(timer);
+  }, [idle, refreshRooms]);
 
   const selectedDeck = decks.find((d) => d.id === selectedDeckId) ?? null;
   const issue = selectedDeck ? deckIssue(selectedDeck) : null;
@@ -53,8 +97,17 @@ export function Lobby({
   const drawMode = mode === 'draw';
   // Ni le Mode Aléatoire ni le Mode Pioche ne jouent le deck sélectionné : inutile d'exiger
   // qu'il soit valide pour créer le salon.
-  const canPlay = randomMode || drawMode || (Boolean(selectedDeck) && issue === null);
+  const deckReady = Boolean(selectedDeck) && issue === null;
+  const canPlay = randomMode || drawMode || deckReady;
   const busy = conn.status === 'connecting' || conn.resuming;
+  /** Le deck n'est envoyé que s'il est jouable : le serveur refuse un roster incomplet, même
+   *  dans un mode où il l'ignorerait ensuite. */
+  const roster = deckReady && selectedDeck ? deckToRoster(selectedDeck) : undefined;
+  // Le sélecteur de mode ci-dessus ne vaut que pour une CRÉATION : un salon rejoint impose
+  // le sien. Seul un salon en Mode Normal exige donc un deck valide.
+  const canJoin = (roomMode: GameMode) => !busy && (roomMode !== 'normal' || deckReady);
+  // Son propre salon en attente n'est pas une invitation à rejoindre.
+  const openRooms = rooms.filter((room) => room.code !== conn.roomCode);
   const deckSize = selectedDeck
     ? selectedDeck.characterCardIds.length + selectedDeck.objectCardIds.length + selectedDeck.terrainCardIds.length
     : 0;
@@ -69,7 +122,7 @@ export function Lobby({
             <span className="lobby-brand-mark">⚔</span>
             <div className="lobby-brand-text">
               <h1>Jeu de Cartes</h1>
-              <p className="lobby-tagline">Créez un salon et partagez le code avec votre adversaire.</p>
+              <p className="lobby-tagline">Créez un salon, ou rejoignez-en un d'un clic dans la liste.</p>
             </div>
           </div>
 
@@ -158,13 +211,7 @@ export function Lobby({
                 type="button"
                 className="lobby-cta"
                 aria-label="Créer un salon"
-                onClick={() =>
-                  conn.createRoom(
-                    name || 'Joueur',
-                    selectedDeck ? deckToRoster(selectedDeck) : { characterCardIds: [], objectCardIds: [], terrainCardIds: [] },
-                    mode
-                  )
-                }
+                onClick={() => conn.createRoom(name || 'Joueur', roster, mode)}
                 disabled={busy || !canPlay}
               >
                 <span className="lobby-cta-label">Créer un salon</span>
@@ -183,6 +230,60 @@ export function Lobby({
                 <span>ou rejoindre</span>
               </div>
 
+              {/* Les salons ouverts, cliquables : le code à deux lettres reste dispo juste
+                  en dessous pour rejoindre un salon dont on a reçu le code ailleurs. */}
+              <div className="lobby-rooms">
+                <div className="lobby-rooms-head">
+                  <span>
+                    Salons ouverts{openRooms.length > 0 ? ` (${openRooms.length})` : ''}
+                  </span>
+                  <button type="button" className="lobby-rooms-refresh" onClick={() => void refreshRooms()}>
+                    Actualiser
+                  </button>
+                </div>
+
+                {roomsError ? (
+                  <p className="lobby-rooms-empty error">{roomsError}</p>
+                ) : openRooms.length === 0 ? (
+                  <p className="lobby-rooms-empty subtitle">
+                    {roomsLoading ? 'Recherche des salons...' : 'Aucun salon ouvert — créez-en un.'}
+                  </p>
+                ) : (
+                  <ul className="lobby-room-list">
+                    {openRooms.map((room) => (
+                      <li key={room.code}>
+                        <button
+                          type="button"
+                          className="lobby-room"
+                          onClick={() => conn.joinRoom(room.code, name || 'Joueur', roster)}
+                          disabled={!canJoin(room.mode)}
+                          aria-label={`Rejoindre le salon ${room.code} de ${room.hostName} (${MODE_LABELS[room.mode]})`}
+                          title={
+                            canJoin(room.mode)
+                              ? `Rejoindre le salon de ${room.hostName}`
+                              : 'Ce salon se joue avec votre deck : il en faut un valide.'
+                          }
+                        >
+                          <span className="lobby-room-code">{room.code}</span>
+                          <span className="lobby-room-info">
+                            <strong>{room.hostName}</strong>
+                            <span className="lobby-room-meta">
+                              {MODE_LABELS[room.mode]} · depuis {waitingSince(room.createdAt)}
+                            </span>
+                          </span>
+                          {/* Un chevron plutôt qu'un « Rejoindre » écrit : dans un panneau
+                              aussi étroit, le mot volait la place de la ligne de mode.
+                              L'intitulé complet reste porté par `aria-label`. */}
+                          <span className="lobby-room-go" aria-hidden="true">
+                            ›
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
               <div className="lobby-join">
                 <input
                   value={joinCode}
@@ -193,7 +294,7 @@ export function Lobby({
                 />
                 <button
                   type="button"
-                  onClick={() => selectedDeck && conn.joinRoom(joinCode, name || 'Joueur', deckToRoster(selectedDeck))}
+                  onClick={() => conn.joinRoom(joinCode, name || 'Joueur', roster)}
                   disabled={busy || joinCode.length < 2 || !canPlay}
                 >
                   Rejoindre

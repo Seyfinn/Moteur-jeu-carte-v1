@@ -29,11 +29,11 @@ packages/
 
 ### `server`
 
-Serveur `ws` + HTTP minimal, en mémoire (pas de base de données). Un salon = un code à 6 caractères + une instance de `Match`. Le serveur est la seule autorité : les clients envoient des intentions, validées par les mêmes requêtes que le moteur expose. La vue envoyée à chaque joueur masque les objets/terrains non joués de l'adversaire (section 1 des règles).
+Serveur `ws` + HTTP minimal, en mémoire (pas de base de données). Un salon = un code à 2 caractères + une instance de `Match` ; `GET /api/rooms` liste ceux qui attendent un adversaire, pour que le lobby les propose d'un clic. Le serveur est la seule autorité : les clients envoient des intentions, validées par les mêmes requêtes que le moteur expose. La vue envoyée à chaque joueur masque les objets/terrains non joués de l'adversaire (section 1 des règles).
 
 ### `web`
 
-Vite + React, interface fonctionnelle (pas de design final) : lobby (créer/rejoindre un salon), plateau (actif + banc des deux joueurs, terrain, cimetière, journal d'événements), barre d'actions contextuelle, et une modale de choix pour les décisions interactives des cartes (cible, ordre de résolution, oui/non).
+Vite + React, interface fonctionnelle (pas de design final) : lobby (créer un salon, rejoindre depuis la liste des salons ouverts ou par code), plateau (actif + banc des deux joueurs, terrain, cimetière, journal d'événements), barre d'actions contextuelle, et une modale de choix pour les décisions interactives des cartes (cible, ordre de résolution, oui/non).
 
 ## Lancer le projet
 

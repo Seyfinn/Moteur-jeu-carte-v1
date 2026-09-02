@@ -38,14 +38,28 @@ export type ProcRoll = {
  * de l'attaquant, secousse de la cible, secousse du plateau entier). Les seuils sont ici et
  * nulle part ailleurs -- la CSS ne lit que le palier.
  */
-export type ImpactTier = 'light' | 'medium' | 'heavy';
+export type ImpactTier = 'light' | 'heavy' | 'brutal' | 'devastating' | 'cataclysm';
 
-const MEDIUM_HIT_DAMAGE = 30;
-const HEAVY_HIT_DAMAGE = 70;
+/**
+ * Seuils de dégâts, du coup d'épingle au cataclysme. Ils vivent ici et nulle part ailleurs :
+ * la CSS ne connaît que le nom du palier, jamais un nombre de PV.
+ */
+const TIER_THRESHOLDS: Array<[number, ImpactTier]> = [
+  [150, 'cataclysm'],
+  [100, 'devastating'],
+  [70, 'brutal'],
+  [50, 'heavy'],
+];
+
+/** À partir de ce palier, c'est tout l'écran qui encaisse. */
+export const QUAKE_TIERS: ReadonlySet<ImpactTier> = new Set<ImpactTier>(['heavy', 'brutal', 'devastating', 'cataclysm']);
 
 function tierFor(amount: number, critical: boolean): ImpactTier {
-  if (critical || amount >= HEAVY_HIT_DAMAGE) return 'heavy';
-  return amount >= MEDIUM_HIT_DAMAGE ? 'medium' : 'light';
+  const found = TIER_THRESHOLDS.find(([min]) => amount >= min)?.[1];
+  if (found) return found;
+  // Un critique sous les 50 PV mérite quand même mieux qu'une pichenette, sans pour autant
+  // secouer l'écran comme un coup à 150.
+  return critical ? 'heavy' : 'light';
 }
 
 /** Rôle d'une carte dans un échange de coups : elle porte, ou elle encaisse. */
@@ -57,6 +71,9 @@ export type CharacterImpact = { id: number; role: 'attacker' | 'target'; tier: I
  * à la dernière position connue de sa vraie carte (cf. `cardRects.ts`).
  */
 export type KoFlight = { id: number; instanceId: string; cardId: string; ownerId: PlayerId };
+
+/** Secousse de la table entière : son palier décide de l'amplitude et de la durée. */
+export type BoardQuake = { id: number; tier: ImpactTier };
 
 export type TableEvent =
   | { kind: 'turn-transition'; id: number; endingPlayerId: PlayerId; endingName: string; startingPlayerId: PlayerId; startingName: string; turnNumber: number }
@@ -403,8 +420,9 @@ const PROC_ROLL_DURATION_MS = 1800;
 const SPOTLIGHT_DURATION_MS = 1700;
 /** Couvre le dash de l'attaquant (~260 ms) et la secousse de la cible, marge comprise. */
 const IMPACT_DURATION_MS = 700;
-/** Secousse du plateau sur un gros coup. Court exprès : au-delà, ça donne le mal de mer. */
-const BOARD_QUAKE_MS = 300;
+/** Secousse du plateau. Assez longue pour couvrir le plus lourd des paliers (cataclysme),
+ *  les paliers plus légers s'arrêtant d'eux-mêmes -- leur animation CSS est plus courte. */
+const BOARD_QUAKE_MS = 900;
 /** Tremblement de mort + désintégration + vol jusqu'au cimetière, bout à bout. */
 const KO_FLIGHT_DURATION_MS = 1500;
 
@@ -419,8 +437,8 @@ export function useGameEvents(state: GameState): {
   spotlights: CardSpotlight[];
   /** Une entrée par personnage en train de porter ou d'encaisser un coup. */
   impactsByCharacter: Map<string, CharacterImpact>;
-  /** Non nul pendant qu'un gros coup fait trembler la table entière. */
-  boardQuake: number | null;
+  /** Non nul pendant qu'un gros coup fait trembler la table entière, avec sa violence. */
+  boardQuake: BoardQuake | null;
   koFlights: KoFlight[];
 } {
   const [characterBadges, setCharacterBadges] = useState<Array<CharacterBadge & { characterInstanceId: string }>>([]);
@@ -428,7 +446,7 @@ export function useGameEvents(state: GameState): {
   const [procRolls, setProcRolls] = useState<ProcRoll[]>([]);
   const [spotlights, setSpotlights] = useState<CardSpotlight[]>([]);
   const [impacts, setImpacts] = useState<Array<CharacterImpact & { characterInstanceId: string }>>([]);
-  const [boardQuake, setBoardQuake] = useState<number | null>(null);
+  const [boardQuake, setBoardQuake] = useState<BoardQuake | null>(null);
   const [koFlights, setKoFlights] = useState<KoFlight[]>([]);
   const seqRef = useRef(0);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -446,7 +464,7 @@ export function useGameEvents(state: GameState): {
     const newSpotlights: CardSpotlight[] = [];
     const newImpacts: Array<CharacterImpact & { characterInstanceId: string }> = [];
     const newKoFlights: KoFlight[] = [];
-    let heaviestQuake = false;
+    let quakeTier: ImpactTier | null = null;
 
     // La main qui passe d'un camp à l'autre, pas le numéro de manche : un tour de jeu
     // couvre désormais l'action des deux joueurs, donc `turnNumber` ne bouge qu'une fois
@@ -490,7 +508,14 @@ export function useGameEvents(state: GameState): {
                 tier: classified.tier,
               });
             }
-            if (classified.tier === 'heavy') heaviestQuake = true;
+            // Le plus violent du lot l'emporte : deux coups simultanés ne doivent pas
+            // faire jouer la petite secousse par-dessus la grande.
+            if (QUAKE_TIERS.has(classified.tier)) {
+              const order: ImpactTier[] = ['light', 'heavy', 'brutal', 'devastating', 'cataclysm'];
+              if (!quakeTier || order.indexOf(classified.tier) > order.indexOf(quakeTier)) {
+                quakeTier = classified.tier;
+              }
+            }
           } else if (classified.anchor === 'ko-flight') {
             newKoFlights.push({ ...classified.flight, id: ++seqRef.current });
           } else {
@@ -533,13 +558,13 @@ export function useGameEvents(state: GameState): {
         );
       }
     }
-    if (heaviestQuake) {
-      const quakeId = ++seqRef.current;
-      setBoardQuake(quakeId);
+    if (quakeTier) {
+      const quake = { id: ++seqRef.current, tier: quakeTier };
+      setBoardQuake(quake);
       timersRef.current.push(
         // Comparaison sur l'id : une deuxième secousse arrivée entre-temps ne doit pas être
         // coupée par la minuterie de la première.
-        setTimeout(() => setBoardQuake((current) => (current === quakeId ? null : current)), BOARD_QUAKE_MS)
+        setTimeout(() => setBoardQuake((current) => (current?.id === quake.id ? null : current)), BOARD_QUAKE_MS)
       );
     }
     if (newKoFlights.length > 0) {

@@ -65,8 +65,13 @@ export interface GameConnection {
   choiceDeadline: number | null;
   /** True while an interrupted session is being reclaimed on page load. */
   resuming: boolean;
-  createRoom(playerName: string, roster: RosterConfig, mode?: GameMode): void;
-  joinRoom(roomCode: string, playerName: string, roster: RosterConfig): void;
+  /** `roster` optionnel, pour la même raison que `joinRoom` ci-dessous. */
+  createRoom(playerName: string, roster?: RosterConfig, mode?: GameMode): void;
+  /**
+   * `roster` est optionnel : en Mode Aléatoire/Pioche le deck n'est pas joué, et le
+   * serveur refuserait un roster incomplet envoyé pour rien.
+   */
+  joinRoom(roomCode: string, playerName: string, roster?: RosterConfig): void;
   /** Mode Aléatoire : la réserve tirée pour ce joueur, `null` hors phase de draft. */
   draftPool: DraftPool | null;
   /** Camps ayant déjà validé leur équipe -- pour afficher « en attente de l'adversaire ». */
@@ -244,14 +249,14 @@ export function useGameConnection(): GameConnection {
   }, []);
 
   const createRoom = useCallback(
-    (playerName: string, roster: RosterConfig, mode?: GameMode) => {
+    (playerName: string, roster?: RosterConfig, mode?: GameMode) => {
       ensureSocket(() => send({ type: 'create-room', playerName, roster, mode }));
     },
     [ensureSocket, send]
   );
 
   const joinRoom = useCallback(
-    (code: string, playerName: string, roster: RosterConfig) => {
+    (code: string, playerName: string, roster?: RosterConfig) => {
       ensureSocket(() => send({ type: 'join-room', roomCode: code, playerName, roster }));
     },
     [ensureSocket, send]

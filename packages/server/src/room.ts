@@ -10,6 +10,7 @@ import {
   type DraftPool,
   type GameMode,
   type PlayerId,
+  type RoomSummary,
   type RosterConfig,
   type ServerMessage,
 } from 'engine';
@@ -41,6 +42,8 @@ function send(socket: WebSocket, message: ServerMessage): void {
 
 export class Room {
   readonly code: string;
+  /** Création du salon -- affichée dans la liste des salons ouverts (« en attente depuis... »). */
+  readonly createdAt = Date.now();
   /** Wall-clock of the last time a socket was attached/detached -- used to reap abandoned rooms. */
   lastActivityAt = Date.now();
   private sockets: Partial<Record<PlayerId, WebSocket>> = {};
@@ -85,6 +88,31 @@ export class Room {
 
   get hasSeat(): boolean {
     return !this.sockets.p1 || !this.sockets.p2;
+  }
+
+  /**
+   * Salon proposé dans la liste publique : quelqu'un dedans, une place libre, et rien de
+   * commencé. Les deux exclusions comptent autant que la place libre :
+   * - un salon dont un joueur s'est déconnecté en pleine partie garde bien un siège vide,
+   *   mais ce siège appartient à celui qui l'a quitté (il a son jeton de reprise) ;
+   * - un salon abandonné est gardé dix minutes pour permettre une reconnexion, et sans
+   *   `isAbandoned` un salon annulé resterait tout ce temps dans la liste, à inviter à
+   *   rejoindre un hôte qui n'est plus là.
+   */
+  get isOpen(): boolean {
+    return this.hasSeat && !this.isAbandoned && !this.match && !this.draftPools.p1 && !this.draftPools.p2;
+  }
+
+  /** Ce que la liste des salons ouverts affiche. Aucun deck, aucun jeton : rien de secret. */
+  get summary(): RoomSummary {
+    return {
+      code: this.code,
+      // Le salon est ouvert, donc il n'a qu'un occupant -- mais lequel des deux sièges
+      // n'est pas garanti (l'hôte peut être parti et son adversaire rester seul).
+      hostName: this.playerNames.p1 ?? this.playerNames.p2 ?? 'Joueur',
+      mode: this.mode,
+      createdAt: this.createdAt,
+    };
   }
 
   addPlayer(socket: WebSocket, playerName: string, roster?: RosterConfig, mode?: GameMode): PlayerId {
