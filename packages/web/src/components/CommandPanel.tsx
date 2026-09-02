@@ -91,10 +91,15 @@ function RootButton({
 }
 
 /**
- * Panneau de commandes « façon Pokémon », posé directement sous le personnage actif :
- * une grille 2×2 (attaque / capacité / switch / passer) qui s'ouvre sur la liste
- * détaillée de la rubrique choisie. Les objets et les terrains ne sont plus ici -- ils se
- * jouent depuis la main en bas de l'écran.
+ * Panneau de commandes « façon Pokémon » : une grille 2×2 (attaque / capacité / switch /
+ * passer) qui s'ouvre sur la liste détaillée de la rubrique choisie. Les objets et les
+ * terrains ne sont plus ici -- ils se jouent depuis la main en bas de l'écran.
+ *
+ * Il n'est plus posé SOUS le personnage actif mais DEDANS : le plateau le passe en
+ * `commands` à la `CharacterCard` de son actif, qui le loge dans la colonne d'infos de la
+ * carte, sous les jauges de PV et de bouclier (cf. `.card-commands` dans la feuille de
+ * style). Le composant n'a donc plus de largeur ni de cadre à lui -- il remplit la place
+ * que la carte lui laisse.
  */
 export function CommandPanel({
   state,

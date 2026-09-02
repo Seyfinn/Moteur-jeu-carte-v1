@@ -35,16 +35,41 @@ export function handSlots(player: PlayerState): HandSlot[] {
  * les trois en variables CSS, jamais en `transform` / `zIndex` posés en ligne : un style en
  * ligne gagne sur toute règle de feuille de style, et la carte survolée ne pourrait plus se
  * redresser, grandir, ni passer devant ses voisines.
+ *
+ * L'arc est calculé sur la main ENTIÈRE (objets puis terrains), pas par groupe : les deux
+ * paquets sont séparés à l'écran mais dessinent une seule courbe continue, sinon la main
+ * ressemblait à deux petits éventails posés l'un à côté de l'autre.
  */
 function fanStyle(index: number, count: number): CSSProperties {
-  const offset = index - (count - 1) / 2;
-  const step = count > 1 ? Math.min(6, 52 / count) : 0;
-  const lift = offset * offset * (count > 8 ? 1 : 1.7);
+  const edge = (count - 1) / 2;
+  const offset = index - edge;
+  // Arc total visé ~38°, plafonné à 5° par carte pour qu'une main de trois cartes ne
+  // reste pas à plat maintenant que l'éventail a toute la largeur pour s'ouvrir.
+  const step = count > 1 ? Math.min(5, 38 / count) : 0;
+  // Retombée toujours NÉGATIVE : c'est le centre qui monte, les extrémités restant sur la
+  // ligne de base. Avec une parabole positive, ce sont les bords qui descendaient -- et
+  // sur une main de onze cartes ils passaient sous le bas de la fenêtre, qui se mettait
+  // alors à défiler.
+  const lift = (offset * offset - edge * edge) * (count > 8 ? 1.15 : 1.9);
   return {
     '--fan-rot': `${(offset * step).toFixed(2)}deg`,
     '--fan-lift': `${lift.toFixed(1)}px`,
     '--fan-z': index + 1,
   } as CSSProperties;
+}
+
+/**
+ * Chevauchement des cartes, décidé sur le nombre de cartes en main. L'éventail dispose
+ * maintenant de 85 % de la largeur de l'écran : une petite main s'y étale presque sans se
+ * recouvrir, et seules les grosses mains ont encore besoin de se serrer pour ne pas
+ * déborder du cadre.
+ */
+function fanSpread(count: number): CSSProperties {
+  // Fraction de la largeur d'une carte ajoutée (positif) ou reprise (négatif) entre deux
+  // voisines. Une main ordinaire tient très largement dans les 85 % : elle s'aère au lieu
+  // de se recouvrir, et seules les mains vraiment chargées se remettent à se serrer.
+  const overlap = count > 16 ? -0.22 : count > 12 ? -0.14 : count > 9 ? -0.06 : count > 6 ? 0.02 : 0.06;
+  return { '--fan-overlap': overlap } as CSSProperties;
 }
 
 /**
@@ -109,14 +134,24 @@ function PlayerHandCard({
 
   return (
     <div
-      className={`hand-card${disabledReason ? ' blocked' : ''}${recycle?.selected ? ' recycle-selected' : ''}`}
+      className={`hand-card hand-card-${slot.kind}${disabledReason ? ' blocked' : ''}${recycle?.selected ? ' recycle-selected' : ''}`}
       style={fanStyle(index, count)}
     >
+      {/* Un terrain se joue autrement qu'un objet (un seul par tour, il remplace celui en
+          place) : il s'annonce donc sur la carte, et pas seulement par la couleur du halo. */}
+      {slot.kind === 'terrain' && (
+        <span className="hand-type-badge" aria-hidden="true">
+          🗺️ Terrain
+        </span>
+      )}
       <CardFrame
         cardId={slot.cardId}
         kind={slot.kind}
         name={name}
         size="normal"
+        // Objets comme terrains restent en portrait : c'est le cadrage pour lequel les
+        // illustrations sont faites, et le paysage est réservé aux personnages en jeu.
+        orientation="portrait"
         // Au doigt, la carte reste en pleine couleur même injouable : le tap sert d'abord à
         // la lire, et le libellé « Indisponible » dit déjà qu'elle ne partira pas.
         dimmed={Boolean(disabledReason) && !coarse}
@@ -270,6 +305,31 @@ export function PlayerHand({
     return objectDenial ?? objectCardDenial(state, you, slot.id);
   };
 
+  // Une carte que `getPlayerView` a caviardée n'est jamais notre propre main : elle est
+  // écartée d'emblée pour que l'index de l'arc et le compte affiché portent sur les seules
+  // cartes réellement dessinées.
+  type PlayableSlot = Extract<HandSlot, { kind: 'object' | 'terrain' }>;
+  const visible = slots.filter((slot): slot is PlayableSlot => slot.kind !== 'hidden');
+  const objects = visible.filter((slot) => slot.kind === 'object');
+  const terrains = visible.filter((slot) => slot.kind === 'terrain');
+
+  const card = (slot: PlayableSlot, index: number) => (
+    <PlayerHandCard
+      key={slot.id}
+      slot={slot}
+      index={index}
+      count={visible.length}
+      disabledReason={denialFor(slot)}
+      recycle={
+        recycling && slot.kind === 'object'
+          ? { selected: selected.includes(slot.id), onToggle: () => toggle(slot.id) }
+          : null
+      }
+      onPlay={() => (slot.kind === 'object' ? onPlayObject(slot.id) : onPlayTerrain(slot.id))}
+      onBlocked={onBlocked}
+    />
+  );
+
   return (
     <div className="hand-dock">
       <RecyclerZone
@@ -284,26 +344,19 @@ export function PlayerHand({
         onSubmit={submit}
         onBlocked={onBlocked}
       />
-      <div className={`hand-fan${recycling ? ' recycling' : ''}`} role="group" aria-label="Votre main">
-        {slots.length === 0 && <span className="hand-strip-empty">Main vide</span>}
-        {slots.map((slot, i) =>
-          slot.kind === 'hidden' ? null : (
-            <PlayerHandCard
-              key={slot.id}
-              slot={slot}
-              index={i}
-              count={slots.length}
-              disabledReason={denialFor(slot)}
-              recycle={
-                recycling && slot.kind === 'object'
-                  ? { selected: selected.includes(slot.id), onToggle: () => toggle(slot.id) }
-                  : null
-              }
-              onPlay={() => (slot.kind === 'object' ? onPlayObject(slot.id) : onPlayTerrain(slot.id))}
-              onBlocked={onBlocked}
-            />
-          )
-        )}
+      <div
+        className={`hand-fan${recycling ? ' recycling' : ''}`}
+        style={fanSpread(visible.length)}
+        role="group"
+        aria-label="Votre main"
+      >
+        {visible.length === 0 && <span className="hand-strip-empty">Main vide</span>}
+        {objects.map((slot, i) => card(slot, i))}
+        {/* Les deux paquets ne se jouent pas pareil et n'ont pas le même quota par tour :
+            un intercalaire les sépare pour qu'on trouve un terrain sans lire les onze
+            cartes. Décoratif -- l'ordre du DOM porte déjà l'information. */}
+        {objects.length > 0 && terrains.length > 0 && <span className="hand-fan-split" aria-hidden="true" />}
+        {terrains.map((slot, i) => card(slot, objects.length + i))}
       </div>
     </div>
   );

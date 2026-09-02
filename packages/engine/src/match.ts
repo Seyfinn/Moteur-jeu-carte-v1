@@ -811,6 +811,9 @@ export class Match {
     const def = getCharacterCard(char.cardId);
     const ability = def.abilities.find((a) => a.id === abilityId)!;
     recordAbilityUse(char, abilityId);
+    // Noté avant l'exécution, pour que la capacité ne puisse pas empêcher son propre
+    // enregistrement en neutralisant celui qui la regarde (cf. PlayerState.lastAbilityUsed).
+    state.players[playerId].lastAbilityUsed = { characterInstanceId, abilityId };
     this.api.log(`${cardName(char.cardId)} utilise ${ability.name}`, { kind: 'use-ability', characterInstanceId, abilityId }, playerId);
     const ctx = this.api.buildEffectContext(characterInstanceId, playerId);
     await ability.execute(ctx);

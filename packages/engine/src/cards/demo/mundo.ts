@@ -30,15 +30,17 @@ export const mundo: CharacterCardDef = {
       name: 'Eveil',
       kind: 'active',
       description:
-        "Mundo gagne l'équivalent de ses HP manquants en HP max. Ensuite, il régénère instantanément la " +
-        'moitié de ses HP max. Utilisable une fois par partie.',
+        "Mundo gagne l'équivalent de ses HP manquants en HP max. Ensuite, il régénère instantanément " +
+        'tous ses HP. Utilisable une fois par partie.',
       usesPerGame: 1,
       async execute(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);
         const missing = self.damage;
+        // raiseMaxHP monte le plafond ET les PV actuels d'autant : l'écart au plafond ne bouge
+        // pas, Mundo est donc toujours à `missing` de dégâts après coup. Soigner ce reliquat
+        // (relu APRÈS la montée du plafond) le remet à fond sur le nouveau maximum.
         ctx.raiseMaxHP(self.instanceId, missing);
-        const healAmount = Math.round(self.currentMaxHP / 2);
-        ctx.heal(self.instanceId, healAmount);
+        ctx.heal(self.instanceId, ctx.getCharacter(self.instanceId).damage);
       },
     },
   ],

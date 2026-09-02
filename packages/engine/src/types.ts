@@ -393,6 +393,15 @@ export interface PlayerState {
   pendingRevives: PendingRevive[];
   /** Once true, getPlayerView (section 1) stops redacting the OPPONENT's unplayed object/terrain instances for this player -- e.g. Kirigiri's "Ultimate Détective". Never reset once set. */
   revealsOpponentUnplayedCards: boolean;
+  /**
+   * La dernière capacité **activée manuellement** par ce joueur, retenue par le moteur pour
+   * le "Spell Thief" de Zoé. Écrite dans `match.ts::handleUseAbility` AVANT l'exécution de la
+   * capacité, et pas par une passive sur `onAbilityUsed` : cet event part une fois l'effet
+   * résolu, donc une capacité qui stun ou silence Zoé au passage (le Menu Surprise de Soma)
+   * la rendait incapable de prendre note de ce qu'elle venait de subir -- et donc de le voler.
+   * Jamais remise à zéro : la mémoire tient toute la partie.
+   */
+  lastAbilityUsed?: { characterInstanceId: string; abilityId: string };
 }
 
 export type GamePhase = 'setup' | 'main' | 'ended';

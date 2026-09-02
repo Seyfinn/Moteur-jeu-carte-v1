@@ -878,7 +878,12 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   100 HP max qu'il a en plus de ses 400HP max de base. »* → modifier `getEffectiveATK`
   calculé sur `currentMaxHP`, donc il redescend si Mundo subit du valeur lock.
 - **Eveil** (active, 1×/partie) — *« Mundo gagne l'équivalent de ses HP manquants en HP max.
-  Ensuite, il régénère instantanément la moitié de ses HP max. »*
+  Ensuite, il régénère instantanément tous ses HP. »*
+  - Moteur : `raiseMaxHP(dégâts subis)` monte le plafond **et** les PV actuels d'autant (l'écart
+    au plafond ne bouge pas), donc Mundo est toujours amoché après coup ; le soin qui suit vise
+    le reliquat de dégâts relu **après** la montée, et le remet à fond sur son nouveau maximum.
+  - Combo direct avec Surcroissance : plus Mundo était bas, plus le plafond monte, donc plus son
+    attaque tape — et il repart à pleine vie sur ce plafond gonflé.
 
 ### Muzan — 270 HP
 
@@ -1113,12 +1118,23 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   Ultime pendant 1 tour. »*
 - **Portail Dimensionnel** (active, 2×/partie) — *« Switch gratuitement avec un personnage du
   banc allié de votre choix. »*
-- **Spell Thief (mémoire)** (passive, `onAbilityUsed`, banc) — mémorise la dernière ability
-  active adverse dans un statut caché.
 - **Spell Thief** (active) — *« Rejoue immédiatement la dernière capacité active utilisée par
   l'adversaire, mais lancée par Zoé. Rechargement : 3 tours. »*
+  - Moteur : la mémoire n'est **pas** une passive de Zoé. C'est le moteur qui retient, pour
+    chaque camp, la dernière capacité activée manuellement (`PlayerState.lastAbilityUsed`,
+    écrite dans `match.ts::handleUseAbility` **avant** l'exécution). Zoé la relit au moment
+    d'utiliser Spell Thief.
+  - Pourquoi avant l'exécution : la mémoire passait auparavant par une passive branchée sur
+    `onAbilityUsed`, event émis une fois l'effet **résolu**. Une capacité qui stun ou silence
+    Zoé en se résolvant (le Menu Surprise de Soma, dans ses deux branches) fermait donc la
+    passive juste à temps pour ne jamais être notée : elle était purement et simplement
+    involable. Le stun, lui, reste dû — il coûte à Zoé le tour qui suit, mais plus la mémoire.
+  - Seules les capacités **activées à la main** entrent dans la mémoire : les passives à
+    trigger ne passent pas par `handleUseAbility`. C'est ce qui limite Spell Thief aux
+    « actifs », sans code de filtrage.
   - Moteur : même réserve que Kakashi — une capacité adossée à un compteur propre à son
-    porteur d'origine rend moins. Le rechargement est un statut de cooldown, avec
+    porteur d'origine rend moins. Rien n'est volé si le personnage d'origine a changé de forme
+    depuis et ne porte plus la capacité. Le rechargement est un statut de cooldown, avec
     `ticksOnBench: true` comme toutes les recharges.
 
 ---

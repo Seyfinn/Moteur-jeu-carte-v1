@@ -912,17 +912,22 @@ input::placeholder {
   --card-hand-w: clamp(58px, 8.2vh, 92px);
   /* Le banc occupe toute la largeur du rail latéral : ce sont des cartes qu'on doit
      pouvoir lire (PV, statuts) sans ouvrir de fiche. */
-  --bench-card-w: clamp(140px, 19vh, 208px);
-  --bench-card-h: clamp(54px, 7.4vh, 84px);
+  /* Banc élargi de 20 %. La HAUTEUR, elle, baisse : la vignette ne porte plus les PV (le
+     bloc `.bench-vitals` les reprend sous elle), et cinq réservistes doivent tenir entre
+     le cimetière et la main sans passer sous la ligne de flottaison. */
+  --bench-card-w: clamp(168px, 22.8vh, 250px);
+  --bench-card-h: clamp(50px, 6.9vh, 78px);
   --gy-card-w: clamp(96px, 13vh, 132px);
   --card-pile-w: clamp(54px, 7.5vh, 82px);
   --card-opp-hand-w: clamp(34px, 4.5vh, 56px);
   /* Les deux actifs sont les pièces maîtresses du plateau : ils prennent nettement plus
      de place que tout le reste. Largeur bornée par la fenêtre (la colonne de la grille
      les rétrécit d'elle-même si les rails prennent trop de place), hauteur bornée par la
-     hauteur d'écran pour ne jamais pousser la main ou le banc hors du cadre. */
-  --active-card-w: clamp(320px, 30vw, 540px);
-  --active-card-h: clamp(150px, 26vh, 280px);
+     hauteur d'écran pour ne jamais pousser la main ou le banc hors du cadre.
+     Cotes relevées de 30 % : le panneau de commandes a quitté la rangée du dessous pour
+     la colonne d'infos de la carte, et cette place rendue va au face-à-face. */
+  --active-card-w: clamp(416px, 39vw, 702px);
+  --active-card-h: clamp(195px, 34vh, 364px);
   position: relative;
   /* Un écran large n'a aucune raison de laisser deux bandes noires sur les côtés pendant
      que les cartes se serrent au milieu. */
@@ -1175,7 +1180,9 @@ input::placeholder {
 
 /* Main du joueur, en éventail : les cartes se chevauchent et pivotent autour de leur
    bas ; celle qu'on survole se redresse, grandit et passe au premier plan. Le padding
-   du haut réserve la place que prend cet agrandissement. */
+   du haut réserve la place que prend cet agrandissement.
+   L'éventail court sur 85 % de la largeur de l'écran : c'est cette place qui permet aux
+   cartes de ne presque plus se recouvrir (cf. `--fan-overlap`, posé par `fanSpread`). */
 .hand-fan {
   position: relative;
   z-index: 4;
@@ -1183,6 +1190,8 @@ input::placeholder {
   display: flex;
   justify-content: center;
   align-items: flex-end;
+  max-width: 85vw;
+  margin-inline: auto;
   padding: clamp(12px, 2.4vh, 40px) 10px 0;
 }
 .hand-card {
@@ -1190,23 +1199,107 @@ input::placeholder {
      servait d'ancre et les trois pastilles s'empilaient dans le coin de l'éventail. */
   position: relative;
   flex: 0 0 auto;
-  /* Le chevauchement suit la taille de la carte, sinon un éventail réduit se recolle. */
-  margin: 0 calc(var(--card-hand-w) * -0.22);
+  /* Le chevauchement suit la taille de la carte, sinon un éventail réduit se recolle. Le
+     facteur, lui, suit le nombre de cartes : une main de cinq s'étale, une main de quinze
+     se serre pour rester dans les 85 %. */
+  margin: 0 calc(var(--card-hand-w) * var(--fan-overlap, -0.07));
   z-index: var(--fan-z, 1);
   transform-origin: bottom center;
   transform: rotate(var(--fan-rot, 0deg)) translateY(var(--fan-lift, 0px));
-  transition: transform 0.18s var(--ease);
+  transition:
+    transform 0.25s cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 0.25s cubic-bezier(0.25, 1, 0.5, 1),
+    filter 0.25s cubic-bezier(0.25, 1, 0.5, 1);
   will-change: transform;
 }
+/* Focus de survol : la carte se redresse, bondit et grossit assez pour être lue sans
+   ouvrir de fiche. `rotate(0deg)` est explicite -- sans lui la carte garderait l'angle de
+   l'éventail et resterait de travers en gros plan. */
 .hand-card:hover {
-  z-index: 40;
-  transform: translateY(-34px) scale(1.3);
+  z-index: 60;
+  transform: rotate(0deg) translateY(-100px) scale(1.4);
+}
+/* ... et le reste de la main s'efface derrière elle. `:has` cible le survol d'UNE carte,
+   là où `.hand-fan:hover` se serait déclenché dans les trous entre les cartes. */
+.hand-fan:has(.hand-card:hover) .hand-card:not(:hover) {
+  opacity: 0.45;
+  filter: blur(1px);
+}
+/* Intercalaire entre le paquet d'objets et celui de terrains. Il doit dépasser le
+   chevauchement de ses deux voisines, sinon elles se rejoindraient par-dessus. */
+.hand-fan-split {
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: clamp(16px, 2.6vw, 38px);
+  margin: 0 calc(var(--card-hand-w) * 0.1);
+  border-right: 1px dashed var(--border-soft);
+  opacity: 0.6;
+  pointer-events: none;
 }
 .hand-card .tcg-card {
   width: var(--card-hand-w);
 }
 .hand-card.blocked .tcg-card {
   cursor: not-allowed;
+}
+
+/* Indices de type : chaque famille a son halo, pour qu'on distingue un objet d'un terrain
+   du coin de l'œil, éventail fermé comme carte en gros plan. */
+.hand-card-object .tcg-card {
+  border-color: rgba(126, 176, 232, 0.5);
+}
+.hand-card-object:hover .tcg-card {
+  border-color: #8fd0ff;
+  box-shadow:
+    0 0 0 1px #8fd0ff,
+    0 0 26px -2px rgba(112, 190, 255, 0.85),
+    var(--shadow-md);
+}
+.hand-card-terrain .tcg-card {
+  border-color: rgba(79, 191, 149, 0.55);
+  box-shadow: 0 0 12px -4px rgba(79, 191, 149, 0.7);
+  animation: terrain-aura 2.6s ease-in-out infinite;
+}
+.hand-card-terrain:hover .tcg-card {
+  border-color: #5fe0ad;
+  animation: none;
+  box-shadow:
+    0 0 0 1px #5fe0ad,
+    0 0 30px -2px rgba(79, 224, 173, 0.9),
+    var(--shadow-md);
+}
+@keyframes terrain-aura {
+  0%,
+  100% {
+    box-shadow: 0 0 10px -5px rgba(79, 191, 149, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 20px -3px rgba(79, 224, 173, 0.85);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hand-card-terrain .tcg-card {
+    animation: none;
+  }
+}
+.hand-type-badge {
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 2;
+  padding: 1px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #062a20;
+  background: linear-gradient(180deg, #6fe6b6, #35a37b);
+  border: 1px solid #0d3d2e;
+  box-shadow: 0 0 10px -2px rgba(79, 224, 173, 0.9);
+  pointer-events: none;
 }
 .hand-card-hint {
   display: block;
@@ -1238,10 +1331,6 @@ input::placeholder {
   padding: 3px 5px 4px;
   gap: 2px;
 }
-.bench-card-wrap .hp-text {
-  font-size: 0.58rem;
-  white-space: nowrap;
-}
 .bench-card-wrap .status-badge {
   font-size: 0.54rem;
   padding: 0 3px;
@@ -1260,12 +1349,14 @@ input::placeholder {
 .battlefield {
   flex: 1 0 auto;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) auto;
-  grid-template-rows: auto auto auto;
+  /* Le panneau de commandes ayant rejoint la carte, la rangée du dessous n'a plus rien à
+     porter : deux rangées suffisent, et les deux plaques de nom coiffent chacune leur
+     actif au lieu de se faire face en diagonale. */
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
   grid-template-areas:
-    'railS plateS  .       railO'
-    'railS activeS activeO railO'
-    'railS lowerS  plateO  railO';
+    'railS plateS  vs plateO  railO'
+    'railS activeS vs activeO railO';
   align-content: center;
   column-gap: 14px;
   row-gap: 6px;
@@ -1283,16 +1374,51 @@ input::placeholder {
 .zone-active-self {
   grid-area: activeS;
 }
-.zone-lower-self {
-  grid-area: lowerS;
-  align-self: start;
-}
 .zone-active-opp {
   grid-area: activeO;
 }
 .zone-plate-opp {
   grid-area: plateO;
-  align-self: start;
+  align-self: end;
+}
+
+/* Ligne de front : une colonne à part entière au milieu de la grille, donc toujours
+   exactement entre les deux actifs sans mesurer quoi que ce soit. */
+.zone-vs {
+  grid-area: vs;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px;
+  pointer-events: none;
+}
+.vs-line {
+  flex: 1;
+  width: 2px;
+  min-height: 18px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, transparent, var(--border), transparent);
+}
+.vs-badge {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: clamp(34px, 4.4vh, 50px);
+  height: clamp(34px, 4.4vh, 50px);
+  border-radius: 50%;
+  font-size: clamp(0.72rem, 1.5vh, 1rem);
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0.04em;
+  color: #ffe3b0;
+  background: radial-gradient(circle at 50% 30%, #4a3a26, #1b1610);
+  border: 2px solid #a8823f;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 0 18px -4px rgba(214, 168, 84, 0.75),
+    inset 0 1px 0 rgba(255, 226, 170, 0.35);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
 /* Rails latéraux : cimetière et terrain, chacun de son côté de l'écran. */
@@ -1518,11 +1644,13 @@ input::placeholder {
   gap: 6px;
   padding: 8px 14px 10px;
 }
+/* Jauges franchement épaisses sur l'actif : à cette taille de carte, les 7 px du banc
+   n'étaient plus qu'un trait, alors que ce sont les deux chiffres qu'on lit en continu. */
 .active-slot .hp-bar {
-  height: 12px;
+  height: 16px;
 }
 .active-slot .shield-bar {
-  height: 7px;
+  height: 10px;
 }
 .active-slot .hp-text {
   font-size: clamp(0.78rem, 1.55vh, 1.1rem);
@@ -1531,8 +1659,18 @@ input::placeholder {
   font-size: clamp(0.62rem, 1.2vh, 0.84rem);
   padding: 2px 7px;
 }
+/* La colonne d'infos accueille désormais les commandes : l'illustration lui laisse de la
+   place plutôt que de tenir la moitié de la carte pour elle. */
 .active-slot .tcg-card-landscape .tcg-card-art {
   flex: 0 0 42%;
+}
+.active-slot.commanded .tcg-card-landscape .tcg-card-art {
+  flex: 0 0 36%;
+}
+/* Les commandes vivant dans la carte, la colonne d'infos empile de haut en bas (jauges
+   puis boutons) au lieu de centrer trois lignes dans le vide. */
+.active-slot.commanded .tcg-card-landscape .tcg-card-body {
+  justify-content: flex-start;
 }
 .active-slot.self {
   justify-content: flex-end;
@@ -1656,6 +1794,55 @@ input::placeholder {
 .bench-card-wrap {
   position: relative;
 }
+/* Jauges du banc, sorties du bandeau d'infos et posées sous la vignette : barre épaisse,
+   chiffre lisible, un peu d'air autour. Le bloc prolonge visuellement la carte (mêmes
+   bords, pas de bordure du haut) pour qu'on lise « une carte », pas « deux boîtes ». */
+.bench-vitals {
+  /* Jauge à gauche, chiffre à droite, sur UNE ligne : empilés, les cinq blocs de réserve
+     poussaient la colonne sous la main du joueur. */
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: var(--bench-card-w);
+  max-width: 100%;
+  padding: 5px 9px 6px;
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  background: linear-gradient(180deg, var(--panel), var(--panel-alt));
+}
+.bench-vitals .hp-gauges {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+.bench-vitals .hp-bar {
+  height: 11px;
+}
+.bench-vitals .shield-bar {
+  height: 6px;
+  margin-top: 0;
+}
+.bench-vitals .hp-text {
+  flex: 0 0 auto;
+  font-size: clamp(0.66rem, 1.16vh, 0.82rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  white-space: nowrap;
+}
+/* La carte perd son arrondi bas : c'est le bloc de jauges qui le porte désormais. */
+.bench-card-wrap .tcg-card {
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+/* Un personnage de réserve mis KO : nettement éteint, mais toujours lisible -- il peut
+   encore être ranimé, et on doit pouvoir dire qui gît là. */
+.bench-card-wrap .tcg-card.dimmed {
+  opacity: 1;
+  filter: grayscale(0.8) opacity(0.5);
+}
 /* Une carte de banc en paysage est très basse : nom et PV doivent tenir sur une ligne
    chacun, sinon la colonne enfle et pousse tout le rail hors de l'écran. */
 .bench-column .tcg-card-landscape .tcg-card-art {
@@ -1668,12 +1855,6 @@ input::placeholder {
 .bench-column .tcg-card-landscape .tcg-card-body {
   gap: 3px;
   padding: 2px 7px 4px;
-}
-.bench-column .hp-bar {
-  height: 6px;
-}
-.bench-column .hp-text {
-  font-size: clamp(0.58rem, 1.02vh, 0.76rem);
 }
 .bench-column .statuses {
   gap: 3px;
@@ -1982,6 +2163,7 @@ input::placeholder {
   min-height: var(--landscape-h, 132px);
 }
 .tcg-card-landscape .tcg-card-art {
+  position: relative;
   flex: 0 0 38%;
   /* L'illustration ne pilote plus la hauteur : elle s'étire sur celle de la colonne
      d'infos, sinon le ratio 3/4 rendrait la carte aussi haute qu'en portrait. */
@@ -1989,8 +2171,13 @@ input::placeholder {
   border-right: 1px solid var(--border);
 }
 /* Les visuels sont des portraits : recadrés dans une boîte presque carrée, un cadrage
-   centré coupe les visages. */
+   centré coupe les visages.
+   Sortie du flux, l'image ne peut plus imposer sa hauteur naturelle : `height: 100%` dans
+   une boîte de hauteur indéterminée retombait sur `auto`, et une vignette de banc de 59 px
+   se retrouvait à 86 px -- assez pour que le cinquième réserviste passe sous la main. */
 .tcg-card-landscape .tcg-card-art img {
+  position: absolute;
+  inset: 0;
   object-position: 50% 28%;
 }
 .tcg-card-landscape .tcg-card-lane {
@@ -2517,6 +2704,12 @@ input::placeholder {
   border-color: #ffd23c;
 }
 
+/* Groupe barre de PV + barre de bouclier. Transparent par défaut (`contents`) : partout
+   sauf au banc, les deux jauges sont des enfants directs du bandeau d'infos, exactement
+   comme avant que ce groupe n'existe. */
+.hp-gauges {
+  display: contents;
+}
 .hp-bar {
   height: 7px;
   background: #10141a;
@@ -2524,17 +2717,24 @@ input::placeholder {
   overflow: hidden;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
 }
+/* `--hp-hue` est posée sur la barre par CharacterCard : 120 (vert) à pleine vie, 0
+   (rouge) à zéro, en continu. Les classes `mid` / `low` ne portent plus la couleur --
+   seulement l'alerte qui va avec le seuil. Repli à 120 pour les surfaces qui dessinent
+   une barre sans passer la variable. */
 .hp-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--ok), #7fd39c);
-  transition: width 0.25s var(--ease), background 0.25s var(--ease);
-}
-.hp-bar-fill.mid {
-  background: linear-gradient(90deg, #c99a3a, var(--warn));
+  background: linear-gradient(
+    180deg,
+    hsl(var(--hp-hue, 120) 72% 52%),
+    hsl(var(--hp-hue, 120) 78% 34%)
+  );
+  box-shadow: inset 0 1px 0 hsl(var(--hp-hue, 120) 90% 72% / 0.55);
+  transition: width 0.25s var(--ease), background 0.25s var(--ease), box-shadow 0.25s var(--ease);
 }
 .hp-bar-fill.low {
-  background: linear-gradient(90deg, #b3363f, #ff6b6b);
-  box-shadow: 0 0 6px rgba(255, 107, 107, 0.5);
+  box-shadow:
+    inset 0 1px 0 hsl(var(--hp-hue, 0) 90% 72% / 0.55),
+    0 0 8px hsl(var(--hp-hue, 0) 90% 55% / 0.65);
 }
 /* Deuxième jauge, sous celle des PV : les points de bouclier, dans une couleur qui ne
    peut pas être confondue avec de la vie -- c'est ce qui sera mangé en premier. */
@@ -2546,11 +2746,38 @@ input::placeholder {
   overflow: hidden;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
 }
+/* Bouclier en place : contour métallique et halo néon, pour qu'on voie du premier coup
+   d'œil qu'il y a une réserve à manger avant les PV. */
+.shield-bar.active {
+  border: 1px solid rgba(154, 220, 255, 0.55);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.5),
+    0 0 10px -1px rgba(127, 199, 242, 0.7);
+  animation: shield-pulse 2.2s ease-in-out infinite;
+}
 .shield-bar-fill {
   height: 100%;
   background: linear-gradient(90deg, #4a9fd4, #9adcff);
   box-shadow: 0 0 6px rgba(127, 199, 242, 0.55);
   transition: width 0.25s var(--ease);
+}
+@keyframes shield-pulse {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 1px 2px rgba(0, 0, 0, 0.5),
+      0 0 8px -2px rgba(127, 199, 242, 0.55);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 2px rgba(0, 0, 0, 0.5),
+      0 0 16px 0 rgba(154, 220, 255, 0.9);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shield-bar.active {
+    animation: none;
+  }
 }
 .hp-text {
   font-size: 0.68rem;
@@ -2560,6 +2787,7 @@ input::placeholder {
 .shield-text {
   color: #7fc7f2;
   font-weight: 600;
+  text-shadow: 0 0 8px rgba(127, 199, 242, 0.75);
 }
 /* ATK du moment d'une attaque à dégâts évolutifs (Guts, Hulk, Mundo) ou simplement
    buffée/réduite. Affiché seulement quand il diffère de la valeur imprimée : une carte
@@ -2751,18 +2979,30 @@ input::placeholder {
 }
 
 /* ==========================================================================
-   Panneau de commandes « façon Pokémon », posé sous le personnage actif du joueur.
-   Les objets et les terrains n'y sont plus : ils se jouent depuis la main, en bas.
+   Panneau de commandes « façon Pokémon ». Il ne vit plus dans une grille posée SOUS le
+   personnage actif : il est logé dans la colonne d'infos de la carte elle-même
+   (`.card-commands`, cf. CharacterCard), sous les jauges de PV et de bouclier. Les objets
+   et les terrains n'y sont pas : ils se jouent depuis la main, en bas.
    ========================================================================== */
 
+/* Le bloc pousse les commandes en bas de la colonne d'infos, quel que soit le nombre de
+   statuts affichés au-dessus -- sinon les boutons remontaient et redescendaient à chaque
+   brûlure posée ou dissipée. */
+.card-commands {
+  margin-top: auto;
+  padding-top: 6px;
+  cursor: default;
+}
 .cmd-panel {
-  width: min(var(--active-card-w), 100%);
-  margin-left: auto;
-  background: linear-gradient(180deg, var(--panel-raised), var(--panel));
+  width: 100%;
+}
+/* Rubrique ouverte : elle prend la place des quatre boutons dans la carte, donc elle se
+   détache du fond pour qu'on voie qu'on est « entré » dans une liste. */
+.cmd-panel-open {
+  background: rgba(0, 0, 0, 0.28);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 8px;
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-sm);
+  padding: 6px;
 }
 .cmd-panel-attack {
   border-color: #d0606a;
@@ -2773,14 +3013,15 @@ input::placeholder {
 .cmd-panel-switch {
   border-color: #4fbf95;
 }
-/* Même encombrement pendant le tour adverse : sans ça le plateau sautait à chaque
-   changement de tour. */
+/* Même encombrement pendant le tour adverse : sans ça la carte active changeait de
+   hauteur à chaque changement de tour. */
 .cmd-panel-waiting {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: clamp(60px, 11vh, 84px);
-  border-style: dashed;
+  min-height: clamp(52px, 9vh, 76px);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
 }
 .cmd-waiting-label {
   color: var(--text-dim);
@@ -2792,45 +3033,87 @@ input::placeholder {
 .cmd-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 6px;
 }
+/* La colonne d'infos de la carte est étroite : sans `min-width: 0`, un élément de grille
+   refuse de descendre sous la largeur de son propre texte et les quatre boutons
+   débordaient du cadre au lieu de se contenter de leur moitié. */
+.cmd-grid > * {
+  min-width: 0;
+}
+/* Boutons « façon console » : coins biseautés (le biseau est une découpe, donc le liseré
+   est un box-shadow interne et non une bordure -- une bordure serait coupée en diagonale),
+   arête claire en haut, ombre portée en bas, et enfoncement de 2 px au clic.
+   Le halo de survol passe par `drop-shadow` : un `box-shadow` externe serait rogné par le
+   `clip-path`, donc invisible. */
 .cmd-button {
+  position: relative;
+  /* Pastille icône-au-dessus-du-libellé plutôt que ligne icône-puis-texte : la colonne
+     d'infos d'une carte fait la moitié de la largeur de l'ancien panneau, et « Capacité »
+     posé à côté de son icône s'y coupait en « C… ». */
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: clamp(7px, 1.3vh, 10px) 11px;
-  text-align: left;
-  font-size: 0.88rem;
+  justify-content: center;
+  gap: 1px;
+  padding: clamp(6px, 1.1vh, 9px) 6px;
+  text-align: center;
+  font-size: clamp(0.68rem, 1.25vh, 0.84rem);
   font-weight: 700;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--cmd-border, var(--border));
+  letter-spacing: 0.02em;
+  border: none;
+  border-radius: 0;
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
   background: var(--cmd-bg, var(--panel-alt));
   color: var(--cmd-fg, var(--text));
+  box-shadow:
+    inset 0 0 0 1px var(--cmd-border, var(--border)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.34);
+  transition:
+    transform 0.1s var(--ease),
+    filter 0.18s var(--ease),
+    box-shadow 0.18s var(--ease);
 }
 /* `background` est redéclaré : la règle générique `button:hover` repeindrait le bouton
    en gris et effacerait le code couleur de la rubrique. */
 .cmd-button:hover:not(:disabled) {
   background: var(--cmd-bg, var(--panel-raised));
-  border-color: var(--cmd-border, var(--accent));
-  filter: brightness(1.12);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  filter: brightness(1.15) drop-shadow(0 0 9px var(--cmd-glow, var(--accent-glow)));
+  transform: translateY(-1px);
+}
+.cmd-button:active:not(:disabled) {
+  transform: translateY(2px);
+  filter: brightness(0.9);
+  box-shadow:
+    inset 0 0 0 1px var(--cmd-border, var(--border)),
+    inset 0 3px 7px rgba(0, 0, 0, 0.55);
+}
+.cmd-button:disabled {
+  cursor: not-allowed;
 }
 .cmd-button-icon {
-  font-size: 1.02rem;
+  font-size: clamp(0.95rem, 1.8vh, 1.25rem);
+  line-height: 1.1;
 }
 .cmd-button-label {
-  flex: 1;
-  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Le compte d'options part dans le coin : en ligne, il volait au libellé la largeur qui
+   lui manquait déjà. */
 .cmd-button-count {
-  padding: 1px 6px;
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  min-width: 15px;
+  padding: 0 4px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.3);
-  font-size: 0.68rem;
+  background: rgba(0, 0, 0, 0.42);
+  font-size: 0.6rem;
+  line-height: 1.5;
   font-variant-numeric: tabular-nums;
 }
 /* Rubrique vide ou entièrement bloquée : le bouton reste lisible, mais il n'attire plus. */
@@ -2841,21 +3124,25 @@ input::placeholder {
   --cmd-bg: linear-gradient(180deg, #b5434c, #8e2f37);
   --cmd-border: #d0606a;
   --cmd-fg: #ffe9ea;
+  --cmd-glow: rgba(208, 96, 106, 0.85);
 }
 .cmd-ability {
   --cmd-bg: linear-gradient(180deg, #6a4bb5, #4a3187);
   --cmd-border: #9b7ce0;
   --cmd-fg: #ece4ff;
+  --cmd-glow: rgba(155, 124, 224, 0.85);
 }
 .cmd-switch {
   --cmd-bg: linear-gradient(180deg, #2f7d63, #21604a);
   --cmd-border: #4fbf95;
   --cmd-fg: #dffaef;
+  --cmd-glow: rgba(79, 191, 149, 0.85);
 }
 .cmd-pass {
   --cmd-bg: linear-gradient(180deg, #4a5262, #363d4a);
   --cmd-border: #69738a;
   --cmd-fg: #dfe4ee;
+  --cmd-glow: rgba(105, 115, 138, 0.85);
 }
 .cmd-sub-head {
   display: flex;
@@ -2875,11 +3162,13 @@ input::placeholder {
   letter-spacing: 0.08em;
   color: var(--text-dim);
 }
+/* La liste vit maintenant dans la carte, qui est en `overflow: hidden` : sans plafond
+   propre elle serait rognée au lieu de défiler. */
 .cmd-options {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 216px;
+  max-height: clamp(96px, 19vh, 216px);
   overflow-y: auto;
 }
 .cmd-option {
@@ -3920,21 +4209,19 @@ textarea {
 @media (max-width: 980px) {
   .battlefield {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
     grid-template-areas:
       'plateO'
-      'benchO'
       'activeO'
       'railO'
+      'vs'
       'railS'
       'activeS'
-      'lowerS'
       'plateS';
     row-gap: 6px;
   }
   .zone-plate-self,
-  .zone-plate-opp,
-  .zone-lower-self,
-  .zone-bench-opp {
+  .zone-plate-opp {
     align-self: auto;
   }
   .rail-self,
@@ -3945,9 +4232,19 @@ textarea {
   .active-slot.opponent {
     justify-content: center;
   }
-  .cmd-panel {
-    margin-left: auto;
-    margin-right: auto;
+  /* Empilé, le « versus » n'est plus une colonne mais la ligne de partage horizontale
+     entre les deux moitiés du plateau. */
+  .zone-vs {
+    flex-direction: row;
+    gap: 10px;
+    padding: 2px 0;
+  }
+  .vs-line {
+    flex: 1;
+    width: auto;
+    height: 2px;
+    min-height: 0;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
   }
 }
 
@@ -4002,13 +4299,13 @@ textarea {
      proportions qu'en grand écran, l'actif devant rester la pièce maîtresse. */
   .board {
     --card-hand-w: 60px;
-    --bench-card-w: 152px;
-    --bench-card-h: 58px;
+    --bench-card-w: 182px;
+    --bench-card-h: 54px;
     --gy-card-w: 104px;
     --card-pile-w: 58px;
     --card-opp-hand-w: 38px;
-    --active-card-w: min(94vw, 340px);
-    --active-card-h: 136px;
+    --active-card-w: min(94vw, 442px);
+    --active-card-h: 177px;
   }
   .tcg-card-landscape .tcg-card-name-banner {
     font-size: 0.82rem;
@@ -4037,15 +4334,13 @@ textarea {
   .recycler-actions {
     width: auto;
   }
-  .cmd-panel {
-    width: 100%;
-  }
   .cmd-button {
-    padding: 9px;
-    font-size: 0.8rem;
+    padding: 8px;
+    font-size: 0.76rem;
+    gap: 5px;
   }
   .cmd-options {
-    max-height: 40dvh;
+    max-height: 30dvh;
   }
   .cmd-option-detail.blocked {
     max-width: 45vw;
