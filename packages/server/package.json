@@ -10,6 +10,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.114.0",
     "engine": "*",
     "ws": "^8.18.0"
   },

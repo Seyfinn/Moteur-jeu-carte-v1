@@ -12,6 +12,7 @@ import {
 } from './DeckContentsPanel';
 import { createEmptyDeck, decodeDeckCode, deckToRoster, encodeDeckCode, loadDecks, saveDecks, type Deck } from '../decks';
 import { usePointerCoarse } from '../hooks/usePointerCoarse';
+import { getCloudUserName, loadDecksFromCloud, saveDeckToCloud, setCloudUserName } from '../api/cloudDecks';
 
 type SortValue = 'hp-desc' | 'hp-asc' | 'name-asc' | 'name-desc' | 'duration-desc' | 'duration-asc';
 
@@ -442,6 +443,98 @@ function DeckShareBox({ code }: { code: string }) {
   );
 }
 
+/**
+ * Barre de sauvegarde cloud : un pseudo (persisté en local, sert d'identifiant côté
+ * Supabase -- pas un vrai compte) et un bouton pour rapatrier les decks sauvegardés
+ * sous ce pseudo depuis n'importe quel appareil.
+ */
+function CloudDeckBar({ onImportDecks }: { onImportDecks: (decks: Deck[]) => void }) {
+  const [userName, setUserName] = useState(() => getCloudUserName());
+  const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [error, setError] = useState<string | null>(null);
+
+  function commitUserName(value: string) {
+    setUserName(value);
+    setCloudUserName(value);
+  }
+
+  async function handleLoad() {
+    if (!userName.trim()) return;
+    setStatus('loading');
+    setError(null);
+    const result = await loadDecksFromCloud(userName.trim());
+    if (!result.ok) {
+      setStatus('error');
+      setError(result.error ?? 'Erreur inconnue');
+      return;
+    }
+    setStatus('idle');
+    const decks: Deck[] = (result.decks ?? []).map((d) => ({
+      id: `deck-cloud-${d.deckName}-${Date.now()}`,
+      name: d.deckName,
+      ...d.roster,
+    }));
+    onImportDecks(decks);
+  }
+
+  return (
+    <div className="deck-cloud-bar">
+      <label className="field">
+        Pseudo (pour sauvegarder/charger vos decks en ligne)
+        <input
+          value={userName}
+          onChange={(e) => commitUserName(e.target.value)}
+          placeholder="Votre pseudo"
+        />
+      </label>
+      <button onClick={handleLoad} disabled={!userName.trim() || status === 'loading'}>
+        {status === 'loading' ? 'Chargement...' : '☁ Charger mes decks en ligne'}
+      </button>
+      {error && <p className="error">{error}</p>}
+    </div>
+  );
+}
+
+function SaveToCloudButton({ deck }: { deck: Deck }) {
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'no-username'>('idle');
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    const userName = getCloudUserName().trim();
+    if (!userName) {
+      setStatus('no-username');
+      return;
+    }
+    setStatus('saving');
+    setError(null);
+    const result = await saveDeckToCloud(userName, deck.name || '(sans nom)', deckToRoster(deck));
+    if (!result.ok) {
+      setStatus('error');
+      setError(result.error ?? 'Erreur inconnue');
+      return;
+    }
+    setStatus('saved');
+    setTimeout(() => setStatus('idle'), 2000);
+  }
+
+  const labels: Record<typeof status, string> = {
+    idle: '☁ Sauvegarder en ligne',
+    saving: 'Sauvegarde...',
+    saved: 'Sauvegardé !',
+    error: 'Échec de la sauvegarde',
+    'no-username': 'Renseignez un pseudo d’abord',
+  };
+
+  return (
+    <span className="deck-cloud-save">
+      <button onClick={handleSave} disabled={status === 'saving'} title="Sauvegarde ce deck en ligne sous votre pseudo">
+        {labels[status]}
+      </button>
+      {status === 'error' && error && <span className="deck-cloud-save-error">{error}</span>}
+    </span>
+  );
+}
+
 export function DeckBuilder({
   onBack,
   initialView = 'list',
@@ -550,6 +643,8 @@ export function DeckBuilder({
         </button>
       </div>
 
+      <CloudDeckBar onImportDecks={(imported) => persist([...decks, ...imported])} />
+
       <button className="primary" onClick={() => openEditor(createEmptyDeck())}>
         + Nouveau deck
       </button>
@@ -565,6 +660,7 @@ export function DeckBuilder({
                 </span>
               </div>
               <div className="deck-list-actions">
+                <SaveToCloudButton deck={deck} />
                 <button onClick={() => setSharingId((id) => (id === deck.id ? null : deck.id))}>Partager</button>
                 <button onClick={() => openEditor({ ...deck })}>Modifier</button>
                 <button onClick={() => removeDeck(deck.id)}>Supprimer</button>
