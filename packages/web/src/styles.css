@@ -1035,11 +1035,11 @@ input::placeholder {
   --card-hand-w: clamp(56px, 4.4vw, 94px);
   /* Le banc occupe toute la largeur du rail latéral : ce sont des cartes qu'on doit
      pouvoir lire (PV, statuts) sans ouvrir de fiche. */
-  /* Banc élargi de 20 %. La HAUTEUR, elle, baisse : la vignette ne porte plus les PV (le
-     bloc `.bench-vitals` les reprend sous elle), et cinq réservistes doivent tenir entre
-     le cimetière et la main sans passer sous la ligne de flottaison. */
-  --bench-card-w: clamp(170px, 14vw, 340px);
-  --bench-card-h: clamp(66px, min(6.4vw, 8.4vh), 150px);
+  /* Banc au format paysage assumé : nettement plus large que haut. Les PV vivent dans la
+     colonne de droite de la carte, donc une entrée ne coûte que la hauteur de la vignette
+     -- c'est ce qui permet de la doubler sans que cinq réservistes ne débordent du rail. */
+  --bench-card-w: clamp(196px, 15.6vw, 340px);
+  --bench-card-h: clamp(90px, min(7.2vw, 11.6vh), 156px);
   --gy-card-w: clamp(96px, 13vh, 132px);
   --card-pile-w: clamp(54px, 7.5vh, 82px);
   /* Le terrain a quitté le rail pour la ligne centrale : il y a la place d'en montrer
@@ -1058,6 +1058,9 @@ input::placeholder {
      décaler d'exactement autant pour rester aligné sur la CARTE et non sur l'ensemble
      carte + colonne. */
   --cmd-col-w: clamp(52px, 3.9vw, 72px);
+  /* Plancher des rails : la largeur en dessous de laquelle une carte de banc couchée
+     cesse d'être lisible. */
+  --rail-min: clamp(210px, 17vw, 360px);
   position: relative;
   /* Le combat tient dans l'écran, un point c'est tout : pas de largeur maximale (elle
      laissait deux bandes noires sur les côtés) et pas de débordement (la molette ne doit
@@ -1723,7 +1726,7 @@ input::placeholder {
      actif au lieu de se faire face en diagonale.
      La ligne centrale se lit en miroir de part et d'autre du « VS » :
      [terrain joueur] [actif joueur] VS [actif adverse] [terrain adverse]. */
-  grid-template-columns: minmax(0, 1fr) auto min-content auto min-content auto minmax(0, 1fr);
+  grid-template-columns: minmax(var(--rail-min), 1fr) auto min-content auto min-content auto minmax(var(--rail-min), 1fr);
   grid-template-rows: auto;
   grid-template-areas: 'railS terrS activeS vs activeO terrO railO';
   align-content: center;
@@ -2355,60 +2358,57 @@ input::placeholder {
 .bench-card-wrap {
   position: relative;
 }
-/* Jauges du banc, sorties du bandeau d'infos et posées sous la vignette : barre épaisse,
-   chiffre lisible, un peu d'air autour. Le bloc prolonge visuellement la carte (mêmes
-   bords, pas de bordure du haut) pour qu'on lise « une carte », pas « deux boîtes ». */
-.bench-vitals {
-  /* Jauge à gauche, chiffre à droite, sur UNE ligne : empilés, les cinq blocs de réserve
-     poussaient la colonne sous la main du joueur. */
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: var(--bench-card-w);
-  max-width: 100%;
-  margin-top: 4px;
-  padding: 5px 9px 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: linear-gradient(180deg, var(--panel), var(--panel-alt));
-}
-.bench-vitals .hp-gauges {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  flex: 1;
-  min-width: 0;
-}
-.bench-vitals .hp-bar {
-  height: 15px;
-}
-.bench-vitals .shield-bar {
-  height: 6px;
-  margin-top: 0;
-}
-.bench-vitals .hp-text {
-  flex: 0 0 auto;
-  font-size: clamp(0.72rem, 1.3vh, 0.92rem);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--text);
-  white-space: nowrap;
-}
-
 /* Un personnage de réserve mis KO : nettement éteint, mais toujours lisible -- il peut
    encore être ranimé, et on doit pouvoir dire qui gît là. */
 .bench-card-wrap .tcg-card.dimmed {
   opacity: 1;
   filter: grayscale(0.8) opacity(0.5);
 }
-/* Couchée et grande, la carte de banc peut enfin donner de la place à son illustration :
-   c'est elle qui la rend reconnaissable d'un coup d'oeil. */
+/* Couchée et grande, la carte de banc donne à son illustration la moitié gauche du cadre :
+   c'est elle qui la rend reconnaissable d'un coup d'oeil. Le nom et les PV occupent la
+   colonne de droite. */
 .bench-column .tcg-card-landscape .tcg-card-art {
-  flex: 0 0 42%;
+  flex: 0 0 44%;
+}
+/* Hauteur FIXE, pas un plancher : c'est elle qui garantit que cinq réservistes tiennent
+   dans le rail. Sans ça, un personnage à trois statuts allongeait sa carte et poussait ses
+   voisins hors de l'écran. */
+.bench-column .tcg-card-landscape {
+  height: var(--bench-card-h);
+  min-height: 0;
+}
+.bench-column .tcg-card-landscape .tcg-card-lane {
+  justify-content: center;
+  min-height: 0;
+}
+.bench-column .tcg-card-landscape .tcg-card-body {
+  flex: 0 0 auto;
+  gap: 4px;
+  padding: 3px 9px 5px;
+}
+/* Jauge de PV et chiffre nettement lisibles, maintenant qu'ils ont la place. */
+.bench-column .hp-bar {
+  height: 12px;
+}
+.bench-column .shield-bar {
+  height: 7px;
+}
+.bench-column .hp-text {
+  font-size: clamp(0.7rem, 1.25vh, 0.9rem);
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+/* Les statuts passent en pastilles serrées : à cette hauteur ils ne doivent jamais
+   pousser la jauge hors du cadre. */
+.bench-column .statuses {
+  max-height: 15px;
+  overflow: hidden;
 }
 .bench-column .tcg-card-landscape .tcg-card-name-banner {
-  font-size: clamp(0.74rem, 1.5vh, 1.02rem);
-  padding: 6px 9px 3px;
+  font-size: clamp(0.78rem, 1.6vh, 1.06rem);
+  font-weight: 700;
+  padding: 5px 9px 2px;
 }
 .bench-column .tcg-card-landscape .tcg-card-body {
   gap: 3px;

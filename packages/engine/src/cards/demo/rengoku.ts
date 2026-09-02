@@ -43,7 +43,12 @@ export const rengoku: CharacterCardDef = {
       id: 'la-flamme',
       name: 'La flamme',
       kind: 'passive',
-      description: "Tout ennemi touché par « Souffle du feu » prend Brûlure pendant 2 tours.",
+      // Texte imprimé sur la carte, mot pour mot (cf. la règle « texte EXACT » du
+      // CLAUDE.md). La version précédente était une reformulation, qui avait au passage
+      // perdu le « (cumulable) » -- une information de jeu, pas un détail de style : deux
+      // Souffles du feu additionnent bien leurs durées de brûlure (`statuses.ts`).
+      description:
+        'A chaque fois qu\'un ennemi est touché par "souffle du feu" applique l\'effet burn pendant 2 tours (cumulable)',
       // Pas de trigger : le mécanisme vit entièrement dans l'attaque, cf description ci-dessus.
       async execute() {},
     },

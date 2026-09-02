@@ -12,7 +12,7 @@ import {
   type PlayerId,
   type PlayerState,
 } from 'engine';
-import { characterVitals, CharacterCard, CharacterVitals } from './CharacterCard';
+import { characterVitals, CharacterCard } from './CharacterCard';
 import { CardFrame } from './CardFrame';
 import { ChoiceCountdownBadge, ChoiceModal } from './ChoiceModal';
 import { switchTargeting, TargetingBar, useBoardTargeting, type BoardTargeting } from './Targeting';
@@ -290,20 +290,6 @@ function ActiveSlot({
 }
 
 /**
- * Jauges d'un personnage de réserve, posées SOUS sa vignette plutôt que dans son bandeau
- * d'infos. À la taille d'une carte de banc, ce bandeau ne laissait à la barre de PV que
- * quelques pixels et au chiffre qu'un corps de 0,58 rem -- or c'est exactement ce qu'on
- * vient lire sur le banc pour décider qui envoyer au combat.
- */
-function BenchVitals({ char, state }: { char: CharacterInstance; state: GameState }) {
-  return (
-    <div className="bench-vitals">
-      <CharacterVitals char={char} state={state} />
-    </div>
-  );
-}
-
-/**
  * Mini-menu d'un personnage de réserve : de quoi le renvoyer au combat ou déclencher à
  * distance une capacité marquée `usableFromBench`, sans passer par une barre d'action.
  */
@@ -435,10 +421,8 @@ function SelfBenchCard({
         onTarget={() => targeting?.toggle(char.instanceId)}
         attachedObjects={attachedObjectsOf(state, char)}
         state={state}
-        hideVitals
         impact={impact}
       />
-      <BenchVitals char={char} state={state} />
       {isOpen && <BenchMenu name={name} options={options} onClose={onClose} onDetails={inspect.onClick} />}
     </div>
   );
@@ -515,10 +499,8 @@ function BenchRow({
               onTarget={() => targeting?.toggle(char.instanceId)}
               attachedObjects={attachedObjectsOf(state, char)}
               state={state}
-              hideVitals
               impact={impactsByCharacter.get(char.instanceId)}
             />
-            <BenchVitals char={char} state={state} />
           </div>
         )
       )}
