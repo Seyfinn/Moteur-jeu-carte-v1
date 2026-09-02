@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { CharacterInstance, ObjectInstance, PlayerState, TerrainInstance } from 'engine';
+import { graveyardRectKey, trackCardRect } from './cardRects';
 import { CardArt } from './CardArt';
 import { CardFrame } from './CardFrame';
 import { CharacterCard } from './CharacterCard';
@@ -139,10 +140,17 @@ export function GraveyardPile({
   const [open, setOpen] = useState(false);
   const contents = readGraveyard(player);
 
+  // Destination du vol d'une carte qui vient de mourir (cf. `KoFlight.tsx`).
+  const pileRef = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    trackCardRect(graveyardRectKey(player.id), pileRef.current);
+  });
+
   return (
     <div className="graveyard-pile-zone">
       <span className="zone-label">Cimetière</span>
       <button
+        ref={pileRef}
         className={`graveyard-pile graveyard-pile-${orientation}${contents.total === 0 ? ' empty' : ''}`}
         onClick={() => setOpen(true)}
         title={`${title} — ${contents.total} carte${contents.total > 1 ? 's' : ''}`}

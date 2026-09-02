@@ -37,7 +37,8 @@ import {
   terrainName,
   type ActionOption,
 } from './boardActions';
-import { useGameEvents, type CharacterBadge } from './gameEvents';
+import { KoFlights } from './KoFlight';
+import { useGameEvents, type CharacterBadge, type CharacterImpact } from './gameEvents';
 import { TableEventBanners } from './gameEventBadges';
 import type { GameConnection } from '../net/useGameConnection';
 
@@ -148,6 +149,30 @@ function TerrainSlot({ player, side }: { player: PlayerState; side: 'self' | 'op
   );
 }
 
+/**
+ * Distorsion de chaleur de la Brûlure. Un `filter` CSS ne sait pas réfracter : il faut un
+ * vrai filtre SVG (turbulence + déplacement), dont la graine est animée pour que les
+ * vagues ondulent au lieu d'être figées.
+ *
+ * Déclaré une seule fois pour tout le plateau et référencé par `filter: url(#fx-heat-haze)`
+ * sur l'illustration de chaque carte qui brûle -- un `<svg>` par carte multiplierait le
+ * même filtre autant de fois qu'il y a de brûlés.
+ */
+function HeatHazeFilter() {
+  return (
+    <svg className="fx-svg-defs" aria-hidden="true" focusable="false">
+      <defs>
+        <filter id="fx-heat-haze" x="-8%" y="-8%" width="116%" height="116%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.014 0.05" numOctaves="2" seed="3" result="noise">
+            <animate attributeName="baseFrequency" dur="4s" values="0.014 0.05;0.02 0.075;0.014 0.05" repeatCount="indefinite" />
+          </feTurbulence>
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="7" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+      </defs>
+    </svg>
+  );
+}
+
 function Nameplate({
   label,
   alive,
@@ -192,6 +217,7 @@ function ActiveSlot({
   targeting,
   state,
   commands,
+  impact,
 }: {
   char: CharacterInstance | undefined;
   badges?: CharacterBadge[];
@@ -200,6 +226,7 @@ function ActiveSlot({
   state: GameState;
   /** Panneau d'actions logé dans la carte elle-même -- côté joueur uniquement. */
   commands?: ReactNode;
+  impact?: CharacterImpact;
 }) {
   if (!char) {
     // Le slot vide garde la classe `commanded` : sinon le plateau se réorganiserait d'un
@@ -228,6 +255,10 @@ function ActiveSlot({
         attachedObjects={attachedObjectsOf(state, char)}
         state={state}
         commands={commands}
+        impact={impact}
+        // L'ennemi est toujours en face : le joueur bondit vers la droite, l'adversaire
+        // vers la gauche.
+        facing={side === 'self' ? 'right' : 'left'}
       />
     </div>
   );
@@ -316,6 +347,7 @@ function SelfBenchCard({
   onToggle,
   onClose,
   targeting,
+  impact,
 }: {
   char: CharacterInstance;
   badges?: CharacterBadge[];
@@ -327,6 +359,7 @@ function SelfBenchCard({
   onToggle: () => void;
   onClose: () => void;
   targeting: BoardTargeting | null;
+  impact?: CharacterImpact;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const name = characterName(char.cardId);
@@ -378,6 +411,7 @@ function SelfBenchCard({
         attachedObjects={attachedObjectsOf(state, char)}
         state={state}
         hideVitals
+        impact={impact}
       />
       <BenchVitals char={char} state={state} />
       {isOpen && <BenchMenu name={name} options={options} onClose={onClose} onDetails={inspect.onClick} />}
@@ -394,6 +428,7 @@ function BenchRow({
   conn,
   turnGate,
   targeting,
+  impactsByCharacter,
 }: {
   player: PlayerState;
   isSelf: boolean;
@@ -403,6 +438,7 @@ function BenchRow({
   conn: GameConnection;
   turnGate: string | null;
   targeting: BoardTargeting | null;
+  impactsByCharacter: Map<string, CharacterImpact>;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   // Un ciblage qui démarre referme le mini-menu : il recouvre les cartes voisines, donc
@@ -438,6 +474,7 @@ function BenchRow({
             onToggle={() => setOpenId((prev) => (prev === char.instanceId ? null : char.instanceId))}
             onClose={() => setOpenId(null)}
             targeting={targeting}
+            impact={impactsByCharacter.get(char.instanceId)}
           />
         ) : (
           <div className="bench-card-wrap" key={char.instanceId}>
@@ -454,6 +491,7 @@ function BenchRow({
               attachedObjects={attachedObjectsOf(state, char)}
               state={state}
               hideVitals
+              impact={impactsByCharacter.get(char.instanceId)}
             />
             <BenchVitals char={char} state={state} />
           </div>
@@ -467,7 +505,8 @@ export function Board({ conn }: { conn: GameConnection }) {
   const state = conn.state!;
   const you = conn.you!;
   const opponentId = otherPlayer(you);
-  const { badgesByCharacter, tableEvents, procRolls, spotlights } = useGameEvents(state);
+  const { badgesByCharacter, tableEvents, procRolls, spotlights, impactsByCharacter, boardQuake, koFlights } =
+    useGameEvents(state);
   // La roue d'initiative ne se joue qu'une fois, à l'ouverture : `phase` quitte 'setup'
   // dès la mise en place terminée, donc une reconnexion en cours de partie ne la rejoue
   // pas. `useCallback` parce que le plateau se redessine à chaque état reçu du serveur et
@@ -567,7 +606,12 @@ export function Board({ conn }: { conn: GameConnection }) {
   return (
     // `targeting` allume les cibles légales et éteint le reste du plateau : c'est la
     // classe qui porte cette mise en avant, côté CSS.
-    <div className={`board${targeting ? ' targeting' : ''}${ambience ? ` ${ambience}` : ''}`}>
+    // `board-quake` est posée puis retirée 300 ms plus tard : c'est ce retrait qui permet
+    // au gros coup suivant de rejouer l'animation, une classe restée en place ne
+    // redémarrerait rien.
+    <div
+      className={`board${targeting ? ' targeting' : ''}${ambience ? ` ${ambience}` : ''}${boardQuake ? ' board-quake' : ''}`}
+    >
       {/* HUD flottant : trois blocs en grille pour que la capsule de tour soit centrée sur
           la fenêtre et non sur ce qui reste entre ses voisins -- avec `space-between`, elle
           se décalait dès que le Mode Pioche ajoutait son compteur de piles. */}
@@ -619,6 +663,8 @@ export function Board({ conn }: { conn: GameConnection }) {
       <TableEventBanners events={tableEvents} />
       <ProcWheels rolls={procRolls} />
       <CardSpotlights spotlights={spotlights} />
+      <KoFlights flights={koFlights} />
+      <HeatHazeFilter />
 
       <div className="arena">
         <OpponentHand player={opponent} />
@@ -636,6 +682,7 @@ export function Board({ conn }: { conn: GameConnection }) {
               conn={conn}
               turnGate={turnGate}
               targeting={targeting}
+              impactsByCharacter={impactsByCharacter}
             />
           </div>
 
@@ -664,6 +711,7 @@ export function Board({ conn }: { conn: GameConnection }) {
               side="self"
               targeting={targeting}
               state={state}
+              impact={impactsByCharacter.get(me.activeCharacterInstanceId ?? '')}
               commands={
                 <CommandPanel state={state} you={you} conn={conn} onStartSwitch={() => setSwitchMode(true)} />
               }
@@ -685,6 +733,7 @@ export function Board({ conn }: { conn: GameConnection }) {
               side="opponent"
               targeting={targeting}
               state={state}
+              impact={impactsByCharacter.get(opponent.activeCharacterInstanceId ?? '')}
             />
           </div>
 
@@ -715,6 +764,7 @@ export function Board({ conn }: { conn: GameConnection }) {
               conn={conn}
               turnGate={turnGate}
               targeting={targeting}
+              impactsByCharacter={impactsByCharacter}
             />
           </div>
         </div>

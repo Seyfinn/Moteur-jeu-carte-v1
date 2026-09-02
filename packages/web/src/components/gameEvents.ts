@@ -33,6 +33,31 @@ export type ProcRoll = {
   label?: string;
 };
 
+/**
+ * Puissance d'un coup, qui décide de toute la mise en scène de l'impact (amplitude du dash
+ * de l'attaquant, secousse de la cible, secousse du plateau entier). Les seuils sont ici et
+ * nulle part ailleurs -- la CSS ne lit que le palier.
+ */
+export type ImpactTier = 'light' | 'medium' | 'heavy';
+
+const MEDIUM_HIT_DAMAGE = 30;
+const HEAVY_HIT_DAMAGE = 70;
+
+function tierFor(amount: number, critical: boolean): ImpactTier {
+  if (critical || amount >= HEAVY_HIT_DAMAGE) return 'heavy';
+  return amount >= MEDIUM_HIT_DAMAGE ? 'medium' : 'light';
+}
+
+/** Rôle d'une carte dans un échange de coups : elle porte, ou elle encaisse. */
+export type CharacterImpact = { id: number; role: 'attacker' | 'target'; tier: ImpactTier };
+
+/**
+ * Une carte qui vient de mourir, gardée en vie le temps de son animation alors que le
+ * moteur l'a déjà rangée au cimetière. Elle est rejouée en calque au-dessus du plateau,
+ * à la dernière position connue de sa vraie carte (cf. `cardRects.ts`).
+ */
+export type KoFlight = { id: number; instanceId: string; cardId: string; ownerId: PlayerId };
+
 export type TableEvent =
   | { kind: 'turn-transition'; id: number; endingPlayerId: PlayerId; endingName: string; startingPlayerId: PlayerId; startingName: string; turnNumber: number }
   | { kind: 'coin-flip'; id: number; label: string };
@@ -64,7 +89,19 @@ type Classified =
   | { anchor: 'character'; characterInstanceId: string; badge: DistributiveOmit<CharacterBadge, 'id'> }
   | { anchor: 'table'; event: DistributiveOmit<TableEvent, 'id'> }
   | { anchor: 'proc'; proc: DistributiveOmit<ProcRoll, 'id'> }
-  | { anchor: 'spotlight'; spotlight: Omit<CardSpotlight, 'id'> };
+  | { anchor: 'spotlight'; spotlight: Omit<CardSpotlight, 'id'> }
+  | { anchor: 'impact'; targetInstanceId: string; attackerInstanceId?: string; tier: ImpactTier }
+  | { anchor: 'ko-flight'; flight: Omit<KoFlight, 'id'> };
+
+/**
+ * Mémoire de lecture d'un lot d'entrées de journal. L'entrée `damage` ne nomme que sa
+ * cible : c'est l'entrée `attack` / `use-ability` qui la précède dans le même lot qui dit
+ * d'où le coup vient, et l'entrée `critical` qui dit s'il faut tout faire trembler.
+ */
+interface BatchContext {
+  lastActorInstanceId?: string;
+  criticalPending: boolean;
+}
 
 function characterName(state: GameState, instanceId: string | undefined): string {
   const char = findCharacter(state, instanceId);
@@ -109,7 +146,7 @@ function entryKind(entry: LogEntry): string | undefined {
  * Une entrée de journal peut produire plusieurs effets à l'écran : l'activation d'une
  * capacité pose un badge sur le personnage *et* met sa carte en avant au centre.
  */
-function classifyLogEntry(entry: LogEntry, state: GameState): Classified[] {
+function classifyLogEntry(entry: LogEntry, state: GameState, ctx: BatchContext): Classified[] {
   const d = entry.data ?? {};
 
   switch (entryKind(entry)) {
@@ -118,8 +155,30 @@ function classifyLogEntry(entry: LogEntry, state: GameState): Classified[] {
       const attackId = d['attackId'] as string | undefined;
       const char = findCharacter(state, characterInstanceId);
       if (!char || !characterInstanceId) return [];
+      ctx.lastActorInstanceId = characterInstanceId;
       const attack = getCharacterCard(char.cardId).attacks.find((a) => a.id === attackId);
       return [{ anchor: 'character', characterInstanceId, badge: { kind: 'attack', label: attack?.name ?? 'Attaque' } }];
+    }
+
+    // Les dégâts ne nomment pas leur source : elle vient de l'entrée d'action qui précède
+    // dans le même lot. Sans elle (tic de poison, effet de terrain), la cible encaisse
+    // seule -- il n'y a personne à faire bondir.
+    case 'damage': {
+      const targetInstanceId = d['targetInstanceId'] as string | undefined;
+      const amount = Number(d['amount'] ?? 0);
+      if (!targetInstanceId || amount <= 0) return [];
+      const attackerInstanceId = ctx.lastActorInstanceId;
+      const tier = tierFor(amount, ctx.criticalPending);
+      ctx.criticalPending = false;
+      return [
+        {
+          anchor: 'impact',
+          targetInstanceId,
+          // Un personnage ne bondit pas sur lui-même (coût en PV que son camp se paie).
+          ...(attackerInstanceId && attackerInstanceId !== targetInstanceId ? { attackerInstanceId } : {}),
+          tier,
+        },
+      ];
     }
 
     case 'use-ability': {
@@ -127,6 +186,7 @@ function classifyLogEntry(entry: LogEntry, state: GameState): Classified[] {
       const abilityId = d['abilityId'] as string | undefined;
       const char = findCharacter(state, characterInstanceId);
       if (!char || !characterInstanceId) return [];
+      ctx.lastActorInstanceId = characterInstanceId;
       const def = getCharacterCard(char.cardId);
       const ability = def.abilities.find((a) => a.id === abilityId);
       return [
@@ -265,6 +325,8 @@ function classifyLogEntry(entry: LogEntry, state: GameState): Classified[] {
       const sourceInstanceId = d['sourceInstanceId'] as string | undefined;
       const char = findCharacter(state, sourceInstanceId);
       if (!sourceInstanceId || !char) return [];
+      // Un critique fait passer le coup qui suit au palier maximal, quel que soit son montant.
+      ctx.criticalPending = true;
       if (d['fromCard'] === true) {
         return [
           {
@@ -307,9 +369,17 @@ function classifyLogEntry(entry: LogEntry, state: GameState): Classified[] {
 
     case 'ko': {
       const characterInstanceId = d['characterInstanceId'] as string | undefined;
+      const ownerId = d['ownerId'] as PlayerId | undefined;
       const char = findCharacter(state, characterInstanceId);
       if (!characterInstanceId || !char) return [];
-      return [{ anchor: 'character', characterInstanceId, badge: { kind: 'ko', label: 'KO' } }];
+      return [
+        { anchor: 'character', characterInstanceId, badge: { kind: 'ko', label: 'KO' } },
+        // Le moteur a déjà rangé la carte au cimetière dans cet état-là : le vol est rejoué
+        // en calque, à la dernière position connue de la vraie carte.
+        ...(ownerId
+          ? [{ anchor: 'ko-flight' as const, flight: { instanceId: characterInstanceId, cardId: char.cardId, ownerId } }]
+          : []),
+      ];
     }
 
     // Pas de badge pour un soin : le texte flottant vert de la carte (CharacterCard) le
@@ -331,6 +401,12 @@ const TABLE_EVENT_DURATION_MS = 2000;
 const PROC_ROLL_DURATION_MS = 1800;
 /** Assez long pour lire la carte en grand, assez court pour ne pas freiner la partie. */
 const SPOTLIGHT_DURATION_MS = 1700;
+/** Couvre le dash de l'attaquant (~260 ms) et la secousse de la cible, marge comprise. */
+const IMPACT_DURATION_MS = 700;
+/** Secousse du plateau sur un gros coup. Court exprès : au-delà, ça donne le mal de mer. */
+const BOARD_QUAKE_MS = 300;
+/** Tremblement de mort + désintégration + vol jusqu'au cimetière, bout à bout. */
+const KO_FLIGHT_DURATION_MS = 1500;
 
 /** Watches state.log growth and turn/active-player changes, turning them into short-lived
  * animated badges. Character-anchored ones (attack/ability/crit/evasion) render on the
@@ -341,11 +417,19 @@ export function useGameEvents(state: GameState): {
   tableEvents: TableEvent[];
   procRolls: ProcRoll[];
   spotlights: CardSpotlight[];
+  /** Une entrée par personnage en train de porter ou d'encaisser un coup. */
+  impactsByCharacter: Map<string, CharacterImpact>;
+  /** Non nul pendant qu'un gros coup fait trembler la table entière. */
+  boardQuake: number | null;
+  koFlights: KoFlight[];
 } {
   const [characterBadges, setCharacterBadges] = useState<Array<CharacterBadge & { characterInstanceId: string }>>([]);
   const [tableEvents, setTableEvents] = useState<TableEvent[]>([]);
   const [procRolls, setProcRolls] = useState<ProcRoll[]>([]);
   const [spotlights, setSpotlights] = useState<CardSpotlight[]>([]);
+  const [impacts, setImpacts] = useState<Array<CharacterImpact & { characterInstanceId: string }>>([]);
+  const [boardQuake, setBoardQuake] = useState<number | null>(null);
+  const [koFlights, setKoFlights] = useState<KoFlight[]>([]);
   const seqRef = useRef(0);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   // Match.create() logs the initiative coin flip before the very first broadcast either player
@@ -360,6 +444,9 @@ export function useGameEvents(state: GameState): {
     const newTableEvents: TableEvent[] = [];
     const newProcRolls: ProcRoll[] = [];
     const newSpotlights: CardSpotlight[] = [];
+    const newImpacts: Array<CharacterImpact & { characterInstanceId: string }> = [];
+    const newKoFlights: KoFlight[] = [];
+    let heaviestQuake = false;
 
     // La main qui passe d'un camp à l'autre, pas le numéro de manche : un tour de jeu
     // couvre désormais l'action des deux joueurs, donc `turnNumber` ne bouge qu'une fois
@@ -379,14 +466,33 @@ export function useGameEvents(state: GameState): {
     prevTurnRef.current = { turnNumber: state.turnNumber, activePlayerId: state.activePlayerId };
 
     if (state.log.length > prevLogLenRef.current) {
+      const batch: BatchContext = { criticalPending: false };
       for (const entry of state.log.slice(prevLogLenRef.current)) {
-        for (const classified of classifyLogEntry(entry, state)) {
+        for (const classified of classifyLogEntry(entry, state, batch)) {
           if (classified.anchor === 'character') {
             newCharacterBadges.push({ ...classified.badge, id: ++seqRef.current, characterInstanceId: classified.characterInstanceId });
           } else if (classified.anchor === 'proc') {
             newProcRolls.push({ ...classified.proc, id: ++seqRef.current });
           } else if (classified.anchor === 'spotlight') {
             newSpotlights.push({ ...classified.spotlight, id: ++seqRef.current });
+          } else if (classified.anchor === 'impact') {
+            newImpacts.push({
+              id: ++seqRef.current,
+              characterInstanceId: classified.targetInstanceId,
+              role: 'target',
+              tier: classified.tier,
+            });
+            if (classified.attackerInstanceId) {
+              newImpacts.push({
+                id: ++seqRef.current,
+                characterInstanceId: classified.attackerInstanceId,
+                role: 'attacker',
+                tier: classified.tier,
+              });
+            }
+            if (classified.tier === 'heavy') heaviestQuake = true;
+          } else if (classified.anchor === 'ko-flight') {
+            newKoFlights.push({ ...classified.flight, id: ++seqRef.current });
           } else {
             newTableEvents.push({ ...classified.event, id: ++seqRef.current } as TableEvent);
           }
@@ -419,6 +525,31 @@ export function useGameEvents(state: GameState): {
         );
       }
     }
+    if (newImpacts.length > 0) {
+      setImpacts((list) => [...list, ...newImpacts]);
+      for (const i of newImpacts) {
+        timersRef.current.push(
+          setTimeout(() => setImpacts((list) => list.filter((x) => x.id !== i.id)), IMPACT_DURATION_MS)
+        );
+      }
+    }
+    if (heaviestQuake) {
+      const quakeId = ++seqRef.current;
+      setBoardQuake(quakeId);
+      timersRef.current.push(
+        // Comparaison sur l'id : une deuxième secousse arrivée entre-temps ne doit pas être
+        // coupée par la minuterie de la première.
+        setTimeout(() => setBoardQuake((current) => (current === quakeId ? null : current)), BOARD_QUAKE_MS)
+      );
+    }
+    if (newKoFlights.length > 0) {
+      setKoFlights((list) => [...list, ...newKoFlights]);
+      for (const f of newKoFlights) {
+        timersRef.current.push(
+          setTimeout(() => setKoFlights((list) => list.filter((x) => x.id !== f.id)), KO_FLIGHT_DURATION_MS)
+        );
+      }
+    }
     if (newSpotlights.length > 0) {
       // Plusieurs cartes jouées dans le même lot (une carte qui en déclenche une autre) se
       // suivent au lieu de se superposer : chacune attend la fin de la précédente.
@@ -444,5 +575,11 @@ export function useGameEvents(state: GameState): {
     list.push(b);
     badgesByCharacter.set(b.characterInstanceId, list);
   }
-  return { badgesByCharacter, tableEvents, procRolls, spotlights };
+  // Un seul impact par carte : deux coups simultanés (AoE, riposte) donneraient deux
+  // animations concurrentes sur la même carte. Le plus récent gagne, et le plus violent
+  // avec lui -- c'est celui-là qu'on veut voir.
+  const impactsByCharacter = new Map<string, CharacterImpact>();
+  for (const i of impacts) impactsByCharacter.set(i.characterInstanceId, i);
+
+  return { badgesByCharacter, tableEvents, procRolls, spotlights, impactsByCharacter, boardQuake, koFlights };
 }
