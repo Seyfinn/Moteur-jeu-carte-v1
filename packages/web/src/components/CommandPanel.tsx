@@ -62,6 +62,7 @@ function RootButton({
   emptyHint,
   /** Le bouton agit directement (switch) : bloqué = rien à ouvrir, donc rien à cliquer. */
   blockedIsDisabled,
+  active,
   onOpen,
 }: {
   kind: Section | 'switch';
@@ -70,6 +71,8 @@ function RootButton({
   options: ActionOption[];
   emptyHint: string;
   blockedIsDisabled?: boolean;
+  /** Rubrique dont le panneau contextuel est ouvert : le bouton reste allumé. */
+  active?: boolean;
   onOpen: () => void;
 }) {
   const empty = options.length === 0;
@@ -78,7 +81,7 @@ function RootButton({
 
   return (
     <button
-      className={`cmd-button cmd-${kind}${empty || allBlocked ? ' cmd-button-blocked' : ''}`}
+      className={`cmd-button cmd-${kind}${empty || allBlocked ? ' cmd-button-blocked' : ''}${active ? ' cmd-button-active' : ''}`}
       onClick={onOpen}
       disabled={empty || (allBlocked && blockedIsDisabled)}
       title={hint}
@@ -146,28 +149,13 @@ export function CommandPanel({
   const switches = switchOptions(state, you, conn);
   const optionsOf: Record<Section, ActionOption[]> = { attack: attacks, ability: abilities };
 
-  if (section) {
-    const options = optionsOf[section];
-    return (
-      <div className={`cmd-panel cmd-panel-open cmd-panel-${section}`}>
-        <div className="cmd-sub-head">
-          <button className="cmd-back" onClick={() => setSection(null)} aria-label="Retour">
-            ←
-          </button>
-          <span className="cmd-sub-title">{SECTION_TITLE[section]}</span>
-        </div>
-        <div className="cmd-options">
-          {options.length === 0 && <p className="cmd-options-empty">{SECTION_EMPTY[section]}</p>}
-          {options.map((option) => (
-            <OptionButton key={option.key} option={option} />
-          ))}
-        </div>
-      </div>
-    );
-  }
+  // La rubrique ouverte ne REMPLACE plus la colonne : elle se pose à côté, en panneau
+  // contextuel. La carte de personnage n'est jamais recouverte, et on garde sous les yeux
+  // les trois autres commandes pendant qu'on choisit.
+  const openOptions = section ? optionsOf[section] : null;
 
   return (
-    <div className="cmd-panel">
+    <div className={`cmd-panel${section ? ` cmd-panel-open cmd-panel-${section}` : ''}`}>
       <div className="cmd-grid">
         <RootButton
           kind="attack"
@@ -175,7 +163,8 @@ export function CommandPanel({
           label="Attaque"
           options={attacks}
           emptyHint={SECTION_EMPTY.attack}
-          onOpen={() => setSection('attack')}
+          active={section === 'attack'}
+          onOpen={() => setSection((prev) => (prev === 'attack' ? null : 'attack'))}
         />
         {/* Volontairement pas de « tir automatique » quand il n'y a qu'une option : une
             capacité est souvent coûteuse (un ultime une fois par partie, un allié qui paie
@@ -186,7 +175,8 @@ export function CommandPanel({
           label="Capacité"
           options={abilities}
           emptyHint={SECTION_EMPTY.ability}
-          onOpen={() => setSection('ability')}
+          active={section === 'ability'}
+          onOpen={() => setSection((prev) => (prev === 'ability' ? null : 'ability'))}
         />
         <RootButton
           kind="switch"
@@ -195,13 +185,32 @@ export function CommandPanel({
           options={switches}
           emptyHint={SWITCH_EMPTY}
           blockedIsDisabled
-          onOpen={onStartSwitch}
+          onOpen={() => {
+            setSection(null);
+            onStartSwitch();
+          }}
         />
         <button className="cmd-button cmd-pass" onClick={() => conn.applyAction({ kind: 'pass' })}>
           <span className="cmd-button-icon">⏭️</span>
           <span className="cmd-button-label">Passer</span>
         </button>
       </div>
+      {section && openOptions && (
+        <div className={`cmd-popover cmd-popover-${section}`}>
+          <div className="cmd-sub-head">
+            <span className="cmd-sub-title">{SECTION_TITLE[section]}</span>
+            <button className="cmd-back" onClick={() => setSection(null)} aria-label="Fermer">
+              ×
+            </button>
+          </div>
+          <div className="cmd-options">
+            {openOptions.length === 0 && <p className="cmd-options-empty">{SECTION_EMPTY[section]}</p>}
+            {openOptions.map((option) => (
+              <OptionButton key={option.key} option={option} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

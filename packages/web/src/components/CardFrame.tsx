@@ -41,6 +41,7 @@ export function CardFrame({
   title,
   className,
   rootRef,
+  hideName,
 }: {
   cardId: string;
   kind: 'character' | 'object' | 'terrain';
@@ -69,6 +70,12 @@ export function CardFrame({
   className?: string;
   /** Accès au cadre pour en relever la position (cf. `cardRects.ts`). */
   rootRef?: Ref<HTMLDivElement>;
+  /**
+   * Retire le bandeau de nom. Réservé au personnage actif, dont le nom est repris par le
+   * bandeau de combat posé au-dessus de la carte -- l'afficher deux fois volerait de la
+   * place à l'illustration, qui est justement ce que ce format met en avant.
+   */
+  hideName?: boolean;
 }) {
   const classes = ['tcg-card', `tcg-card-${size}`];
   if (orientation === 'landscape') classes.push('tcg-card-landscape');
@@ -121,7 +128,7 @@ export function CardFrame({
           colonne transparente (`display: contents`), en paysage elle devient le panneau
           d'infos posé à droite de l'illustration. */}
       <div className="tcg-card-lane">
-        <div className="tcg-card-name-banner">{name}</div>
+        {!hideName && <div className="tcg-card-name-banner">{name}</div>}
         {footer && <div className="tcg-card-body">{footer}</div>}
       </div>
       {effects}
