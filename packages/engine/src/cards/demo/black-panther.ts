@@ -25,7 +25,7 @@ export const blackPanther: CharacterCardDef = {
       id: 'griffes',
       name: 'Griffes',
       baseATK: GRIFFES_ATK,
-      description: `${VULNERABLE_CHANCE_PERCENT}% de chance d'infliger vulnérable pendant ${VULNERABLE_EFFECTIVE_TURNS} tour.`,
+      description: "40% de chance d'infliger vulnérable pendant 1 tour.",
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -54,8 +54,7 @@ export const blackPanther: CharacterCardDef = {
       name: 'Energie Cinétique',
       kind: 'active',
       description:
-        `Black Panther stock ${STORE_PERCENT}% des dégâts qu'il reçoit. Peut relacher cette énergie stocké ` +
-        "à l'ennemi actif. Utilisable une fois.",
+        "Black Panther stock 40% des dégâts qu'il reçoit. Peut relacher cette énergie stocké à l'ennemi actif. Utilisable une fois.",
       // « Utilisable une fois » porte sur la LIBÉRATION seule : le stockage, lui, tourne en
       // permanence via le passive ci-dessous, dès le début de partie et jusqu'à la fin.
       usesPerGame: 1,
@@ -86,6 +85,8 @@ export const blackPanther: CharacterCardDef = {
       id: 'energie-cinetique-stockage',
       name: 'Energie Cinétique (réserve)',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description: `Accumule ${STORE_PERCENT}% des dégâts subis par Black Panther, en réserve pour Energie Cinétique.`,
       trigger: 'afterDamage',
       // Il encaisse aussi au banc (AoE, tics de poison/brûlure/saignement), et peut se faire

@@ -41,8 +41,7 @@ export const offrandeDuDieuDeLaMort: ObjectCardDef = {
   id: 'offrande-du-dieu-de-la-mort',
   name: 'Offrande du Dieu de la Mort',
   description:
-    `Une sélection de ${OWNER_CHOICE_COUNT} cartes objets aléatoire dans le jeu se présente à vous, choisissez en une. ` +
-    `Une sélection de ${OPPONENT_CHOICE_COUNT} cartes objets aléatoire dans le jeu se présente à votre adversaire, il en choisi une.`,
+    'Une sélection de 6 cartes objets aléatoire dans le jeu se présente à vous, choisissez en une. Une sélection de 2 cartes objets aléatoire dans le jeu se présente à votre adversaire, il en choisi une.',
   async execute(ctx) {
     // Les deux prompts sont séquentiels : le moteur n'autorise qu'une question ouverte à
     // la fois, même adressée à deux joueurs différents.

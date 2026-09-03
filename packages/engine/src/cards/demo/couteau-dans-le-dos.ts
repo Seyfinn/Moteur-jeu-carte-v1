@@ -8,7 +8,8 @@ export const couteauDansLeDos: ObjectCardDef = {
   id: 'couteau-dans-le-dos',
   name: 'Couteau dans le dos',
   description:
-    "Exemplaire unique. Dès maintenant et jusqu'à la fin de votre prochain tour, les dégâts infligés au banc ennemi sont doublés.",
+    `1 EXEMPLAIRE
+Double les dégâts infligés au banc ennemi lors du prochain tour.`,
   maxCopies: 1,
   async execute(ctx) {
     for (const char of ctx.getAllOnBoard(ctx.ownerId)) {

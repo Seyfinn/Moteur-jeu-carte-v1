@@ -16,7 +16,7 @@ export const akali: CharacterCardDef = {
       id: 'kunai',
       name: 'Kunaï',
       baseATK: BASE_ATK,
-      description: `Inflige ${BASE_ATK} dégâts à l'actif adverse.`,
+      description: '',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -40,7 +40,7 @@ export const akali: CharacterCardDef = {
       id: 'shroud',
       name: 'Shroud',
       kind: 'active',
-      description: `Akali lance son nuage de fumée, lui accordant esquive pendant ${SHROUD_DURATION_TURNS} tours. Utilisable une seule fois par partie.`,
+      description: 'Akali lance son nuage de fumée, lui accordant esquive pendant 3 tours.',
       usesPerGame: 1,
       async execute(ctx) {
         ctx.applyStatus(ctx.sourceInstanceId, {
@@ -56,7 +56,7 @@ export const akali: CharacterCardDef = {
       id: 'perfect-execution',
       name: 'Perfect Execution',
       kind: 'passive',
-      description: `Si après une attaque de Akali, l'ennemi touché est à ${EXECUTE_THRESHOLD_HP}HP ou moins, il meurt immédiatement.`,
+      description: "Si après l'attaque de Akali, l'ennemi est à 20hp ou moins, celui ci meurt immédiatement.",
       // Purement descriptive : la logique vit dans l'AttackDef de Kunaï ci-dessus,
       // pas via un trigger d'event -- afterDamage ne dit pas qui a infligé les
       // dégâts, donc impossible de savoir depuis un trigger séparé si c'est bien

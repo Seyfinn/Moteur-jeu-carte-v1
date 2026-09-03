@@ -9,7 +9,8 @@ export const critPlus: ObjectCardDef = {
   id: 'crit-plus',
   name: 'Crit +',
   equipment: true, // se lie au porteur (ctx.attachSelfTo ci-dessous) au lieu d'être consommée
-  description: 'Si la carte a réussis à crit 2x, Tout ses crit passent à 70 pourcents de chance\n',
+  description: `Si la carte a réussis à crit 2x, Tout ses crit passent à 70 pourcents de chance
+`,
   unplayableReason(state, ownerId) {
     const player = state.players[ownerId];
     const ids = [player.activeCharacterInstanceId, ...player.benchCharacterInstanceIds].filter(

@@ -69,7 +69,7 @@ export const gon: CharacterCardDef = {
       name: 'La Pierre',
       baseATK: LA_PIERRE_ATK,
       // Pas de texte d'attaque sur la carte : description implicite.
-      description: `Inflige ${LA_PIERRE_ATK} dégâts à l'actif adverse.`,
+      description: '',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -84,7 +84,7 @@ export const gon: CharacterCardDef = {
       name: 'Sermet de Vengance',
       kind: 'passive',
       description:
-        'Au début de la partie, une carte adverse est secrètement désignée comme Cible (révélée au Tour 10 à l’adversaire). Si la Cible est éliminée, Gon évolue en Gon Adulte et soigne tous ses PV.',
+        "Au début de la partie, une carte adverse est secrètement désignée comme Cible (révélée au Tour 10 à l'adversaire). Si la Cible est éliminée, Gon évolue en Gon Adulte et soigne tous ses PV.",
       // Une seule passive imprimée qui surveille trois moments : la désignation, la
       // révélation, l'élimination. Une capacité par event afficherait trois fois la même
       // ligne sur la carte (cf. CLAUDE.md).

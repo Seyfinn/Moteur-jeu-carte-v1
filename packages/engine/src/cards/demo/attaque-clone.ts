@@ -31,9 +31,7 @@ export const attaqueClone: ObjectCardDef = {
   equipment: true,
   name: 'Attaque cloné',
   description:
-    'Permet d’attaquer deux fois pendant ce tour, la deuxième attaque inflige ' +
-    `${SECOND_ATTACK_DAMAGE_PERCENT}% des dégâts. Incapable d’utiliser son actif aux ` +
-    `${SILENCE_EFFECTIVE_TURNS} prochains tours.`,
+    'Permet d’attaquer deux fois pendant ce tour, la deuxième attaque inflige 50% des dégâts. Incapable d’utiliser son actif aux 2 prochains tours.',
   unplayableReason(state, ownerId) {
     const player = state.players[ownerId];
     const activeId = player.activeCharacterInstanceId;

@@ -14,16 +14,19 @@ export const jeuDeLaMort: TerrainCardDef = {
   id: 'jeu-de-la-mort',
   name: 'Jeu de la mort',
   description:
-    'Pendant 3 tours, à la fin de son tour, les personnage sur le poste actif lance la roue.\n' +
-    '50% : Le personnage actif gagne un bonus de +20 ATK pour son prochain tour.\n' +
-    '50% : Le personnage actif subit 30 dégâts. \n' +
-    'Si vous avez posé le terrain, votre personnage sur le actif gagne 30 de bouclier. ',
+    `Pendant 3 tours, à la fin de son tour, les personnage sur le poste actif lance la roue.
+50% : Le personnage actif gagne un bonus de +20 ATK pour son prochain tour.
+50% : Le personnage actif subit 30 dégâts. 
+Si vous avez posé le terrain, votre personnage sur le actif gagne 30 de bouclier. 
+`,
   durationTurns: DURATION_TURNS,
   abilities: [
     {
       id: 'jeu-de-la-mort-pose',
       name: 'Jeu de la mort',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description: 'À la pose, le personnage actif du poseur gagne 30 de bouclier.',
       trigger: 'onTerrainPlayed',
       // Pour CE terrain seulement (cf. CLAUDE.md) : l'event part pour n'importe quelle pose.
@@ -40,6 +43,8 @@ export const jeuDeLaMort: TerrainCardDef = {
       id: 'jeu-de-la-mort-roue',
       name: 'Jeu de la mort',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description: 'À la fin de son tour, le personnage actif (des deux camps) lance la roue.',
       trigger: 'onTurnEnd',
       async execute(ctx) {

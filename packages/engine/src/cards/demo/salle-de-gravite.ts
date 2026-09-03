@@ -9,13 +9,16 @@ export const salleDeGravite: TerrainCardDef = {
   id: 'salle-de-gravite',
   name: 'Salle de Gravité',
   description:
-    "Chaque fois qu'un joueur effectue un switch , son nouveau personnage qui arrive sur le poste actif subit des dégâts . Le poseur du terrain subit 30 dégâts, tandis que l'adversaire subit 50 dégâts. (Ne s'applique pas au remplacement d'un personnage KO).",
+    `Chaque fois qu'un joueur effectue un switch , son nouveau personnage qui arrive sur le poste actif subit des dégâts . Le poseur du terrain subit 30 dégâts, tandis que l'adversaire subit 50 dégâts. (Ne s'applique pas au remplacement d'un personnage KO).
+`,
   durationTurns: DURATION_TURNS,
   abilities: [
     {
       id: 'salle-de-gravite-ecrasement',
       name: 'Salle de Gravité',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description: "Punit quiconque switch : le nouvel actif encaisse des dégâts, plus lourds pour l'adversaire du poseur.",
       trigger: 'onSwitch',
       async execute(ctx) {

@@ -12,7 +12,7 @@ export const mahito: CharacterCardDef = {
       id: 'paume-transfiguratrice',
       name: 'Paume Transfiguratrice',
       baseATK: PAUME_ATK,
-      description: `Inflige ${PAUME_ATK} dégâts à l'actif adverse.`,
+      description: '',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -43,7 +43,7 @@ export const mahito: CharacterCardDef = {
       id: 'alteration-de-lame',
       name: "Altération de l'Âme",
       kind: 'passive',
-      description: 'Toutes les attaques de Mahito convertissent 100% de leurs dégâts directement en réduction de HP max.',
+      description: 'Toutes les attaques de Mahito convertissent 100 % de leurs dégâts directement en réduction de HP max',
       // Purement descriptif : implémenté directement dans Paume Transfiguratrice via
       // l'option { asValeurLock: true } de dealDamage (esquive/critique résolus
       // normalement, seule la destination des dégâts change -- voir effect-context.ts).
@@ -53,7 +53,7 @@ export const mahito: CharacterCardDef = {
       id: 'marque',
       name: 'Marque',
       kind: 'passive',
-      description: "Les PV retirés par Mahito ne peuvent plus jamais être récupérés, par aucun soin.",
+      description: 'La cible ne peut plus jamais soigner ces PV.',
       // Purement descriptif : implémenté directement dans Paume Transfiguratrice, qui pose
       // le statut générique 'unhealable' sur la cible touchée (voir statuses.ts).
       async execute() {},

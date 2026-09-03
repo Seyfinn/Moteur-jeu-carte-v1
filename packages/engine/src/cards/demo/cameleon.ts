@@ -8,7 +8,8 @@ export const cameleon: ObjectCardDef = {
   id: 'cameleon',
   name: 'Caméléon',
   description:
-    "Choisissez une carte objet de votre main actuelle, Caméléon devient celle-ci. Possible seulement si la carte choisi n'est pas une carte déjà sélectionné 2 fois ou si ce n'est pas une carte unique exemplaire.",
+    `Choisissez une carte objet de votre main actuelle, Caméléon devient celle-ci.
+Possible seulement si la carte choisi n'est pas une carte déjà sélectionné 2 fois ou si ce n'est pas une carte unique exemplaire.`,
   async execute(ctx) {
     const player = ctx.state.players[ctx.ownerId];
 

@@ -98,7 +98,10 @@ export const chrolloLucilfer: CharacterCardDef = {
       name: 'Double Face : Annulation',
       kind: 'active',
       description:
-        "Condition : L'adversaire doit avoir au moins un autre personnage en vie.\n\nEffet : Envoie le personnage actif adverse sur son banc et le Scelle (il ne peut plus agir). Chrollo remplace son attaque de base par l'Attaque et l'Actif de la carte scellée.\n\nContrainte : Tant que la carte est scellée, Chrollo perd 25 % de ses PV actuels au début de chacun de tes tours.",
+        `L'adversaire doit avoir au moins un autre personnage en vie.
+Envoie le personnage actif adverse sur son banc et le Scelle (il ne peut plus agir).
+Chrollo remplace son attaque par l'Attaque de l'ennemi scellé et cet actif par l'actif de l'ennemi est scellé.
+Tant que la carte est scellée, Chrollo perd 25 % de ses PV actuels au début de chaque tour.`,
       condition(ctx) {
         // Un seul livre à la fois : Double Face ne se relance qu'une fois la page tournée.
         if (sealedVictim(ctx)) return false;
@@ -218,6 +221,8 @@ export const chrolloLucilfer: CharacterCardDef = {
       // peut pas, en plus, réagir à un event (un `trigger` la rendrait non activable).
       name: 'Contrainte',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description:
         'Contrainte : Tant que la carte est scellée, Chrollo perd 25 % de ses PV actuels au début de chacun de tes tours.',
       trigger: 'onTurnStart',

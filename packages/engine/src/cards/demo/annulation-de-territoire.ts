@@ -6,7 +6,8 @@ export const annulationDeTerritoire: ObjectCardDef = {
   type: 'object',
   id: 'annulation-de-territoire',
   name: 'Annulation de territoire',
-  description: `Sacrifiez votre terrain actif pour retirer ${TURNS_REMOVED} tours au terrain adverse.`,
+  description: `Envoi au cimetière votre terrain actif, vous permettant de retirer 3 tours au terrain ennemi.
+Utilisable seulement si vous avez un terrain actif.`,
   // La carte a besoin des DEUX terrains pour faire quoi que ce soit : sans le sien il n'y a
   // rien à sacrifier, sans celui d'en face il n'y a rien à annuler. Refusée avant d'être
   // consommée plutôt que jouée dans le vide.

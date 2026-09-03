@@ -58,15 +58,18 @@ export const livreDeChrollo: TerrainCardDef = {
   type: 'terrain',
   id: 'livre-de-chrollo',
   name: 'Livre de Chrollo',
-  description: `Chrollo prête son livre aux joueurs. Chaque tour, au début du tour : une attaque au hasard parmi l'entièreté des attaques du jeu est proposée aux joueurs.
-Le joueur peut décider d'accepter le livre de Chrollo et prendre ce qui est offert.
-Il ne pourra alors utiliser que cette attaque pendant ce tour. La même attaque est proposée aux deux joueurs pendant le tour.`,
+  description: `Chrollo prête son livre aux joueurs. Chaque tour, au début du tour : Une attaque au hasard parmi l'entièreté des attaques du jeu, est proposé aux joueurs.
+Le joueur peut décider de l'accepter le livre de Chrollo et prendre ce qui est offert. 
+Si il accepte, il ne pourra que utiliser cette attaque pendant ce tour.
+La même attaque est proposé aux deux joueurs pendant le tour.`,
   durationTurns: DURATION_TURNS,
   abilities: [
     {
       id: 'livre-de-chrollo-pret',
       name: 'Le prêt',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description:
         "L'attaque empruntée est portée par le personnage actif du moment, avec son propre ATK effectif, et repart avec lui s'il quitte le poste actif.",
       // `onTerrainPlayed` en plus de `onTurnStart` : le tour du poseur a commencé avant

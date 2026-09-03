@@ -6,13 +6,15 @@ export const destruction: TerrainCardDef = {
   type: 'terrain',
   id: 'destruction',
   name: 'Destruction',
-  description: `Détruit tous les objets actuellement équipés sur le terrain des 2 joueurs. Pendant ${DURATION_TURNS} tours, aucun joueur ne peut utiliser ou équiper de cartes Objet.`,
+  description: 'Détruit tous les objets actuellement équipés sur le terrain des 2 joueurs. aucun joueur ne peut utiliser ou équiper de cartes Objet. »',
   durationTurns: DURATION_TURNS,
   abilities: [
     {
       id: 'destruction-onplay',
       name: 'Destruction',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description: 'Détruit tous les objets actuellement équipés des 2 joueurs.',
       trigger: 'onTerrainPlayed',
       // Only for THIS terrain's own arrival. Without the guard, the event emitted when

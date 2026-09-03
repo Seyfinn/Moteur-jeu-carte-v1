@@ -25,7 +25,7 @@ export const chopper: CharacterCardDef = {
       id: 'heavy-point',
       name: 'Heavy Point',
       baseATK: HEAVY_POINT_ATK,
-      description: `Inflige ${HEAVY_POINT_ATK} dégâts à l'actif adverse. Si les dégâts passent, ${POISON_CHANCE_PERCENT}% de chance d'appliquer Poison pendant ${POISON_REMAINING_TURNS} tour.`,
+      description: "33% de chance d'appliquer poison.",
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -51,7 +51,8 @@ export const chopper: CharacterCardDef = {
       id: 'traque',
       name: 'Traque',
       kind: 'active',
-      description: `Soigne un personnage allié au choix (actif ou banc) de ${TRAQUE_HEAL_AMOUNT} HP même depuis le banc utilisable une fois tout les ${TRAQUE_COOLDOWN_EFFECTIVE_TURNS} tours.`,
+      description: `Soigne un personnage allié au choix (actif ou banc) de 70 HP même depuis le banc utilisable une fois tout les 6 tours.
+`,
       usableFromBench: true,
       condition(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);

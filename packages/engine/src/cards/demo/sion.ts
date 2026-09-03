@@ -14,7 +14,7 @@ const hacheGeante: AttackDef = {
   id: 'hache-geante',
   name: 'Hache géante',
   baseATK: BASE_ATK,
-  description: `Inflige ${BASE_ATK} dégâts à l'actif adverse. Si des dégâts passent, ${DISARM_CHANCE_PERCENT}% de chance de désarmer la cible pendant ${DISARM_EFFECTIVE_TURNS} tour.`,
+  description: "Cette attaque a 33% de chance de désarmer l'ennemi.",
   async execute(ctx) {
     const target = ctx.getActive(ctx.opponentId);
     if (!target) return;
@@ -46,7 +46,7 @@ export const sion: CharacterCardDef = {
       id: 'essence-vitale',
       name: 'Essence vitale',
       kind: 'active',
-      description: `Sion gagne ${SHIELD_BASE} de shield, augmenté de ${SHIELD_PER_ENEMY_IN_GRAVEYARD} par personnage ennemi dans le cimetière adverse. Utilisable une fois par partie.`,
+      description: 'Sion gagne un shield de 50, augmenté de 50 par ennemis dans le cimetière ennemi. Utilisable une fois',
       usesPerGame: 1,
       async execute(ctx) {
         const enemyGraveyardCount = ctx.state.players[ctx.opponentId].graveyardCharacterInstanceIds.length;
@@ -58,7 +58,7 @@ export const sion: CharacterCardDef = {
       id: 'guerrier-mourant',
       name: 'Guerrier mourrant',
       kind: 'passive',
-      description: "Lorsqu'il meurt, Sion attaque une dernière fois (Hache géante) le personnage actif ennemi.",
+      description: "Lorsqu'il meurt, Sion attaque une dernière fois le personnage au poste actif ennemi.",
       trigger: 'onCharacterKO',
       // koCharacter (zones.ts) retire Sion de l'actif/banc AVANT d'émettre l'event --
       // sans usableFromBench, canUseAbility le bloquerait ("actif uniquement").

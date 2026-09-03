@@ -79,7 +79,7 @@ export const kayn: CharacterCardDef = {
       name: 'Faux',
       baseATK: FAUX_ATK,
       // Pas de texte d'attaque sur la carte : description implicite, comme partout ailleurs.
-      description: `Inflige ${FAUX_ATK} dégâts à l'actif adverse.`,
+      description: '',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (target) {

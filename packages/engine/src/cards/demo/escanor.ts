@@ -164,7 +164,9 @@ export const escanor: CharacterCardDef = {
       name: 'Orgueil absolu',
       kind: 'active',
       description:
-        "Réussite (45 %) : Augmente d'un cycle\nÉchec (45 %) : Recule d'un cycle. S'il est déjà au cycle 1, ne peut pas infliger de dégâts ce tour.\nOrgueil Ultime (10 %) : Passe au cycle 4 directement.",
+        `Réussite (45 %) : Augmente d'un cycle
+Échec (45 %) : Recule d'un cycle. S'il est déjà au cycle 1, ne peut pas infliger de dégâts ce tour.
+Orgueil Ultime (10 %) : Passe au cycle 4 directement.`,
       async execute(ctx) {
         const cycle = getCycle(ctx);
 

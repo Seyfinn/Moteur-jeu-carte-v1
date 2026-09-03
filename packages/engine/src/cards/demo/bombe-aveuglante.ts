@@ -12,8 +12,7 @@ export const bombeAveuglante: ObjectCardDef = {
   id: 'bombe-aveuglante',
   name: 'Bombe aveuglante',
   description:
-    "Empêche le personnage actif adverse d'attaquer (Désarmé) pendant 1 tour. En contrepartie, " +
-    "l'adversaire obtient 1 carte Objet aléatoire dans sa main, et votre personnage  sur le poste actif subit 40 dégâts.",
+    "Empêche le personnage actif adverse d'attaquer (Désarmé) pendant 1 tour. En contrepartie, l'adversaire obtient 1 carte Objet aléatoire dans sa main, et votre personnage  sur le poste actif subit 40 dégâts.",
   async execute(ctx) {
     const enemyActive = ctx.getActive(ctx.opponentId);
     if (enemyActive) {

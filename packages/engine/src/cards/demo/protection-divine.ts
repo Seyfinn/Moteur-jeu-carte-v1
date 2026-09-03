@@ -15,13 +15,15 @@ export const protectionDivine: TerrainCardDef = {
   type: 'terrain',
   id: 'protection-divine',
   name: 'Protection Divine',
-  description: `Ajoute ${ALLY_SHIELD_AMOUNT} de shield au personnage actif allié et ${ENEMY_SHIELD_AMOUNT} de shield au personnage actif ennemi.`,
+  description: 'Ajoute 50 de shield au personnage actif allié et 30 de shield au personnage actif ennemi.',
   durationTurns: DURATION_TURNS,
   abilities: [
     {
       id: 'protection-divine-onplay',
       name: 'Protection Divine',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description: "Déclenche l'effet immédiatement à la pose.",
       trigger: 'onTerrainPlayed',
       // Only for THIS terrain's own arrival. Without the guard, the event emitted when
@@ -38,6 +40,8 @@ export const protectionDivine: TerrainCardDef = {
       id: 'protection-divine-tick',
       name: 'Protection Divine',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description: 'Répète l\'effet au début de chacun des tours suivants du possesseur, tant que le terrain reste en jeu.',
       trigger: 'onTurnStart',
       condition(ctx) {

@@ -38,7 +38,8 @@ export const toji: CharacterCardDef = {
       id: 'traque-du-plus-fort',
       name: 'Traque du Plus Fort',
       kind: 'active',
-      description: "Force l'adversaire à échanger son personnage actif avec celui de son banc qui possède le plus de HP actuels\nUtilisable 1x",
+      description: `Force l'adversaire à échanger son personnage actif avec celui de son banc qui possède le plus de HP actuels
+Utilisable 1x`,
       usesPerGame: 1,
       condition(ctx) {
         return getTargetableBench(ctx).length > 0;

@@ -54,7 +54,11 @@ export const yumeko: CharacterCardDef = {
       name: 'Mise à mort',
       kind: 'active',
       description:
-        "Au début de ton tour, tu peux choisir de parier 40, 60, 70 PV de Yumeko.\n\nVictoire (50 %) : L'attaque de Yumeko gagne le double des PV pariés en dégâts bonus.\n\nDéfaite (50 %) : Yumeko subit immédiatement les PV pariés sous forme de dégâts directs.",
+        `Au début de ton tour, tu peux choisir de parier 40, 60, 70 PV de Yumeko.
+
+Victoire (50 %) : L'attaque de Yumeko gagne le double des PV pariés en dégâts bonus.
+
+Défaite (50 %) : Yumeko subit immédiatement les PV pariés sous forme de dégâts directs.`,
       // Ouvert au banc par "Bonus", mais une seule fois de la partie (garde ci-dessous).
       usableFromBench: true,
       condition(ctx) {

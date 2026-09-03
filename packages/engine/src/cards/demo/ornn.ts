@@ -37,7 +37,7 @@ export const ornn: CharacterCardDef = {
       // Soraka/Guts), le texte ne décrit que le bonus par forge réussie (modifier
       // `getEffectiveATK` ci-dessous). Le déverrouillage de Living Forge, lui, est déjà
       // annoncé par le texte de la passive "Matériaux".
-      description: `Inflige ${FORGE_ATK_BONUS} dégâts supplémentaires par objet forgé.`,
+      description: 'Inflige 40 dégâts supplémentaires par objet forgé.',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (target) {
@@ -64,7 +64,7 @@ export const ornn: CharacterCardDef = {
       id: 'living-forge',
       name: 'Living Forge',
       kind: 'active',
-      description: `Ornn construit un objet et est bloqué sur le poste actif pendant ${LOCK_EFFECTIVE_TURNS} tours, il ne peut ni attaquer ni switch. Si il est toujours vivant après les ${LOCK_EFFECTIVE_TURNS} tours, récupérer un objet ou terrain au choix parmi les 2 cimetières.`,
+      description: 'Ornn construit un objet et est bloqué sur le poste actif pendant 3 tours, il ne peut ni attaquer ni switch. Si il est toujours vivant après les 3 tours, récupérer un objet ou terrain au choix parmi les 2 cimetières.',
       condition(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);
         if (!hasStatus(self, MATERIALS_STATUS_ID)) return false;
@@ -94,6 +94,8 @@ export const ornn: CharacterCardDef = {
       id: 'living-forge-reward',
       name: 'Living Forge (récompense)',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description: "S'il survit aux 3 tours de Living Forge, récupère un objet ou terrain au choix parmi les 2 cimetières.",
       trigger: 'onTurnStart',
       // Doit rester déclenchable même si Ornn a quitté le poste actif entre-temps (le

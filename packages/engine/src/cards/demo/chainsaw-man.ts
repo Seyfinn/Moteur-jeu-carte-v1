@@ -53,8 +53,7 @@ export const chainsawMan: CharacterCardDef = {
       name: 'Mangeur de démons',
       kind: 'active',
       description:
-        "Supprime une carte objet aléatoire de l'ennemi. Utilisable 1 fois et 1 fois de plus par personnage " +
-        'tué par Chainsaw Man.',
+        "Supprime une carte objet aléatoire de l'ennemi. Utilisable 1 fois et 1 fois de plus par personnage tué par Chainsaw Man.",
       // Déclaré à 1 : le modifier getAbilityUsesPerGame ci-dessous ajoute +1 par kill
       // enregistré dans le compteur permanent (voir "dévoreur" plus bas).
       usesPerGame: 1,
@@ -92,6 +91,8 @@ export const chainsawMan: CharacterCardDef = {
       id: 'devoreur-compteur',
       name: 'Dévoreur (compteur)',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description: 'Compte les personnages tués par Chainsaw Man, pour Mangeur de démons.',
       trigger: 'onCharacterKO',
       usableFromBench: true,

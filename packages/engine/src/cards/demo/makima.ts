@@ -98,7 +98,7 @@ export const makima: CharacterCardDef = {
       id: 'bang',
       name: 'Bang !',
       baseATK: BANG_BASE_ATK,
-      description: `Inflige ${BANG_BONUS_PER_SEAL} dégâts de plus par compétence alliée scellé (sacrifice)`,
+      description: 'Inflige 30 dégâts de plus par compétence alliée scellé (sacrifice)',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -115,7 +115,7 @@ export const makima: CharacterCardDef = {
       name: 'Sacrifice',
       kind: 'active',
       description:
-        "Au début du tour, Makima peut choisir de sceller (désactiver) au choix 1 Passif, 1 Actif ou 1 ATK d'un personnage sur son propre banc durant son tour",
+        "Au début du tour, Makima peut choisir de sceller (désactiver) de manière permanente, au choix 1 Passif, 1 Actif ou 1 ATK d'un personnage sur son propre banc.",
       condition(ctx) {
         return sacrificeCandidates(ctx).length > 0;
       },
@@ -164,7 +164,9 @@ export const makima: CharacterCardDef = {
       name: 'Manipulation',
       kind: 'active',
       description:
-        "Pas Utilisable 2 tours de suite| 2 sacrifices requis\nDésigne 1 carte du banc adverse. Au prochain tour, l'actif ennemi est forcé de l'attaquer, ce qui mettra fin à son tour.\n(L'activation de cette compétence met fin au tour de Makima).",
+        `Pas Utilisable 2 tours de suite | 2 sacrifices requis.
+Désigne 1 carte du banc adverse. Au prochain tour, le personnage actif ennemi est forcé de l'attaquer, ce qui mettra fin à son tour.
+(L'activation de cette compétence met fin au tour de Makima).`,
       condition(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);
         if (hasStatus(self, MANIPULATION_COOLDOWN_STATUS_ID)) return false;

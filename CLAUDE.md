@@ -44,6 +44,21 @@ lecture de ce fichier + l'écriture du fichier de carte + l'edit de `index.ts`.
 
 ## ⚠️ Les `description` sont le texte EXACT de la carte
 
+**Source de vérité : le dossier `ADMIN Cartes tout/` à la racine.** Un `<carte>.json` par
+carte, exporté par l'éditeur de cartes, avec le PNG à côté. `nom`, `hp`, `attacks[].name /
+damage / desc`, `abilities[].name / desc` et `description` (objets et terrains) y sont le
+texte imprimé, et c'est CE texte que le moteur doit porter, au caractère près — fautes de
+frappe et sauts de ligne compris (le client les affiche, `.ins-entry-text` est en
+`white-space: pre-line`). Un `desc` **vide** est une information : la carte n'imprime rien
+sous cette attaque, et la fiche n'affiche alors aucun paragraphe.
+
+Deux pièges de ces JSON, tous deux du résidu de l'éditeur, à ignorer :
+
+- un objet ou un terrain traîne souvent un `attacks` / `abilities` recopié d'une autre
+  carte (« Berserk » sur les potions, « Za Warudo ! » sur Arène). Un `ObjectCardDef` n'a de
+  toute façon pas d'abilities ;
+- un `damage` peut valoir `"30+"` ou `"-"` : c'est une notation d'éditeur, pas un nombre.
+
 Règle absolue, elle prime sur toute envie de clarté : le champ `description` (carte,
 attaque, ability) reprend **mot pour mot** le texte de la carte d'origine envoyée par
 l'utilisateur. Pas de reformulation, pas de résumé, pas de phrase explicative ajoutée,
@@ -64,6 +79,12 @@ Où va le reste :
   une carte.
 - Les précisions d'implémentation purement locales : en **commentaire de code**, jamais
   dans `description`.
+- Une capacité qui n'existe QUE pour faire tourner le moteur (un compteur, la mémoire de la
+  dernière attaque adverse, l'accroche `onTerrainPlayed` d'un terrain dont le texte est déjà
+  dans sa `description`) porte **`hidden: true`** : elle fonctionne exactement pareil, mais
+  la fiche d'inspection cesse de la lister — sa `description` est une phrase écrite par le
+  moteur, pas le texte de la carte. Même esprit que `hidden: true` sur un statut. À ne PAS
+  mettre sur une capacité `kind: 'active'` : le joueur la déclenche, il doit pouvoir la lire.
 - Les mécaniques génériques (poison, burn, bleed, vulnérable, stun, désarmé, silences,
   critique, esquive) : elles sont déjà décrites pour le joueur dans le **glossaire en
   partie** (`web/components/EffectsGlossary.tsx`), inutile de les réexpliquer sur chaque
@@ -112,6 +133,7 @@ interface AttackDef {
 interface AbilityDef {
   id: string; name: string; kind: 'active' | 'passive'; description: string;
   trigger?: EventName | EventName[]; // un event, ou "n'importe lequel de ceux-ci" ; sans trigger = purement descriptive
+  hidden?: boolean;    // plomberie interne : la fiche d'inspection ne la liste pas (voir plus bas)
   condition?(ctx: EffectContext): boolean;
   usableFromBench?: boolean; // défaut false
   usesPerTurn?: number; // défaut 1

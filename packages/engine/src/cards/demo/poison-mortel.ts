@@ -6,7 +6,7 @@ export const poisonMortel: ObjectCardDef = {
   type: 'object',
   id: 'poison-mortel',
   name: 'Poison Mortel',
-  description: `Applique poison sur la carte ennemi du poste actif pendant ${POISON_DURATION_TURNS} tours.`,
+  description: 'Applique poison sur la carte ennemi du poste actif pendant 3 tours',
   async execute(ctx) {
     const active = ctx.getActive(ctx.opponentId);
     if (!active) return;

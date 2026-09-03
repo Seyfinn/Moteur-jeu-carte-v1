@@ -8,10 +8,10 @@ export const jacobEtEssau: ObjectCardDef = {
   name: 'Jacob et Essau',
   equipment: true, // reste en jeu accroché au premier des deux liés (ctx.attachSelfTo ci-dessous)
   description:
-    'Lie 2 personnages. \n' +
-    'Ces deux personnages attaquent désormais ensemble, appliquant leurs deux attaques. \n' +
-    "Seul le personnage du poste actif peut utiliser son actif/passif.\n" +
-    'Ces deux personnages subissent aussi des dégâts ensemble, si un des deux meurt, les deux meurent. ',
+    `Lie 2 personnages. 
+Ces deux personnages attaquent désormais ensemble, appliquant leurs deux attaques. 
+Seul le personnage du poste actif peut utiliser son actif/passif.
+Ces deux personnages subissent aussi des dégâts ensemble, si un des deux meurt, les deux meurent. `,
   unplayableReason(state, ownerId) {
     const player = state.players[ownerId];
     const ids = [player.activeCharacterInstanceId, ...player.benchCharacterInstanceIds].filter(

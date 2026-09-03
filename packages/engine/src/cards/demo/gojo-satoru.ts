@@ -27,7 +27,7 @@ export const gojoSatoru: CharacterCardDef = {
       id: 'blackflash',
       name: 'Blackflash',
       baseATK: BLACKFLASH_ATK,
-      description: `Inflige ${BLACKFLASH_ATK} dégâts à l'actif adverse. ${BLACKFLASH_CRIT_PERCENT}% de chance de critique.`,
+      description: 'Peut crit',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -42,7 +42,7 @@ export const gojoSatoru: CharacterCardDef = {
       id: 'infini',
       name: "L'Infini",
       kind: 'passive',
-      description: "Gojo bénéficie en permanence de l'effet Esquive, qu'il soit actif ou au banc.",
+      description: "Gojo bénéficie de l'effet Esquive",
       // Purement descriptive : implémentée par le modifier 'getEvasionPercent' plus bas.
       // Un modifier vit tant que la carte est en jeu, donc l'esquive est acquise dès le
       // premier coup de la partie, ne peut pas être dissipée comme un statut, et
@@ -53,7 +53,7 @@ export const gojoSatoru: CharacterCardDef = {
       id: 'extension-du-territoire',
       name: 'Extension du Territoire',
       kind: 'active',
-      description: `Inflige Stun au personnage actif adverse pendant son prochain tour. Utilisable une seule fois par partie.`,
+      description: "Inflige Stun au personnage actif adverse pendant son prochain tour utilisable qu'une fois",
       usesPerGame: 1,
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);

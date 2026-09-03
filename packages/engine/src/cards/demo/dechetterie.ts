@@ -8,7 +8,7 @@ export const dechetterie: ObjectCardDef = {
   id: 'dechetterie',
   name: 'Déchetterie',
   description:
-    'Permet de récupérer une carte objet parmi une sélection aléatoire de 5 cartes objets des 2 cimetières.',
+    'Permet de récupérer une carte objet parmi une sélection aléatoire de 5 cartes objets des 2 cimetières. ',
   maxCopies: 1,
   async execute(ctx) {
     const own = ctx.state.players[ctx.ownerId];

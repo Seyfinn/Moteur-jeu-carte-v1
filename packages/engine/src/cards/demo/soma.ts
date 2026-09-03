@@ -48,7 +48,11 @@ export const soma: CharacterCardDef = {
       name: 'Menu Surprise',
       kind: 'active',
       description:
-        "Ne peut pas être utiliser les 2 prochains tours après avoir été utilisé\nSoma cuisine un plat mystérieux et force le personnage sur le poste actif adverse à choisir instantanément entre deux options :\nManger le plat : Si vous mangez le plat vous soigne de 80 HP, mais l'extase culinaire Stun 1 tour.\nRefuser le plat : Si vous refusez le plat, vous subissez 50 dégâts et Silence passif pendant 1 tour",
+        `Ne peut pas être utiliser les 2 prochains tours après avoir été utilisé
+Soma cuisine un plat mystérieux et force le personnage sur le poste actif adverse à choisir instantanément entre deux options :
+Manger le plat : Si vous mangez le plat vous soigne de 80 HP, mais l'extase culinaire Stun 1 tour.
+Refuser le plat : Si vous refusez le plat, vous subissez 50 dégâts et Silence passif pendant 1 tour
+`,
       condition(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);
         return !hasStatus(self, MENU_SURPRISE_COOLDOWN_STATUS_ID);
@@ -103,7 +107,7 @@ export const soma: CharacterCardDef = {
       name: 'Sabotage de Recette',
       kind: 'passive',
       description:
-        "Chaque fois que l'adversaire joue une carte Objet Soma réduit immédiatement la recharge de sa capacité Menu Surprise de 1 tour.",
+        "Chaque fois que l'adversaire joue une carte Objet Soma réduit immédiatement la recharge de sa capacité Menu Surprise de 1 tour. ",
       trigger: 'onObjectPlayed',
       // Doit continuer de réduire la recharge même si Soma est au banc.
       usableFromBench: true,

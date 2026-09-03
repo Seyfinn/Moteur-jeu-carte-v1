@@ -35,7 +35,7 @@ export const rhaast: CharacterCardDef = {
       name: 'Faux Rouge',
       baseATK: FAUX_ROUGE_ATK,
       // Pas de texte d'attaque sur la carte : description implicite.
-      description: `Inflige ${FAUX_ROUGE_ATK} dégâts à l'actif adverse.`,
+      description: '',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;

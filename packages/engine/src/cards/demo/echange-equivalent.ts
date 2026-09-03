@@ -8,7 +8,7 @@ export const echangeEquivalent: ObjectCardDef = {
   type: 'object',
   id: 'echange-equivalent',
   name: 'Echange équivalent',
-  description: `Sacrifier ${SACRIFICE_COUNT} cartes, objets ou terrain. En échange, vous permet de récupérer une carte objet ou terrain parmi toutes les cartes du jeu.`,
+  description: 'Sacrifier 2 cartes, objets ou terrain. En échange, vous permet de récupérer une carte objet ou terrain parmi toutes les cartes du jeu.',
   async execute(ctx) {
     const player = ctx.state.players[ctx.ownerId];
 

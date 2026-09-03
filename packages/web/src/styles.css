@@ -1030,6 +1030,10 @@ input::placeholder {
   }
 }
 
+:root {
+  --ins-panel-w: 360px;
+}
+
 /* Board */
 .board {
   --card-hand-w: clamp(56px, 4.4vw, 94px);
@@ -1038,8 +1042,13 @@ input::placeholder {
   /* Banc au format paysage assumé : nettement plus large que haut. Les PV vivent dans la
      colonne de droite de la carte, donc une entrée ne coûte que la hauteur de la vignette
      -- c'est ce qui permet de la doubler sans que cinq réservistes ne débordent du rail. */
-  --bench-card-w: clamp(196px, 15.6vw, 340px);
-  --bench-card-h: clamp(90px, min(7.2vw, 11.6vh), 156px);
+  --bench-card-w: clamp(200px, 15.5vw, 400px);
+  /* La hauteur reste bornée par la HAUTEUR d'écran (`vh`) et pas seulement par la largeur :
+     c'est elle qui décide si cinq réservistes tiennent encore dans le rail. Le rapport
+     largeur/hauteur qui en découle ne descend jamais sous ~2,3:1 -- et le `max()` posé sur
+     la largeur (cf. `.bench-column .tcg-card-landscape`) en fait une garantie et non une
+     coïncidence de réglage. */
+  --bench-card-h: clamp(88px, min(8vw, 11.8vh), 168px);
   --gy-card-w: clamp(96px, 13vh, 132px);
   --card-pile-w: clamp(54px, 7.5vh, 82px);
   /* Le terrain a quitté le rail pour la ligne centrale : il y a la place d'en montrer
@@ -1058,9 +1067,11 @@ input::placeholder {
      décaler d'exactement autant pour rester aligné sur la CARTE et non sur l'ensemble
      carte + colonne. */
   --cmd-col-w: clamp(52px, 3.9vw, 72px);
-  /* Plancher des rails : la largeur en dessous de laquelle une carte de banc couchée
-     cesse d'être lisible. */
-  --rail-min: clamp(210px, 17vw, 360px);
+  /* Plancher des rails, DÉRIVÉ de la carte de banc (largeur + les 8px de marge intérieure
+     de chaque côté du rail). C'était deux réglages indépendants qu'il fallait penser à
+     rejouer ensemble : dès qu'on élargissait la carte sans toucher au rail, la colonne du
+     banc débordait de sa piste de grille et repassait visuellement à l'étroit. */
+  --rail-min: calc(var(--bench-card-w) + 18px);
   position: relative;
   /* Le combat tient dans l'écran, un point c'est tout : pas de largeur maximale (elle
      laissait deux bandes noires sur les côtés) et pas de débordement (la molette ne doit
@@ -2343,7 +2354,9 @@ input::placeholder {
   --landscape-h: var(--bench-card-h);
   display: flex;
   flex-direction: column;
-  align-items: stretch;
+  /* `stretch` laissait la colonne imposer sa largeur aux cartes : le plancher paysage
+     posé ci-dessous n'aurait servi à rien dans un rail plus étroit que lui. */
+  align-items: center;
   gap: 6px;
   min-height: 40px;
 }
@@ -2374,8 +2387,16 @@ input::placeholder {
    dans le rail. Sans ça, un personnage à trois statuts allongeait sa carte et poussait ses
    voisins hors de l'écran. */
 .bench-column .tcg-card-landscape {
+  /* Hauteur FIXE et largeur PLANCHÉE au double de cette hauteur : le format couché du banc
+     ne dépend plus de l'accord entre deux clamps réglés à la main. Quoi qu'il arrive à
+     `--bench-card-w` (rail étroit, media query, écran exotique), la carte reste au moins
+     2,2 fois plus large que haute -- elle ne peut PAS redevenir un portrait. */
+  width: max(var(--bench-card-w), calc(var(--bench-card-h) * 2.2));
   height: var(--bench-card-h);
   min-height: 0;
+  /* Colonne flex : sans ça, cinq réservistes se partagent la hauteur restante et la carte
+     s'étire (ou s'écrase) au lieu de garder la sienne. */
+  flex: 0 0 var(--bench-card-h);
 }
 .bench-column .tcg-card-landscape .tcg-card-lane {
   justify-content: center;
@@ -4022,7 +4043,9 @@ input::placeholder {
 .ins-panel {
   position: fixed;
   z-index: 50;
-  width: 360px;
+  /* Largeur du panneau d'inspection, SEULE source de vérité : `HoverCard.tsx` la relit ici
+     pour choisir de quel côté de la bande centrale le poser. */
+  width: var(--ins-panel-w);
   /* Assez haut pour que TOUTES les attaques et tous les talents tiennent d'un seul coup
      d'oeil : la barre de défilement du panneau n'apparaît plus que sur les cartes
      vraiment bavardes. */
@@ -4247,6 +4270,10 @@ input::placeholder {
   font-size: 0.76rem;
   line-height: 1.4;
   color: #cdd4e0;
+  /* Les textes de carte viennent des JSON de l'éditeur, sauts de ligne compris (Escanor
+     énumère ses trois issues ligne par ligne, Aki ses trois cas). En HTML ils étaient
+     aplatis en un seul paragraphe : la carte se lit comme elle est imprimée. */
+  white-space: pre-line;
 }
 
 /* Badges de valeur : les dégâts en rouge/orange, la nature d'un talent en violet (actif)

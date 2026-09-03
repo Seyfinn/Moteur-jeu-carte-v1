@@ -22,7 +22,7 @@ export const guts: CharacterCardDef = {
       // Texte carte : "Se soigne de 25." -- l'ATK 50 affiché inflige les dégâts (implicite,
       // comme les autres attaques), le texte ne décrit que l'effet secondaire (même
       // convention que Soraka).
-      description: `Inflige ${COUP_DEPEE_ATK} dégâts à l'actif adverse, puis Guts se soigne de ${COUP_DEPEE_SELF_HEAL}.`,
+      description: 'Se soigne de 25.',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (target) {
@@ -38,7 +38,7 @@ export const guts: CharacterCardDef = {
       id: 'berserk',
       name: 'Berserk',
       kind: 'passive',
-      description: `Tous les ${HP_CHUNK} HP que Guts perd au cours de la partie, "Coup d'épée" inflige ${BONUS_PER_CHUNK} dégâts supplémentaires de façon permanente.`,
+      description: "Tout les 100 HP que la carte \"Guts\" perd, l'attaque coup d'épée fait 50 dégâts supplémentaires",
       trigger: 'afterDamage',
       // Le décompte doit valoir même si Guts encaisse les dégâts depuis le banc (AoE).
       usableFromBench: true,

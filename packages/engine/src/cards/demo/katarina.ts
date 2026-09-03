@@ -29,7 +29,7 @@ export const katarina: CharacterCardDef = {
       id: 'shunpo',
       name: 'Shunpo',
       baseATK: BASE_ATK,
-      description: `Inflige ${BASE_ATK} dégâts à l'actif adverse. Si des dégâts passent, ${DISARM_CHANCE_PERCENT}% de chance de désarmer la cible pendant ${DISARM_EFFECTIVE_TURNS} tour.`,
+      description: '33% de chance de désarmé la cible',
       endsTurn(ctx) {
         return !ctx.scratch[KILLED_THIS_ATTACK];
       },
@@ -65,7 +65,7 @@ export const katarina: CharacterCardDef = {
       id: 'voracity',
       name: 'Voracity',
       kind: 'passive',
-      description: 'Si Katarina tue un personnage ennemi avec Shunpo, elle peut immédiatement attaquer de nouveau ce tour.',
+      description: 'Si Katarina tue un personnage ennemi, le joueur peut immédiatement attaquer de nouveau.',
       // Purement descriptive : la logique vit dans l'AttackDef de Shunpo ci-dessus
       // (flag en closure partagé entre execute/endsTurn), pas via un trigger d'event --
       // onCharacterKO ne donne pas assez d'info pour savoir qui a tué la cible.

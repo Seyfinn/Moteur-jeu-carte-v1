@@ -15,14 +15,14 @@ export const izukuDeLAcademie: CharacterCardDef = {
   name: "Izuku de l'Académie",
   baseMaxHP: 280,
   attacks: [
-    simpleAttack('texas-smash', 'Texas Smash', TEXAS_SMASH_ATK, `Inflige ${TEXAS_SMASH_ATK} dégâts à l'actif adverse.`),
+    simpleAttack('texas-smash', 'Texas Smash', TEXAS_SMASH_ATK, ''),
   ],
   abilities: [
     {
       id: 'nouvel-alter',
       name: 'Nouvel Alter',
       kind: 'active',
-      description: `Izuku utilise son alter pour infliger ${ATK_BONUS} dégâts en plus ce round, mais il se blesse aussi de ${SELF_DAMAGE}hp.`,
+      description: 'Izuku utilise son alter pour infliger 60 dégâts en plus ce round, mais il se blesse aussi de 80hp.',
       // Aucune limite de partie déclarée : le défaut du moteur (1 fois par tour) s'applique.
       // Le vrai frein est le coût en HP, pas un compteur.
       //

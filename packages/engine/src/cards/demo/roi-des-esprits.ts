@@ -20,7 +20,7 @@ const espritDeGlace: AttackDef = {
   id: 'esprit-de-glace',
   name: 'Esprit de glace',
   baseATK: ICE_ATK,
-  description: `Inflige ${ICE_ATK} dégâts à l'actif adverse. Si les dégâts passent, ${STUN_CHANCE_PERCENT}% de chance d'appliquer Stun pendant ${STUN_EFFECTIVE_TURNS} tour.`,
+  description: 'Lance un esprit de glace qui a 65% de chance de stun la cible',
   async execute(ctx) {
     const target = ctx.getActive(ctx.opponentId);
     if (!target) return;
@@ -45,7 +45,7 @@ const espritDeFeu: AttackDef = {
   id: 'esprit-de-feu',
   name: 'Esprit de feu',
   baseATK: FIRE_ATK,
-  description: `Inflige ${FIRE_ATK} dégâts à l'actif adverse et applique Burn pendant 1 tour.`,
+  description: 'Inflige burn pendant 1 tour à la cible',
   async execute(ctx) {
     const target = ctx.getActive(ctx.opponentId);
     if (!target) return;
@@ -75,7 +75,7 @@ const espritDeSoin: AttackDef = {
   id: 'esprit-de-soin',
   name: 'Esprit de soin',
   baseATK: HEAL_ATK,
-  description: `Soigne un personnage allié au choix (actif ou banc) de ${HEAL_AMOUNT} HP.`,
+  description: "Lance un esprit de soin qui heal de 40 l'allié choisi",
   async execute(ctx) {
     const allies = ctx.getAllOnBoard(ctx.ownerId);
     const [targetId] = await ctx.choose({
@@ -102,7 +102,7 @@ export const roiDesEsprits: CharacterCardDef = {
       name: "Explosion d'esprits",
       kind: 'active',
       description:
-        "Lance les 3 esprits (Esprit de glace, Esprit de feu, Esprit de soin) en même temps. Ne peut pas attaquer ce tour. Utilisable une seule fois par partie.",
+        'Le Roi des esprits lance les 3 esprits en même temps. Ne peut pas attaquer ce round. Utilisable une fois.',
       usesPerGame: 1,
       async execute(ctx) {
         // "Ne peut pas attaquer ce round" : Désarmé bloque spécifiquement canAttack

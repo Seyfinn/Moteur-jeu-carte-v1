@@ -7,7 +7,8 @@ export const hopital: TerrainCardDef = {
   type: 'terrain',
   id: 'hopital',
   name: 'Hôpital',
-  description: `Les soins reçus sont multipliés par ${HEAL_MULTIPLIER} pendant ${DURATION_TURNS} tours.`,
+  description: `Les soins sont multipliés par 2 
+`,
   durationTurns: DURATION_TURNS,
   modifiers: [
     {

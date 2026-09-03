@@ -25,7 +25,7 @@ export const killua: CharacterCardDef = {
       id: 'narukami',
       name: 'Narukami',
       baseATK: NARUKAMI_ATK,
-      description: `Inflige ${NARUKAMI_ATK} dégâts à l'actif adverse ; si le coup touche, ${DISARM_CHANCE_PERCENT}% de chance de le désarmer pendant ${DISARM_EFFECTIVE_TURNS} tour.`,
+      description: "Possède 33 % de chance d'appliquer l'état Désarmé au personnage actif adverse pendant 1 tour",
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -72,7 +72,7 @@ export const killua: CharacterCardDef = {
       name: 'Godspeed',
       kind: 'passive',
       description:
-        "Lorsque Killua devient le personnage actif via un switch, la première attaque qu'il effectue lors de ce tour inflige obligatoirement un coup critique.",
+        "Lorsque Killua devient le personnage actif via un switch, la première attaque qu'il effectue lors de ce tour inflige obligatoirement un coup Critique",
       trigger: 'onBecomeActive',
       condition(ctx) {
         // 'setup' = personnage actif de départ : la carte dit "via un switch", donc la

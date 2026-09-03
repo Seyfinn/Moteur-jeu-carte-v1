@@ -89,7 +89,7 @@ export const isaacD6: TerrainCardDef = {
   type: 'terrain',
   id: 'isaac-d6',
   name: 'Isaac D6',
-  description: `Chaque joueur peut choisir de donner un de ses objets à Isaac D6. Chaque tour, Isaac D6 reroll l'item, le transformant en un autre objet du jeu de manière aléatoire.
+  description: `Chaque joueur peut choisir de donner un de ses objets à Isaac D6. Chaque tour, Isaac D6 reroll l'item, le transformant en un autre objet du jeu de manière aléatoire. 
 Chaque tour, le joueur peut décider de prendre cet objet ou de le laisser pour qu'il soit reroll une nouvelle fois au tour suivant.`,
   durationTurns: DURATION_TURNS,
   abilities: [
@@ -97,6 +97,8 @@ Chaque tour, le joueur peut décider de prendre cet objet ou de le laisser pour 
       id: 'isaac-d6-pose',
       name: 'Premier lancer',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description: "Celui qui pose le terrain est invité à confier un objet tout de suite, sans attendre son prochain tour.",
       trigger: 'onTerrainPlayed',
       condition(ctx) {
@@ -117,6 +119,8 @@ Chaque tour, le joueur peut décider de prendre cet objet ou de le laisser pour 
       id: 'isaac-d6-tour',
       name: 'Relance',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description:
         "Au début de son tour, chaque joueur relance l'objet qu'il a confié et décide de le prendre ou de le laisser tourner ; celui qui n'a rien confié se voit reproposer de le faire.",
       trigger: 'onTurnStart',
@@ -143,6 +147,8 @@ Chaque tour, le joueur peut décider de prendre cet objet ou de le laisser pour 
       id: 'isaac-d6-fin',
       name: 'Restitution',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description: "Quand le terrain part, tout objet encore dans le dé est rendu à son joueur, sous la face qu'il a alors.",
       trigger: 'onTerrainRemoved',
       condition(ctx) {

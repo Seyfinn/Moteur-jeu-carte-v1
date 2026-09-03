@@ -9,7 +9,7 @@ export const kirigiri: CharacterCardDef = {
   name: 'Kirigiri',
   baseMaxHP: 300,
   attacks: [
-    simpleAttack('deduction-froide', 'Déduction Froide', DEDUCTION_ATK, `Inflige ${DEDUCTION_ATK} dégâts à l'actif adverse.`),
+    simpleAttack('deduction-froide', 'Déduction Froide', DEDUCTION_ATK, ''),
   ],
   abilities: [
     {
@@ -17,7 +17,7 @@ export const kirigiri: CharacterCardDef = {
       name: 'Ultimate Détective',
       kind: 'active',
       description:
-        "Révèle définitivement toutes les cartes objets et terrains non jouées de l'adversaire pour le reste de la partie. Utilisation unique.",
+        "Permet de voir toute les cartes objets et terrains de l'adversaire",
       usesPerGame: 1,
       async execute(ctx) {
         ctx.state.players[ctx.ownerId].revealsOpponentUnplayedCards = true;

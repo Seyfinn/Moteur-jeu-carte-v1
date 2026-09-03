@@ -344,6 +344,15 @@ export interface AbilityDef {
     * same line three times on the card.
     */
   trigger?: EventName | EventName[];
+  /**
+   * Plomberie interne : capacité qui n'est PAS imprimée sur la carte (un compteur, la
+   * mémoire de la dernière attaque adverse, l'accroche « à la pose » d'un terrain dont le
+   * texte est déjà dans sa `description`). Elle continue de fonctionner exactement pareil ;
+   * seule la fiche d'inspection cesse de la lister, parce que sa `description` est une
+   * phrase écrite par le moteur et non le texte de la carte -- même esprit que
+   * `hidden: true` sur un statut.
+   */
+  hidden?: boolean;
   /** Extra gating beyond the generic canUseAbility query. */
   condition?(ctx: EffectContext): boolean;
   /** Defaults to false (usable only by the active character). */
