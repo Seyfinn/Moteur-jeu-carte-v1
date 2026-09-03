@@ -65,7 +65,13 @@ export const deidara: CharacterCardDef = {
       name: 'Détonation : Katsu !',
       kind: 'active',
       description:
-        "Utilisable depuis le banc\nDeidara fait exploser le personnage adverse qui porte le statut Bombe d'Argile. L'effet change selon la position de la cible \nSi la cible est sur le poste actif : L'explosion est concentrée et lui inflige 50 dégâts pour une bombe \n80 pour 2 bombes\n120 pour 3 bombes\nSi la cible est sur le banc : inflige 40 dégâts à la cible ET 20 dégâts à tous ses alliés",
+        `Utilisable depuis le banc
+Deidara fait exploser le personnage adverse qui porte le statut Bombe d'Argile. L'effet change selon la position de la cible 
+Si la cible est sur le poste actif : L'explosion est concentrée et lui inflige 50 dégâts pour une bombe 
+80 pour 2 bombes
+120 pour 3 bombes
+Si la cible est sur le banc : inflige 40 dégâts à la cible ET 20 dégâts à tous ses alliés
+`,
       usableFromBench: true,
       condition(ctx) {
         return !!findBombCarrier(ctx);

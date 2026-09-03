@@ -1,7 +1,23 @@
 import { getCharacterCard, getObjectCard, getTerrainCard, type CharacterInstance, type GameState } from 'engine';
+
+// Une `description` VIDE est une information, pas un oubli : elle veut dire que
+// l'illustration de la carte n'imprime rien pour cette attaque (souvent le cas -- juste un
+// nom et un chiffre d'ATK). On n'affiche alors aucun paragraphe, plutôt qu'un blanc.
+
 import { statusBadgeText } from './CharacterCard';
 import { toneForStatus } from './statusEffects';
 import { attackReadouts, liveAttacks } from './boardActions';
+
+/**
+ * Ce que la carte IMPRIME, par opposition à sa plomberie. Une capacité `hidden` porte une
+ * phrase écrite par le moteur (« Compte les personnages tués par Chainsaw Man, pour
+ * Mangeur de démons. ») : elle explique le code, pas la carte, et n'a rien à faire sous
+ * les yeux du joueur -- qui lisait jusqu'ici deux lignes « Autel Démoniaque » sous un
+ * terrain dont le texte disait déjà tout.
+ */
+function printedAbilities<T extends { hidden?: boolean }>(abilities: readonly T[] | undefined): readonly T[] {
+  return (abilities ?? []).filter((a) => !a.hidden);
+}
 
 /**
  * Jauge de PV de la fiche d'inspection. Même dégradé continu que sur le plateau (la teinte
@@ -74,23 +90,23 @@ export function characterDetailBody(cardId: string, instance?: CharacterInstance
                 {/* La valeur imprimée n'apparaît que quand elle a été modifiée : une attaque
                     qui frappe pour ce qui est écrit dessus n'a rien à corriger. */}
                 {shifted && <span className="ins-entry-note">imprimé {a.baseATK} ATK</span>}
-                <p className="ins-entry-text">{a.description}</p>
+                {a.description && <p className="ins-entry-text">{a.description}</p>}
               </article>
             );
           })}
         </section>
       )}
 
-      {def.abilities.length > 0 && (
+      {printedAbilities(def.abilities).length > 0 && (
         <section className="ins-block ins-block-talent">
           <h4>Talents</h4>
-          {def.abilities.map((a) => (
+          {printedAbilities(def.abilities).map((a) => (
             <article key={a.id} className="ins-entry">
               <header className="ins-entry-head">
                 <span className="ins-entry-name">{a.name}</span>
                 <span className={`ins-badge ins-badge-${a.kind}`}>{a.kind === 'active' ? 'Actif' : 'Passif'}</span>
               </header>
-              <p className="ins-entry-text">{a.description}</p>
+              {a.description && <p className="ins-entry-text">{a.description}</p>}
             </article>
           ))}
         </section>
@@ -108,7 +124,7 @@ export function objectDetailBody(cardId: string) {
           <span className="ins-pill tone-neutral">🔗 Objet à lier</span>
         </div>
       )}
-      <p className="ins-entry-text">{def.description}</p>
+      {def.description && <p className="ins-entry-text">{def.description}</p>}
     </>
   );
 }
@@ -125,16 +141,16 @@ export function terrainDetailBody(cardId: string) {
             : 'Durée indéfinie'}
         </span>
       </div>
-      <p className="ins-entry-text">{def.description}</p>
-      {def.abilities && def.abilities.length > 0 && (
+      {def.description && <p className="ins-entry-text">{def.description}</p>}
+      {printedAbilities(def.abilities).length > 0 && (
         <section className="ins-block ins-block-talent">
           <h4>Effets</h4>
-          {def.abilities.map((a) => (
+          {printedAbilities(def.abilities).map((a) => (
             <article key={a.id} className="ins-entry">
               <header className="ins-entry-head">
                 <span className="ins-entry-name">{a.name}</span>
               </header>
-              <p className="ins-entry-text">{a.description}</p>
+              {a.description && <p className="ins-entry-text">{a.description}</p>}
             </article>
           ))}
         </section>

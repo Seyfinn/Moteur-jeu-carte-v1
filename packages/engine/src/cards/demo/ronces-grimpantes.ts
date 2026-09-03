@@ -66,7 +66,7 @@ export const roncesGrimpantes: TerrainCardDef = {
   id: 'ronces-grimpantes',
   name: 'Ronces grimpantes',
   description: `Tous les personnages actifs subissent de plus en plus de dégâts en fonction du temps qu'ils restent au poste actif.
-Premier tour 0% de dégâts prit en plus, ensuite, augmente de ${DAMAGE_BONUS_PERCENT_PER_TURN}% les dégâts subis à chaque tour (Tour 2 = ${DAMAGE_BONUS_PERCENT_PER_TURN}%, tour 3 = ${DAMAGE_BONUS_PERCENT_PER_TURN * 2}%) tant que le personnage actif reste sur le poste actif.
+Premier tour 0% de dégâts prit en plus, ensuite, augmente de 10% les dégâts subis à chaque tour (Tour 2 = 10%, tour 3 = 20%) tant que le personnage actif reste sur le poste actif. 
 Se réinitialise si il y a un switch où si le personnage actif meurt, seulement pour le joueur concerné.`,
   durationTurns: DURATION_TURNS,
   abilities: [
@@ -74,6 +74,8 @@ Se réinitialise si il y a un switch où si le personnage actif meurt, seulement
       id: 'ronces-grimpantes-pose',
       name: 'Prise de racine',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description: 'À la pose, les deux camps repartent de zéro, quel que soit le temps déjà passé au poste actif.',
       trigger: 'onTerrainPlayed',
       // Pour CE terrain seulement : l'event part pour n'importe quelle pose, celle de
@@ -91,6 +93,8 @@ Se réinitialise si il y a un switch où si le personnage actif meurt, seulement
       id: 'ronces-grimpantes-reset',
       name: 'Réinitialisation',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description:
         "Un nouvel arrivant au poste actif repart à 0 %, qu'il vienne d'un switch, d'une carte qui l'a poussé ou du remplacement d'un mort.",
       // `onBecomeActive` couvre les trois chemins d'un seul coup : switch volontaire,
@@ -107,6 +111,8 @@ Se réinitialise si il y a un switch où si le personnage actif meurt, seulement
       id: 'ronces-grimpantes-serrage',
       name: 'Les ronces se resserrent',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description: `Au début de chaque tour, l'actif qui n'a pas bougé prend ${DAMAGE_BONUS_PERCENT_PER_TURN} % de plus.`,
       trigger: 'onTurnStart',
       async execute(ctx) {
@@ -134,6 +140,8 @@ Se réinitialise si il y a un switch où si le personnage actif meurt, seulement
       id: 'ronces-grimpantes-fin',
       name: 'Fin des ronces',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description: 'Les compteurs disparaissent avec le terrain.',
       // Le terrain peut partir autrement que par son décompte (détruit, remplacé) : sans
       // ce nettoyage, le badge resterait collé aux personnages pour toute la partie

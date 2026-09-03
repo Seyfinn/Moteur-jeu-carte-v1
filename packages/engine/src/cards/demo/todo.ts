@@ -13,7 +13,7 @@ export const todo: CharacterCardDef = {
       id: 'black-flash',
       name: 'Black Flash',
       baseATK: BLACK_FLASH_ATK,
-      description: `Inflige ${BLACK_FLASH_ATK} dégâts à l'actif adverse. ${BLACK_FLASH_CRIT_PERCENT}% de chance de critique.`,
+      description: 'Cette Attaque possède du Crit',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -29,7 +29,7 @@ export const todo: CharacterCardDef = {
       name: 'Boogie Woogie',
       kind: 'active',
       description:
-        "Switch gratuitement le personnage actif avec un personnage du banc allié de votre choix, même si Todo lui-même n'est pas l'actif. Utilisable une seule fois par partie.",
+        "Permet même depuis le banc de switch 2 cartes alliées utilisable qu'une seule fois",
       usableFromBench: true,
       usesPerGame: 1,
       async execute(ctx) {

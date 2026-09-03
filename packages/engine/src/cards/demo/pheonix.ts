@@ -15,8 +15,7 @@ export const pheonix: ObjectCardDef = {
   // sur la carte : un objet au cimetière ne peut porter aucun statut/minuteur.
   equipment: true,
   description:
-    `Tue ce personnage, au bout de ${REVIVE_DELAY_TURNS} tours, le réanime avec ${BONUS_MAX_HP}pv max supplémentaire et ` +
-    `${BONUS_ATK} d'attaque supplémentaire. Si il ne vous reste plus qu'un personnage en vie. Cette carte ne ferra pas effet.`,
+    "Tue ce personnage, au bout de 15 tours, le réanime avec 80pv max supplémentaire et 30 d'attaque supplémentaire. Si il ne vous reste plus qu'un personnage en vie. Cette carte ne ferra pas effet.",
   unplayableReason(state, ownerId) {
     const player = state.players[ownerId];
     const aliveCount = [player.activeCharacterInstanceId, ...player.benchCharacterInstanceIds].filter(

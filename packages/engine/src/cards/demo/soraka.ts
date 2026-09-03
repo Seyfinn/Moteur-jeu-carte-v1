@@ -20,7 +20,7 @@ export const soraka: CharacterCardDef = {
       name: 'Don forcé',
       baseATK: ATTACK_BASE_ATK,
       // Texte carte : "Heal de 50." — l'ATK 50 affiché inflige les dégâts (implicite, comme les autres attaques), le texte ne décrit que l'effet secondaire.
-      description: `Inflige ${ATTACK_BASE_ATK} dégâts à l'actif adverse, puis Soraka se soigne de ${ATTACK_SELF_HEAL}.`,
+      description: 'Heal de 50.',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (target) {
@@ -36,7 +36,7 @@ export const soraka: CharacterCardDef = {
       id: 'soin-sacrificiel',
       name: 'Soin Sacrificiel',
       kind: 'active',
-      description: `Sacrifie ${SACRIFICE_COST}HP pour rendre ${SACRIFICE_HEAL}HP au personnage de votre choix. Utilisable sur le banc. Nécessite plus de ${SACRIFICE_COST}HP actuels.`,
+      description: 'Sacrifie 100hp pour rendre 150hp au personnage de votre choix. Utilisable sur le banc.',
       usableFromBench: true,
       condition(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);

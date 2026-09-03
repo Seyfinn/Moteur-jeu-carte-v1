@@ -10,7 +10,7 @@ export const coeurAcier: ObjectCardDef = {
   name: 'Coeur acier',
   equipment: true,
   maxCopies: 1,
-  description: `Vos ${CHARGES} prochaines attaques augmente vos hp max de ${BONUS_MAX_HP} et vous rend ${BONUS_MAX_HP}hp.`,
+  description: 'Vos 3 prochaines attaques augmente vos hp max de 35 et vous rend 35hp.',
   unplayableReason(state, ownerId) {
     const player = state.players[ownerId];
     const ids = [player.activeCharacterInstanceId, ...player.benchCharacterInstanceIds].filter(

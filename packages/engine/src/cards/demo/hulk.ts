@@ -11,13 +11,13 @@ export const hulk: CharacterCardDef = {
   id: 'hulk',
   name: 'Hulk',
   baseMaxHP: 500,
-  attacks: [simpleAttack('smash', 'Smash', 30, "Inflige 30 dégâts à l'actif adverse.")],
+  attacks: [simpleAttack('smash', 'Smash', 30, '')],
   abilities: [
     {
       id: 'enervement',
       name: 'Enervement',
       kind: 'passive',
-      description: `Chaque fois que Hulk subit une instance de dégâts (actif ou banc), il s'énerve et gagne ${ATK_BONUS_PER_STACK} dégâts d'attaque de façon permanente.`,
+      description: "A chaque fois que Hulk subit une instance de dégâts, il s'énerve et gagne 30 dégâts d'attaque.",
       trigger: 'afterDamage',
       // Se déclenche même si Hulk encaisse les dégâts depuis le banc (ex: AoE adverse).
       usableFromBench: true,

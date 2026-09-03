@@ -21,7 +21,7 @@ export const kaynAssassin: CharacterCardDef = {
       baseATK: FAUX_BLEU_ATK,
       // Pas de texte d'attaque sur la carte : description implicite. Le bonus de Disciple
       // de l'ombre est porté par la passive, pas par cette ligne.
-      description: `Inflige ${FAUX_BLEU_ATK} dégâts à l'actif adverse.`,
+      description: '',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;

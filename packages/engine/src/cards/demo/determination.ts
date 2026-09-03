@@ -13,7 +13,7 @@ export const determination: ObjectCardDef = {
   // fois le tour terminé (même convention qu'Attaque cloné / Potion force).
   equipment: true,
   description:
-    "Empêche le personnage actif de mourir pendant 1 tour, si il subit des dégâts, ne peut pas descendre en dessous de 1hp.",
+    'Empêche le personnage actif de mourir pendant 1 tour, si il subit des dégâts, ne peut pas descendre en dessous de 1hp.',
   maxCopies: 1,
   unplayableReason(state, ownerId) {
     const player = state.players[ownerId];

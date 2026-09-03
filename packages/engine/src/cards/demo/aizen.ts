@@ -17,8 +17,7 @@ export const aizen: CharacterCardDef = {
       name: 'Hado #90',
       baseATK: HADO_BASE_ATK,
       description:
-        `Inflige ${HADO_BASE_ATK} dégâts à l'actif adverse en traversant tous les boucliers et toutes les ` +
-        'réductions de dégâts.',
+        'Ignore les shields, et les réductions de dégâts',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -33,8 +32,7 @@ export const aizen: CharacterCardDef = {
       name: 'Hypnose Absolue',
       kind: 'passive',
       description:
-        `Quand Aizen est attaqué (attaque ou ability adverse), ${REDIRECT_PERCENT} % de chance que les dégâts soient ` +
-        "entièrement redirigés vers un personnage du banc allié, désigné par le joueur d'Aizen.",
+        'Quand Aizen est attaqué, lance un dé (40 % de chance) : Ses dégâts sont entièrement redirigés vers un personnage du banc allié.',
       // Purement descriptive : le mécanisme vit dans le modifier 'getDamageRedirectPercent'
       // ci-dessous. Un modifier est scanné en continu tant que la carte est en jeu, donc
       // l'effet est actif dès le tout premier coup subi -- sans dépendre d'un trigger de
@@ -45,7 +43,7 @@ export const aizen: CharacterCardDef = {
       id: 'inversion-de-la-realite',
       name: 'Inversion de la Réalité',
       kind: 'active',
-      description: "Échange les altérations d'Aizen (buffs comme malus) avec celles du personnage actif adverse.",
+      description: 'Inverse tout les effets/statuts du personnage actif adverse avec les siens',
       async execute(ctx) {
         const opponentActive = ctx.getActive(ctx.opponentId);
         if (!opponentActive) return;

@@ -13,7 +13,7 @@ export const potionForce: ObjectCardDef = {
   // seul dès que le buff expire naturellement -- rien ne reste accroché pour rien une fois
   // le tour de bonus terminé (même convention qu'Attaque cloné).
   equipment: true,
-  description: `Augmente les dégâts des attaques d'un personnage de ${BOOST_AMOUNT} pendant ${BOOST_DURATION_TURNS} tour`,
+  description: "Augmente les dégâts des attaques d'un personnage de 50 pendant 1 tour",
   unplayableReason(state, ownerId) {
     const player = state.players[ownerId];
     const ids = [player.activeCharacterInstanceId, ...player.benchCharacterInstanceIds].filter(

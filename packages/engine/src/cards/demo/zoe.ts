@@ -54,7 +54,7 @@ export const zoe: CharacterCardDef = {
       id: 'sleepy-bubble',
       name: 'Sleepy Bubble',
       baseATK: BASE_ATK,
-      description: `Inflige ${BASE_ATK} dégâts à l'actif adverse. Si des dégâts passent, ${SILENCE_CHANCE_PERCENT}% de chance d'appliquer Silence Ultime pendant ${SILENCE_EFFECTIVE_TURNS} tour.`,
+      description: "Cette attaque a 33% de chance d'appliquer Silence Ultime à la cible",
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -80,7 +80,7 @@ export const zoe: CharacterCardDef = {
       id: 'portail-dimensionnel',
       name: 'Portail Dimensionnel',
       kind: 'active',
-      description: `Switch gratuitement avec un personnage du banc allié de votre choix. ${PORTAL_USES_PER_GAME} utilisations maximum par partie.`,
+      description: 'Zoé peut switch avec un personnage du banc allié, gratuitement. 2 utilisations maximum.',
       usesPerGame: PORTAL_USES_PER_GAME,
       async execute(ctx) {
         const bench = ctx.getBench(ctx.ownerId);
@@ -100,7 +100,7 @@ export const zoe: CharacterCardDef = {
       id: 'spell-thief',
       name: 'Spell Thief',
       kind: 'active',
-      description: `Rejoue immédiatement la dernière capacité active utilisée par l'adversaire, mais lancée par Zoé. Rechargement : ${SPELL_THIEF_COOLDOWN_EFFECTIVE_TURNS} tours.`,
+      description: "Zoé peut récupérer et utiliser la dernière ability utilisé par l'ennemi. Ne peut pas être utilisé pendant 3 tours après avoir été utilisé.",
       condition(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);
         if (hasStatus(self, SPELL_THIEF_COOLDOWN_STATUS_ID)) return false;

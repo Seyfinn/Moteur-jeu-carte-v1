@@ -7,7 +7,7 @@ export const dieuDuTonnerreVolant: ObjectCardDef = {
   id: 'dieu-du-tonnerre-volant',
   name: 'Dieu du Tonnerre Volant',
   description:
-    'Téléportation : échange votre actif avec un personnage de votre banc, gratuitement et sans finir votre tour. Ignore Stun.',
+    'Permet de switch le personnage actif avec un personnage du banc allié, gratuitement, sans mettre fin au tour.',
   // Refusée avant d'être consommée dans tous les cas où la téléportation n'aurait pas lieu :
   // le Stun est bien ignoré (il n'apparaît pas ici), mais Chaînes bloque tout switch et un
   // interdit explicite d'une carte en jeu (Bouclier Ultime) aussi.

@@ -8,7 +8,7 @@ export const miroirDeRenvoi: ObjectCardDef = {
   name: 'Miroir de Renvoi',
   equipment: true, // se lie au porteur (ctx.attachSelfTo ci-dessous) au lieu d'être consommée
   description:
-    `À lier à votre personnage actif. Celui-ci subit 100% des dégâts de la prochaine attaque qu'il subit et en renvoie immédiatement ${REFLECT_PERCENT}% à l'attaquant, puis le miroir se détruit.`,
+    "Ton personnage actif subit 100 % des dégâts de la prochaine attaque et en renvoie immédiatement l'équivalent 50 % à l'attaquant. à lier au persnnage",
   async execute(ctx) {
     const active = ctx.getActive(ctx.ownerId);
     if (!active) return;

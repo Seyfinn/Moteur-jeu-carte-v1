@@ -18,13 +18,15 @@ export const failleDimensionnelle: TerrainCardDef = {
   type: 'terrain',
   id: 'faille-dimensionnelle',
   name: 'Faille dimensionnelle',
-  description: `Tous les joueurs peuvent switch gratuitement jusqu'à ${FREE_SWITCHES} fois pendant la durée de ce terrain.`,
+  description: "Tous les joueurs peuvent switch gratuitement jusqu'à 2 fois pendant la durée de ce terrain.",
   durationTurns: DURATION_TURNS,
   abilities: [
     {
       id: 'faille-dimensionnelle-charges',
       name: 'Passage libre',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description:
         "Seuls les changements décidés par le joueur consomment une charge : un switch imposé par une carte adverse reste gratuit et n'en retire aucune.",
       trigger: 'onSwitch',

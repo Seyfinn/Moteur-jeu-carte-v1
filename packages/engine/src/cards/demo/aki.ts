@@ -53,7 +53,9 @@ export const aki: CharacterCardDef = {
       name: 'Vision du Futur',
       kind: 'passive',
       description:
-        "Si l'ennemi utilise un Objet : +40 dégâts sur la prochaine attaque d'Aki.\nS'il utilise un Actif : Aki va stun au prochain tour.\nS'il effectue une Atk : Gagne 20 HP ",
+        `Si l'ennemi utilise un Objet : +40 dégâts sur la prochaine attaque d'Aki.
+S'il utilise un Actif : Aki va stun au prochain tour.
+S'il effectue une Atk : Gagne 20 HP `,
       // Une seule passive imprimée, trois sortes d'action adverse à surveiller.
       trigger: ['onObjectPlayed', 'onAbilityUsed', 'onAttackDeclared'],
       // Pas de `usableFromBench` : Aki ne lit le jeu que depuis le poste actif. L'adversaire

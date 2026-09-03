@@ -8,7 +8,7 @@ export const pocheDeSang: ObjectCardDef = {
   id: 'poche-de-sang',
   name: 'Poche de sang',
   equipment: true, // se lie au porteur (ctx.attachSelfTo ci-dessous) au lieu d'être consommée
-  description: `Augmente les hp max de ${MAX_HP_BONUS}, sans augmenter les hp actuel. Cet objet ne soigne pas de ${MAX_HP_BONUS}hp.`,
+  description: 'Augmente les hp max de 200, sans augmenter les hp actuel. Cet objet ne soigne pas de 200hp.',
   unplayableReason(state, ownerId) {
     const player = state.players[ownerId];
     const ids = [player.activeCharacterInstanceId, ...player.benchCharacterInstanceIds].filter(

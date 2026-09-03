@@ -28,8 +28,8 @@ export const locke: CharacterCardDef = {
       name: 'Marteau',
       baseATK: 0,
       description:
-        "Locke enfonce un clou sur n'importe quel ennemi, même sur le banc. Cette attaque " +
-        "inflige a 65% de chance d'infliger silence ultime si Locke attaque l'ennemi actif.",
+        `Locke enfonce un clou sur n'importe quel ennemi, même sur le banc.
+Cette attaque inflige a 65% de chance d'infliger silence ultime si Locke attaque l'ennemi actif.`,
       async execute(ctx) {
         // L'actif reste toujours ciblable ; le banc, seulement s'il est atteignable
         // (Bouclier Ultime le protège, Arène l'isole).
@@ -121,7 +121,7 @@ export const locke: CharacterCardDef = {
       id: 'purgatoire',
       name: 'Purgatoire',
       kind: 'passive',
-      description: `Si l'ennemi au poste actif est à ${PURGATOIRE_THRESHOLD_PERCENT}% de ses hp max ou moins, l'execute immédiatement.`,
+      description: "Si l'ennemi au poste actif est à 10% de ses hp max ou moins, l'execute immédiatement.",
       // "immédiatement" veut dire dès que l'actif adverse SE RETROUVE sous le seuil, peu
       // importe comment : un coup classique (Marteau, un allié de Locke, un tic de
       // poison/brûlure/saignement -- afterDamage), un switch/remplacement qui amène un
@@ -157,7 +157,7 @@ export const locke: CharacterCardDef = {
       id: 'cloue',
       name: 'Cloué',
       kind: 'passive',
-      description: 'Lorsqu\'un ennemi a 3 clous sur lui, Locke fait exploser les clous infligeant 100 dégâts + 50% hp max.',
+      description: "Lorsqu'un ennemi a 3 clous sur lui, Locke fait exploser les clous infligeant 100 dégâts + 50% hp max.",
       // Purement descriptive : la logique vit dans Marteau ci-dessus (c'est le moment où
       // le 3e clou est planté qui décide de l'explosion, pas un event séparé).
       async execute() {},

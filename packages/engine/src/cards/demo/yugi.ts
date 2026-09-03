@@ -130,20 +130,20 @@ export const yugi: CharacterCardDef = {
   id: 'yugi',
   name: 'Yugi',
   baseMaxHP: 200,
-  attacks: [simpleAttack('appel-du-magicien-sombre', 'Appel du Magicien Sombre', ATTACK_ATK, `Inflige ${ATTACK_ATK} dégâts à l'actif adverse.`)],
+  attacks: [simpleAttack('appel-du-magicien-sombre', 'Appel du Magicien Sombre', ATTACK_ATK, '')],
   abilities: [
     {
       id: 'puzzle-millenaire',
       name: 'Puzzle Millénaire',
       kind: 'active',
       description:
-        "Obtient aléatoirement l'un des effets suivants à qu'il pourra utiliser quand il le souhaite une fois par tour :\n" +
-        `${ATK_BOOST_ROLL_PERCENT} % : Boost l'ATK de ${ATK_BOOST_AMOUNT} durant un tour.\n` +
-        `${BLEED_ROLL_PERCENT} % : Applique ${BLEED_STACKS} bleed sur l'ennemi.\n` +
-        `${HEAL_ROLL_PERCENT} % : Se soigne de ${SELF_HEAL_AMOUNT} HP ou soigne un allié sur le banc de ${BENCH_HEAL_AMOUNT} HP.\n` +
-        `${REFLECT_ROLL_PERCENT} % : Renvoie ${REFLECT_PERCENT} % des dégâts de la prochaine attaque subie à l'attaquant et ne les subit pas.\n` +
-        `${REVIVE_ROLL_PERCENT} % : Ressuscite un personnage allié de votre cimetière sur votre banc avec ${REVIVE_HP_PERCENT} % de ses PV. Si le cimetière est vide, soigne Yugi de ${REVIVE_FALLBACK_HEAL} HP.\n` +
-        `${FAIL_ROLL_PERCENT} % : Échec (rien ne se passe).`,
+        `Obtient aléatoirement l'un des effets suivants à qu'il pourra utiliser quand il le souhaite une fois par tour :
+40 % : Boost l'ATK de 30 durant un tour.
+20 % : Applique 2 bleed sur l'ennemi.
+15 % : Se soigne de 70 HP ou soigne un allié sur le banc de 50 HP.
+4 % : Renvoie 100 % des dégâts de la prochaine attaque subie à l'attaquant et ne les subit pas.
+1 % : Ressuscite un personnage allié de votre cimetière sur votre banc avec 50 % de ses PV. Si le cimetière est vide, soigne Yugi de 100 HP.
+20 % : Échec (rien ne se passe).`,
       usesPerTurn: 1,
       async execute(ctx) {
         const roll = randomInt(ctx.state.rng, 100);

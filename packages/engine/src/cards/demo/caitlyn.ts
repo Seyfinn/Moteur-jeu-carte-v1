@@ -19,7 +19,7 @@ export const caitlyn: CharacterCardDef = {
       id: 'headshot',
       name: 'Headshot',
       baseATK: HEADSHOT_DAMAGE,
-      description: `Inflige ${HEADSHOT_DAMAGE} dégâts à l'actif adverse.`,
+      description: 'Cette attaque peut crit',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -33,7 +33,7 @@ export const caitlyn: CharacterCardDef = {
       id: 'execution',
       name: 'Execution',
       kind: 'passive',
-      description: `Caitlyn a une chance de critique innée de ${BASE_CRIT_PERCENT}% sur ses attaques. Si elle tue un ennemi, cette chance passe à ${EXECUTION_CRIT_PERCENT}% pour le reste de la partie.`,
+      description: 'Si caitlyn tue un ennemi, elle a désormais 50% de chance de crit au lieu de 33%.',
       trigger: 'onCharacterKO',
       // Le kill peut arriver n'importe quand (y compris pendant qu'elle est au banc,
       // via un effet différé), et plusieurs fois dans un même tour.

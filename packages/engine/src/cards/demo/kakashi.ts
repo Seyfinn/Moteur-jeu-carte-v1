@@ -18,7 +18,7 @@ export const kakashi: CharacterCardDef = {
       id: 'raikiri',
       name: 'Raikiri',
       baseATK: RAIKIRI_ATK,
-      description: `Inflige ${RAIKIRI_ATK} dégâts à l'actif adverse.`,
+      description: '',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -32,7 +32,7 @@ export const kakashi: CharacterCardDef = {
       id: 'sharingan',
       name: 'Sharingan',
       kind: 'passive',
-      description: "Kakashi bénéficie en permanence de l'effet Esquive, qu'il soit actif ou au banc.",
+      description: "Kakashi bénéficie de l'effet Esquive",
       // Purement descriptive : implémentée par le modifier 'getEvasionPercent' plus bas
       // (même mécanisme que L'Infini de Gojo).
       async execute() {},
@@ -44,6 +44,8 @@ export const kakashi: CharacterCardDef = {
       id: 'copie-de-technique-tracker',
       name: 'Copie de Technique (mémoire)',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description: "Retient la dernière attaque utilisée par l'ennemi, pour Copie de Technique.",
       trigger: 'onAttackDeclared',
       usableFromBench: true,
@@ -67,7 +69,7 @@ export const kakashi: CharacterCardDef = {
       name: 'Copie de Technique',
       kind: 'active',
       description:
-        "Rejoue immédiatement la dernière attaque utilisée par l'adversaire, mais lancée par Kakashi. Utilisation unique.",
+        "Utilisation Unique : Copie la dernière attaque utilisée par l'adversaire lors de la partie et l'exécute immédiatement.",
       usesPerGame: 1,
       condition(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);

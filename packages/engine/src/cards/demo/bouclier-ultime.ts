@@ -17,8 +17,7 @@ export const bouclierUltime: TerrainCardDef = {
   id: 'bouclier-ultime',
   name: 'Bouclier Ultime',
   description:
-    `Pendant ${DURATION_TURNS} tours, votre banc devient intouchable : ` +
-    'impossible à cibler et immunisé contre tous les dégâts adverses.',
+    'Tant que le Terrain est actif, vous ne pouvez pas effectuer de switch. En contrepartie, aucun personnage sur le banc alliée ne peut être ciblé et le banc est totalement immunisé contre tous les dégâts (abilities, objets, terrains, états et attaques)',
   durationTurns: DURATION_TURNS,
   // Le terrain n'a plus de contrepartie : il ne verrouille plus le poste actif de son
   // possesseur (il portait un modifier `canSwitchStandard` refusant le switch).

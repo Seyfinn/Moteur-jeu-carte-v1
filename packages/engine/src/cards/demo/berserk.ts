@@ -10,9 +10,9 @@ export const berserk: ObjectCardDef = {
   name: 'Berserk',
   equipment: true,
   description:
-    'Le porteur doit descendre sous la barre des 30 HP actuels sans mourir.\n' +
-    "Récompense : Il gagne définitivement le passif Buveur de Sang (se soigne de 50 % des dégâts qu'il inflige). " +
-    "En contrepartie, plus aucun soin externe (alliés, objets) n'a d'effet sur lui",
+    `Le porteur doit descendre sous la barre des 30 HP actuels sans mourir.
+Récompense : Il gagne définitivement le passif Buveur de Sang (se soigne de 50 % des dégâts qu'il inflige). En contrepartie, plus aucun soin externe (alliés, objets) n'a d'effet sur lui 
+`,
   unplayableReason(state, ownerId) {
     const player = state.players[ownerId];
     const ids = [player.activeCharacterInstanceId, ...player.benchCharacterInstanceIds].filter(

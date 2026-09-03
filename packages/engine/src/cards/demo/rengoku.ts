@@ -12,7 +12,7 @@ export const rengoku: CharacterCardDef = {
       id: 'souffle-du-feu',
       name: 'Souffle du feu',
       baseATK: 30,
-      description: "Inflige 30 dégâts à l'actif adverse et, si le coup touche, le met en Brûlure pendant 2 tours.",
+      description: '',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -48,7 +48,7 @@ export const rengoku: CharacterCardDef = {
       // perdu le « (cumulable) » -- une information de jeu, pas un détail de style : deux
       // Souffles du feu additionnent bien leurs durées de brûlure (`statuses.ts`).
       description:
-        'A chaque fois qu\'un ennemi est touché par "souffle du feu" applique l\'effet burn pendant 2 tours (cumulable)',
+        "A chaque fois qu'un ennemi est touché par \"souffle du feu\" applique l'effet burn pendant 2 tours (cumulable)",
       // Pas de trigger : le mécanisme vit entièrement dans l'attaque, cf description ci-dessus.
       async execute() {},
     },

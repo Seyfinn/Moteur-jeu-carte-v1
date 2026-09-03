@@ -15,14 +15,14 @@ export const gonAdulte: CharacterCardDef = {
   baseMaxHP: 300,
   attacks: [
     // Pas de texte d'attaque sur la carte : description implicite.
-    simpleAttack('jajanken-ultime', 'Jajanken Ultime', JAJANKEN_ATK, `Inflige ${JAJANKEN_ATK} dégâts à l'actif adverse.`),
+    simpleAttack('jajanken-ultime', 'Jajanken Ultime', JAJANKEN_ATK, ''),
   ],
   abilities: [
     {
       id: 'contrat-de-mort',
       name: 'Sermet de Vengance',
       kind: 'passive',
-      description: `Contrat de Mort : Gon Adulte subit ${CONTRAT_DE_MORT_DAMAGE} dégâts auto-infligés à la fin de chacun de ses tours`,
+      description: 'Contrat de Mort : Gon Adulte subit 30 dégâts auto-infligés à la fin de chacun de ses tours',
       trigger: 'onTurnEnd',
       // `usableFromBench` volontairement absent : `canUseAbility` exige alors le poste
       // actif, donc le contrat cesse de saigner dès que Gon Adulte se replie au banc.

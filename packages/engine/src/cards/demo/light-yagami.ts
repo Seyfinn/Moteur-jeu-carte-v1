@@ -108,7 +108,7 @@ export const lightYagami: CharacterCardDef = {
       name: 'Sermet de Vengeance',
       kind: 'passive',
       description:
-        'À la fin de ton tour, pose 1 marque "Nom" sur le personnage actif adverse. À 8 marques, il subit une crise cardiaque et la carte Meurt',
+        'À la fin de ton tour, pose 1 marque "Nom" sur le personnage actif adverse. À 8 marques, il subit une crise cardiaque et la carte Meurt ',
       trigger: 'onTurnEnd',
       condition(ctx) {
         // À la fin du tour de Light lui-même, et seulement s'il tient le poste actif : au

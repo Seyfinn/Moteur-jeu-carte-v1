@@ -13,14 +13,14 @@ export const mundo: CharacterCardDef = {
   name: 'Mundo',
   baseMaxHP: BASE_HP,
   attacks: [
-    simpleAttack('hache-volante', 'Hache Volante', HACHE_VOLANTE_ATK, `Inflige ${HACHE_VOLANTE_ATK} dégâts à l'actif adverse.`),
+    simpleAttack('hache-volante', 'Hache Volante', HACHE_VOLANTE_ATK, ''),
   ],
   abilities: [
     {
       id: 'surcroissance',
       name: 'Surcroissance',
       kind: 'passive',
-      description: `Son attaque gagne ${ATK_BONUS_PER_CHUNK} de dégâts supplémentaires tous les ${HP_CHUNK} HP max qu'il a en plus de ses ${BASE_HP}HP max de base.`,
+      description: "Son attaque gagne 10 de dégâts supplémentaire tout les 100hp max qu'il a en plus de ses 400hp max de base.",
       // Purement descriptive : le bonus est calculé en continu par le modifier getEffectiveATK
       // ci-dessous à partir de currentMaxHP/baseMaxHP, pas de statut/compteur à maintenir.
       async execute() {},
@@ -30,8 +30,9 @@ export const mundo: CharacterCardDef = {
       name: 'Eveil',
       kind: 'active',
       description:
-        "Mundo gagne l'équivalent de ses HP manquants en HP max. Ensuite, il régénère instantanément " +
-        'tous ses HP. Utilisable une fois par partie.',
+        `Mundo gagne l'équivalent de ses hp manquant en hp max. 
+Ensuite, il régénère instantanément la moitié de ses hp max.
+Utilisable une fois.`,
       usesPerGame: 1,
       async execute(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);

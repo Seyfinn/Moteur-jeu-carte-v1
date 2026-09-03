@@ -54,13 +54,19 @@ interface HoverCardApi {
 const HoverCardCtx = createContext<HoverCardApi | null>(null);
 
 /**
- * Encombrement du panneau d'inspection. Ces deux nombres DOIVENT rester alignés sur la CSS
- * de `.ins-panel` : ils avaient divergé (340 ici, 360 là), et le panneau se posait 20 px
- * trop à droite, à cheval sur le banc. `clampIntoBand` est le filet qui rattrape ce genre
- * de dérive après coup, mais mieux vaut que le calcul soit juste du premier coup.
+ * Encombrement du panneau d'inspection. La largeur n'est plus recopiée ici : elle est LUE
+ * sur la CSS (`--ins-panel-w`), parce que les deux valeurs avaient déjà divergé une fois
+ * (340 en JS, 360 en CSS) et que le panneau se posait alors 20 px trop à droite, à cheval
+ * sur le banc. Un seul chiffre, un seul endroit où le changer.
  */
-const PANEL_WIDTH = 360;
+const PANEL_WIDTH_FALLBACK = 360;
 const PANEL_MAX_HEIGHT = 460;
+
+function panelWidth(): number {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--ins-panel-w');
+  const value = Number.parseFloat(raw);
+  return Number.isFinite(value) && value > 0 ? value : PANEL_WIDTH_FALLBACK;
+}
 /**
  * Délai par défaut avant l'aperçu au survol : celui du deck-builder, où l'on parcourt une
  * grille de cartes pour les lire. Le plateau le remonte à `COMBAT_PREVIEW_DELAY_MS` via
@@ -94,7 +100,12 @@ function centralBand(): { min: number; max: number } {
   const max = right ? right.left - 8 : window.innerWidth - 8;
   // Bande trop étroite pour le panneau (fenêtre minuscule) : on retombe sur la fenêtre
   // entière plutôt que de produire un intervalle vide.
-  return max - min < PANEL_WIDTH ? { min: 8, max: window.innerWidth - 8 } : { min, max };
+  return max - min < panelWidth() ? { min: 8, max: window.innerWidth - 8 } : { min, max };
+}
+
+/** Plafond du panneau : la main du joueur occupe le bas de l'écran, il s'arrête au-dessus. */
+function bandFloor(): number {
+  return document.querySelector('.hand-dock')?.getBoundingClientRect().top ?? window.innerHeight;
 }
 
 /**
@@ -111,6 +122,15 @@ function clampIntoBand(el: HTMLDivElement | null): void {
   const rect = el.getBoundingClientRect();
   const corrected = Math.min(Math.max(band.min, rect.left), Math.max(band.min, band.max - rect.width));
   if (Math.abs(corrected - rect.left) > 0.5) el.style.left = `${corrected}px`;
+
+  // Même recadrage sur la verticale : la hauteur retenue au rendu était calculée sur un
+  // plancher (le haut de la main) relevé avant que la main n'ait fini de se déployer.
+  const floor = bandFloor();
+  const maxHeight = Math.max(200, Math.min(PANEL_MAX_HEIGHT, floor - 16));
+  el.style.maxHeight = `${maxHeight}px`;
+  const height = Math.min(rect.height, maxHeight);
+  const top = Math.min(Math.max(8, rect.top), Math.max(8, floor - height - 8));
+  if (Math.abs(top - rect.top) > 0.5) el.style.top = `${top}px`;
 }
 
 function anchoredStyle(rect: DOMRect): CSSProperties {
@@ -121,10 +141,10 @@ function anchoredStyle(rect: DOMRect): CSSProperties {
   // ne recouvre jamais la carte qu'on est en train de lire). La bande fait ~900 px pour un
   // panneau de 360 : il y a toujours la place des deux côtés.
   const cardIsOnTheRight = rect.left + rect.width / 2 > (band.min + band.max) / 2;
-  const left = cardIsOnTheRight ? band.min : Math.max(band.min, band.max - PANEL_WIDTH);
+  const left = cardIsOnTheRight ? band.min : Math.max(band.min, band.max - panelWidth());
 
   // La main du joueur occupe le bas de l'écran : le panneau s'arrête au-dessus d'elle.
-  const floor = document.querySelector('.hand-dock')?.getBoundingClientRect().top ?? window.innerHeight;
+  const floor = bandFloor();
   const maxHeight = Math.max(200, Math.min(PANEL_MAX_HEIGHT, floor - 16));
   const top = Math.min(Math.max(8, rect.top), Math.max(8, floor - maxHeight - 8));
   return { left, top, maxHeight };
@@ -170,7 +190,24 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
   // noeud d'un survol à l'autre, donc un rappel de `ref` ne suffirait pas -- il ne se
   // redéclencherait jamais après le premier.
   useLayoutEffect(() => {
-    if (anchored) clampIntoBand(panelRef.current);
+    if (!anchored) return;
+    clampIntoBand(panelRef.current);
+
+    // ... et à chaque fois que le plateau bouge SOUS le panneau déjà ouvert. Un rail qui
+    // s'élargit (illustration de banc qui finit de charger), la main qui se déploie, une
+    // fenêtre redimensionnée : le relevé du montage devient faux et le panneau se
+    // retrouvait à cheval sur le banc. Le recadrage est rejoué à chaque mouvement.
+    const recheck = () => clampIntoBand(panelRef.current);
+    const observer = new ResizeObserver(recheck);
+    for (const selector of ['.rail-self', '.rail-opp', '.hand-dock']) {
+      const el = document.querySelector(selector);
+      if (el) observer.observe(el);
+    }
+    window.addEventListener('resize', recheck);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', recheck);
+    };
   }, [anchored]);
 
   const show = useCallback(

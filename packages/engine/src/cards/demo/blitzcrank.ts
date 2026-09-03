@@ -21,13 +21,13 @@ export const blitzcrank: CharacterCardDef = {
   id: 'blitzcrank',
   name: 'Blitzcrank',
   baseMaxHP: 250,
-  attacks: [simpleAttack('poing-dacier', "Poing d'acier", 50, "Inflige 50 dégâts à l'actif adverse.")],
+  attacks: [simpleAttack('poing-dacier', "Poing d'acier", 50, '')],
   abilities: [
     {
       id: 'mana-barrier',
       name: 'Mana Barrier',
       kind: 'passive',
-      description: `Si Blitzcrank tombe sous ${HP_THRESHOLD}HP, il gagne un bouclier absorbant ${SHIELD_AMOUNT} points de dégâts, mais Hook est verrouillé pendant ${HOOK_LOCK_TURNS} tours. Ne se déclenche qu'une seule fois par partie.`,
+      description: 'Si blitzcrank tombe sous 50hp, il gagne un shield de 150hp, mais il ne pourra plus utiliser son actif "Hook" pendant 2 tours',
       trigger: 'afterDamage',
       // Doit pouvoir se déclencher même si Blitzcrank encaisse les dégâts depuis le banc (AoE).
       usableFromBench: true,
@@ -66,7 +66,7 @@ export const blitzcrank: CharacterCardDef = {
       id: 'hook',
       name: 'Hook',
       kind: 'active',
-      description: 'Une fois par partie, ramène un personnage ennemi du banc sur le poste actif.',
+      description: 'Une fois par partie, Blitzcrank peut ramener un personnage ennemi du banc, sur le poste actif.',
       usesPerGame: 1,
       condition(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);

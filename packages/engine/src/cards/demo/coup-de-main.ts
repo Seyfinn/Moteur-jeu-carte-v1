@@ -17,8 +17,7 @@ export const coupDeMain: ObjectCardDef = {
   id: 'coup-de-main',
   name: 'Coup de main',
   description:
-    "Permet à une carte sur le banc d’attaquer sans mettre fin au tour. Néanmoins cette " +
-    'attaque inflige maximum 5 de dégâts.',
+    'Permet à une carte sur le banc d’attaquer sans mettre fin au tour. Néanmoins cette attaque inflige maximum 5 de dégâts.',
   unplayableReason(state, ownerId) {
     const bench = state.players[ownerId].benchCharacterInstanceIds;
     const eligible = bench.filter((id) => {

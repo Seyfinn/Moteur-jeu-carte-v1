@@ -54,7 +54,7 @@ export const itachi: CharacterCardDef = {
       id: 'sharingan',
       name: 'Sharingan',
       kind: 'passive',
-      description: "Bénéficie de l'effet esquive",
+      description: "Bénéficie de l'effet esquive ",
       // Purement descriptive : implémentée par le modifier 'getEvasionPercent' plus bas
       // (même mécanisme que Kakashi / L'Infini de Gojo).
       async execute() {},
@@ -64,7 +64,12 @@ export const itachi: CharacterCardDef = {
       name: 'Illusion des Corbeaux',
       kind: 'passive',
       description:
-        "Des plumes s'accumulent sur les personnages adverses (max 5) :\nGains : Un ennemi reçoit 1 plume chaque fois qu'il lance une attaque à Itachi\nIl reçoit 3 plumes s'il utilise une capacité active\nEffets sur l'adversaire :\n3 plumes : Est réduit au Silence Ultime pendant un tour\n5 plumes (Tsukuyomi) :  est Stun pendant 1 tour, puis toutes ses plumes sont consommées",
+        `Des plumes s'accumulent sur les personnages adverses (max 5) :
+Gains : Un ennemi reçoit 1 plume chaque fois qu'il lance une attaque à Itachi
+Il reçoit 3 plumes s'il utilise une capacité active
+Effets sur l'adversaire :
+3 plumes : Est réduit au Silence Ultime pendant un tour
+5 plumes (Tsukuyomi) :  est Stun pendant 1 tour, puis toutes ses plumes sont consommées`,
       trigger: ['onAttackDeclared', 'onAbilityUsed'],
       // Pas de usableFromBench (choix assumé) : la surveillance ne tourne que quand Itachi
       // est lui-même actif -- une attaque adverse ne peut de toute façon viser Itachi que

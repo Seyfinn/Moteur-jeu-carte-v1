@@ -19,7 +19,7 @@ export const muzan: CharacterCardDef = {
       id: 'black-blood',
       name: 'Black Blood',
       baseATK: BLACK_BLOOD_ATK,
-      description: `Inflige ${BLACK_BLOOD_ATK} dégâts à l'actif adverse et applique Poison pendant ${POISON_REMAINING_TURNS} tour.`,
+      description: ' applique Poison pendant 1 tour',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -41,7 +41,7 @@ export const muzan: CharacterCardDef = {
       name: 'Sang Maudit',
       kind: 'passive',
       description:
-        "Tant que Muzan est actif, le poison des personnages adverses ronge leurs HP max au lieu d'infliger des dégâts soignables. Redevient du poison normal dès que Muzan quitte le poste actif.",
+        "Lorsque muzan est sur le poste actif, poison s'applique sous forme de réduction de HP max",
       // Purement descriptif : la logique vit dans le modifier 'poisonTicksAsValeurLock'
       // ci-dessous, consulté directement par tickStatusesAtTurnStart (statuses.ts) à
       // chaque tic de poison -- il n'y a pas d'event dédié à écouter ici.

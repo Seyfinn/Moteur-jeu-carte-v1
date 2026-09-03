@@ -10,6 +10,38 @@ ne dit pas mais que le moteur fait quand même est consigné ici, sous « Moteur
 imprimé et les faits mécaniques. Le tableau de valeurs vient des constantes en tête de
 chaque fichier `packages/engine/src/cards/demo/<carte>.ts`.
 
+## Où vient le texte imprimé
+
+Du dossier `ADMIN Cartes tout/` à la racine (un `<carte>.json` par carte, exporté par
+l'éditeur). Toutes les `description` du moteur en ont été réalignées au caractère près.
+Les « textes imprimés » recopiés dans les entrées ci-dessous peuvent donc être en retard
+d'une reformulation : **le JSON fait foi**, ce fichier fait foi pour le comportement.
+
+### Écarts connus entre le texte de la carte et ce que fait le moteur
+
+Relevés lors du réalignement, non corrigés : changer l'un ou l'autre est un choix
+d'équilibrage, pas une correction de texte.
+
+| Carte | Le texte dit | Le moteur fait |
+| --- | --- | --- |
+| Akali — Shroud | esquive pendant **3 tours** | 5 tours, et 1×/partie (le texte ne le dit plus) |
+| Autel Démoniaque | « chaque tour », banc adverse **et allié** | 3 tours, banc **adverse** seulement |
+| Bouclier Ultime | « tant que le terrain est actif », et **interdit le switch** | 3 tours, et n'interdit aucun switch |
+| Confiscation | pas de durée | 2 tours |
+| Destruction | pas de durée | 3 tours |
+| Hôpital | pas de durée | 2 tours |
+| Point faible | pas de durée | 2 tours |
+| Régulation Thermique | pas de durée | 5 tours |
+| Mundo — Eveil | régénère **la moitié** de ses HP max | régénère **tous** ses HP |
+| Métamorphe — Métamorphose | « se transforme en la carte ennemie » | transformation **définitive**, 1×/partie |
+| Kirigiri — Ultimate Détective | pas de limite | utilisation unique |
+| Blitzcrank — Mana Barrier | pas de limite | ne se déclenche qu'une fois par partie |
+| Chopper — Traque | `chopper (1).json` dit **4 tours**, `chopper.json` dit 6 | 6 tours |
+
+Et côté catalogue : `brise-bouclier.json` (+ son PNG) n'a **pas** de carte dans le moteur ;
+`bakugo.json` est un brouillon vide alors que `bakugo.ts` existe ; `potion.json` est un
+ancien brouillon de Potion de soin ; `chopper (1).json` est un doublon de `chopper.json`.
+
 Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc à répéter :
 
 - Base 1 % d'esquive et 1 % de critique (x2) sur toute attaque/ability hostile ; le statut

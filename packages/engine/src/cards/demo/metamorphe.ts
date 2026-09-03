@@ -7,14 +7,14 @@ export const metamorphe: CharacterCardDef = {
   id: 'metamorphe',
   name: 'Métamorphe',
   baseMaxHP: 60,
-  attacks: [simpleAttack('gel-gluant', 'Gel gluant', 10, "Inflige 10 dégâts à l'actif adverse.")],
+  attacks: [simpleAttack('gel-gluant', 'Gel gluant', 10, '')],
   abilities: [
     {
       id: 'metamorphose',
       name: 'Métamorphose',
       kind: 'active',
       description:
-        "Devient définitivement une copie de l'actif adverse : ses attaques et ses capacités pour le reste de la partie. Utilisable une seule fois.",
+        'Se transforme en la carte personnage actif ennemi',
       usesPerGame: 1,
       async execute(ctx) {
         const enemyActive = ctx.getActive(ctx.opponentId);

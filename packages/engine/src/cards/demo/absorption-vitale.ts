@@ -24,7 +24,10 @@ export const absorptionVitale: ObjectCardDef = {
   // au temps où Absorption Vitale était un terrain.
   equipment: true,
   description:
-    "Pendant 3 tours, empêche votre personnage actif de switch et d'utiliser ses abilities. Si il est encore vivant après les 3 tours, le tue, et vous permet de récupérer un personnage dans votre cimetière, le ramenant sur votre banc avec la moitié de ses hp. Si votre personnage actif meurt avant la fin des 3 tours, cette carte va au cimetière sans faire effet.",
+    `Pendant 3 tours, empêche votre personnage actif de switch et d'utiliser ses abilities. 
+Si il est encore vivant après les 3 tours, le tue, et vous permet de récupérer un personnage dans votre cimetière, le ramenant sur votre banc avec la moitié de ses hp.
+Si votre personnage actif meurt avant la fin des 3 tours, cette carte va au cimetière sans faire effet.
+`,
   maxCopies: 1,
   unplayableReason(state, ownerId) {
     const player = state.players[ownerId];

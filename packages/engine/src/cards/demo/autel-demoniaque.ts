@@ -22,13 +22,15 @@ export const autelDemoniaque: TerrainCardDef = {
   type: 'terrain',
   id: 'autel-demoniaque',
   name: 'Autel Démoniaque',
-  description: `Pendant ${DURATION_TURNS} tours, au début du tour du joueur actif, inflige ${ACTIVE_DAMAGE} dégâts au personnage actif adverse et ${BENCH_DAMAGE} dégâts à chaque personnage sur le banc adverse.`,
+  description: 'Chaque tour, inflige 30 dégâts au personnage actif adverse et 15 dégâts à chaque personnages sur le banc adverse et allié.',
   durationTurns: DURATION_TURNS,
   abilities: [
     {
       id: 'autel-demoniaque-onplay',
       name: 'Autel Démoniaque',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description: "Déclenche l'effet immédiatement à la pose.",
       trigger: 'onTerrainPlayed',
       // Only for THIS terrain's own arrival. Without the guard, the event emitted when
@@ -45,6 +47,8 @@ export const autelDemoniaque: TerrainCardDef = {
       id: 'autel-demoniaque-tick',
       name: 'Autel Démoniaque',
       kind: 'passive',
+      // Plomberie : pas imprimée sur la carte (cf. `hidden` dans cards/types.ts).
+      hidden: true,
       description: `Répète l'effet au début de chacun des tours suivants du possesseur, tant que le terrain reste en jeu.`,
       trigger: 'onTurnStart',
       condition(ctx) {

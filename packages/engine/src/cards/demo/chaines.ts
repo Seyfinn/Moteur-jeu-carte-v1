@@ -10,7 +10,7 @@ export const chaines: ObjectCardDef = {
   // la mort du porteur, où zones.koCharacter envoie l'objet au cimetière de SON propriétaire.
   equipment: true,
   description:
-    "Enchaîne le personnage actif ennemi : il ne peut plus être switché TOTALEMENT, jusqu'à sa mort. Un exemplaire.",
+    'Enchaîne le personnage actif ennemi, l’empêche TOTALEMENT d’être switch, jusqu’à sa mort. un exemplaire',
   maxCopies: 1,
   async execute(ctx) {
     const target = ctx.getActive(ctx.opponentId);

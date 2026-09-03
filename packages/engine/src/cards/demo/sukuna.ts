@@ -16,7 +16,7 @@ export const sukuna: CharacterCardDef = {
       id: 'laceration',
       name: 'Lacération',
       baseATK: LACERATION_ATK,
-      description: `Inflige ${LACERATION_ATK} dégâts à l'actif adverse et applique ${BLEED_STACKS} stacks de bleed.`,
+      description: 'Applique 2 de bleed',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -47,7 +47,7 @@ export const sukuna: CharacterCardDef = {
       id: 'sort-inverse',
       name: 'Sort Inversé',
       kind: 'passive',
-      description: `À la fin de ton tour, la carte récupère ${REGEN_AMOUNT} PV si elle est sur le poste actif.`,
+      description: 'À la fin de ton tour, la carte récupère 30 PV si elle est sur le poste actif',
       trigger: 'onTurnEnd',
       condition(ctx) {
         return ctx.event?.playerId === ctx.ownerId;
@@ -60,7 +60,7 @@ export const sukuna: CharacterCardDef = {
       id: 'extension-de-territoire',
       name: 'Extention de territoire',
       kind: 'passive',
-      description: `Tant que la carte Terrain Autel Démoniaque est en jeu (jouée par vous ou l'adversaire), les attaques de Sukuna gagnent +${TERRITORY_BONUS} dégâts.`,
+      description: "Tant que la carte Terrain Autel Démoniaque est en jeu (jouée par toi ou l'adversaire), toutes les attaques de Sukuna gagnent +20 dégâts.",
       // Purement descriptif : implémenté via le modifier getEffectiveATK ci-dessous --
       // condition dynamique dépendant du plateau (qui peut changer à tout moment sur
       // les deux camps), pas un statut à poser/retirer sur un trigger.
