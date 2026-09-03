@@ -36,7 +36,9 @@ import {
   terrainDenial,
   terrainName,
   type ActionOption,
+  type AttachedObjectView,
 } from './boardActions';
+import { AttachedObjectCards } from './AttachedObjects';
 import { KoFlights } from './KoFlight';
 import { useGameEvents, type CharacterBadge, type CharacterImpact } from './gameEvents';
 import { TableEventBanners } from './gameEventBadges';
@@ -105,7 +107,18 @@ function ActionErrorBanner({ message, onDismiss }: { message: string; onDismiss:
 }
 
 /** Carte de terrain d'un camp, posée au centre du plateau contre son personnage actif. */
-function TerrainSlot({ player, side }: { player: PlayerState; side: 'self' | 'opponent' }) {
+function TerrainSlot({
+  player,
+  side,
+  attachments,
+}: {
+  player: PlayerState;
+  side: 'self' | 'opponent';
+  /** Objets liés à l'ACTIF de ce camp : ils se rangent sous le terrain, dans la même
+      colonne latérale, plutôt qu'accrochés au flanc de la carte du personnage -- c'est là
+      qu'il reste de la place pour les montrer en grand. */
+  attachments: AttachedObjectView[];
+}) {
   const terrainId = player.activeTerrainInstanceId;
   const terrain = terrainId ? player.terrains[terrainId] : undefined;
   const name = terrain ? terrainName(terrain.cardId) : 'Aucun terrain';
@@ -144,6 +157,12 @@ function TerrainSlot({ player, side }: { player: PlayerState; side: 'self' | 'op
           </span>
           <span className="terrain-slot-empty-label">Poser un Terrain</span>
         </div>
+      )}
+      {attachments.length > 0 && (
+        <>
+          <span className="zone-label zone-label-attached">Objet lié</span>
+          <AttachedObjectCards objects={attachments} />
+        </>
       )}
     </div>
   );
@@ -271,7 +290,11 @@ function ActiveSlot({
             targetable={targeting?.options.has(char.instanceId)}
             targeted={targeting?.selected.includes(char.instanceId)}
             onTarget={() => targeting?.toggle(char.instanceId)}
-            attachedObjects={attachedObjectsOf(state, char)}
+            // Vide À DESSEIN : les objets liés de l'actif sont dessinés sous le terrain
+            // (`TerrainSlot`), pas accrochés au flanc de la carte. Un tableau vide, et non
+            // l'absence de prop, pour que la carte n'affiche pas non plus son repli
+            // « N objet(s) attaché(s) ».
+            attachedObjects={[]}
             state={state}
             impact={impact}
             // L'ennemi est toujours en face : le joueur bondit vers la droite, l'adversaire
@@ -595,6 +618,12 @@ export function Board({ conn }: { conn: GameConnection }) {
 
   const activeOf = (player: PlayerState) =>
     player.activeCharacterInstanceId ? player.characters[player.activeCharacterInstanceId] : undefined;
+  // Les objets liés de l'actif s'affichent dans la colonne du terrain, pas contre la carte
+  // du personnage : c'est le seul endroit du plateau où ils ont la place d'être lisibles.
+  const attachmentsOf = (player: PlayerState) => {
+    const char = activeOf(player);
+    return char ? attachedObjectsOf(state, char) : [];
+  };
   const aliveOf = (player: PlayerState) =>
     player.benchCharacterInstanceIds.length + (player.activeCharacterInstanceId ? 1 : 0);
 
@@ -695,7 +724,7 @@ export function Board({ conn }: { conn: GameConnection }) {
           </div>
 
           <div className="zone zone-terrain-self">
-            <TerrainSlot player={me} side="self" />
+            <TerrainSlot player={me} side="self" attachments={attachmentsOf(me)} />
           </div>
 
           <div className="zone zone-active-self">
@@ -749,7 +778,7 @@ export function Board({ conn }: { conn: GameConnection }) {
           </div>
 
           <div className="zone zone-terrain-opp">
-            <TerrainSlot player={opponent} side="opponent" />
+            <TerrainSlot player={opponent} side="opponent" attachments={attachmentsOf(opponent)} />
           </div>
 
           <div className="rail rail-opp">

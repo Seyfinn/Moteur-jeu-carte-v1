@@ -1042,18 +1042,24 @@ input::placeholder {
   /* Banc au format paysage assumé : nettement plus large que haut. Les PV vivent dans la
      colonne de droite de la carte, donc une entrée ne coûte que la hauteur de la vignette
      -- c'est ce qui permet de la doubler sans que cinq réservistes ne débordent du rail. */
-  --bench-card-w: clamp(200px, 15.5vw, 400px);
-  /* La hauteur reste bornée par la HAUTEUR d'écran (`vh`) et pas seulement par la largeur :
-     c'est elle qui décide si cinq réservistes tiennent encore dans le rail. Le rapport
-     largeur/hauteur qui en découle ne descend jamais sous ~2,3:1 -- et le `max()` posé sur
-     la largeur (cf. `.bench-column .tcg-card-landscape`) en fait une garantie et non une
-     coïncidence de réglage. */
-  --bench-card-h: clamp(88px, min(8vw, 11.8vh), 168px);
+  --bench-card-w: clamp(178px, 14vw, 360px);
+  /* DÉRIVÉE de la largeur, pas réglée à part : la carte de banc garde ainsi son format
+     paysage 2,5:1 à toutes les tailles, au lieu de dépendre de l'accord fragile entre deux
+     `clamp()` indépendants (l'un finissait par plafonner avant l'autre et le ratio partait
+     à la dérive). Le `min()` avec la hauteur d'écran est le garde-fou : cinq cartes + les
+     espaces entre elles doivent toujours tenir dans le rail. */
+  --bench-card-h: min(calc(var(--bench-card-w) / 2.5), 15vh);
   --gy-card-w: clamp(96px, 13vh, 132px);
   --card-pile-w: clamp(54px, 7.5vh, 82px);
   /* Le terrain a quitté le rail pour la ligne centrale : il y a la place d'en montrer
-     enfin l'illustration. Borné en hauteur, comme l'actif, pour ne pas gonfler la rangée. */
-  --terrain-card-w: clamp(104px, 9.4vw, 250px);
+     enfin l'illustration, en grand bloc vertical dressé contre l'actif. Borné par la
+     HAUTEUR d'écran autant que par la largeur : la carte est en portrait 3/4, donc sa
+     largeur commande sa hauteur, et sans le `vh` elle poussait la rangée hors du cadre. */
+  --terrain-card-w: clamp(112px, min(12.5vw, 22vh), 300px);
+  /* L'objet lié se range SOUS le terrain, dans la même colonne : nettement plus grand
+     qu'avant (c'était une vignette de 52 px), mais volontairement plus petit que le
+     terrain -- il reste un accessoire, pas une seconde carte de plein droit. */
+  --attached-card-w: calc(var(--terrain-card-w) * 0.72);
   --card-opp-hand-w: clamp(34px, 4.5vh, 56px);
   /* Les deux actifs sont les pièces maîtresses du plateau : ils prennent nettement plus
      de place que tout le reste. Largeur bornée par la fenêtre (la colonne de la grille
@@ -1062,16 +1068,16 @@ input::placeholder {
      Format PORTRAIT géant : c'est la HAUTEUR qui commande (la largeur en découle, cf.
      `.active-slot .tcg-card-large`), pour que deux portraits de PV différents fassent
      exactement la même taille et que la ligne centrale reste symétrique. */
-  --active-card-w: clamp(190px, min(16.5vw, 42vh), 430px);
+  --active-card-w: clamp(178px, min(15.5vw, 40vh), 430px);
   /* Largeur de la colonne de commandes. Partagée, parce que le bandeau de combat doit se
      décaler d'exactement autant pour rester aligné sur la CARTE et non sur l'ensemble
      carte + colonne. */
   --cmd-col-w: clamp(52px, 3.9vw, 72px);
-  /* Plancher des rails, DÉRIVÉ de la carte de banc (largeur + les 8px de marge intérieure
-     de chaque côté du rail). C'était deux réglages indépendants qu'il fallait penser à
-     rejouer ensemble : dès qu'on élargissait la carte sans toucher au rail, la colonne du
-     banc débordait de sa piste de grille et repassait visuellement à l'étroit. */
-  --rail-min: calc(var(--bench-card-w) + 18px);
+  /* Largeur VISÉE du rail, dérivée de la carte de banc (+ les 8 px de marge intérieure de
+     chaque côté). Ce n'est plus un plancher imposé à la grille (les pistes sont en
+     `minmax(0, 1fr)`, cf. `.battle-line`) mais la largeur que le rail demande quand il y a
+     la place -- ce qui laisse le plateau rétrécir proprement au lieu de déborder. */
+  --rail-w: calc(var(--bench-card-w) + 18px);
   position: relative;
   /* Le combat tient dans l'écran, un point c'est tout : pas de largeur maximale (elle
      laissait deux bandes noires sur les côtés) et pas de débordement (la molette ne doit
@@ -1362,7 +1368,10 @@ input::placeholder {
 .arena {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  /* `hidden` et surtout pas `auto` : le plateau tient dans l'écran, un point c'est tout.
+     En `auto`, la moindre rangée un peu haute rendait la molette active et le plateau se
+     mettait à coulisser -- exactement ce qu'on refuse ici. */
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1408,35 +1417,81 @@ input::placeholder {
   position: relative;
   z-index: 4;
   flex-shrink: 0;
+  /* Rangée, et non plus colonne : l'éventail prend la place qui reste À GAUCHE du
+     Recycleur, qui occupe sa propre colonne à droite. En `position: absolute` par-dessus
+     l'éventail (l'ancien montage), le module recouvrait les dernières cartes de la main
+     dès que celle-ci était un peu chargée -- il ne peut plus rien chevaucher maintenant
+     qu'il a sa colonne à lui. */
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 8px;
 }
-/* Recycleur : coin bas-DROITE, en pastille de verre dépoli. Le coin bas-gauche est pris
-   par le journal, et le centre par l'éventail -- la droite est le seul angle libre. */
+/* Recycleur : colonne DROITE du bas de plateau, en pastille de verre dépoli. Le coin
+   bas-gauche est pris par le journal, et le centre par l'éventail -- la droite est le seul
+   côté libre, et il l'occupe désormais en propre (`.hand-dock` est une rangée) plutôt que
+   de flotter par-dessus la main. */
 .recycler-zone {
-  position: absolute;
-  right: 4px;
-  bottom: 6px;
+  position: relative;
   z-index: 6;
+  flex: 0 0 auto;
+  /* Le Recycleur est le PREMIER enfant de `.hand-dock` dans le DOM (il doit rester avant
+     l'éventail pour l'ordre de tabulation) : `order` le renvoie visuellement à droite. */
+  order: 1;
+  align-self: flex-end;
+  margin-bottom: 6px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 5px;
   width: clamp(132px, 12vw, 178px);
-  padding: 8px 10px 9px;
-  border: 1px solid rgba(120, 220, 255, 0.16);
-  border-radius: var(--radius-md);
-  /* Verre dépoli : un dégradé sombre translucide, flouté, sur lequel un liseré néon fin
-     se pose -- pas de couleur pleine, la table doit rester lisible en transparence. */
-  background: linear-gradient(165deg, rgba(28, 40, 56, 0.55), rgba(12, 17, 27, 0.68));
-  backdrop-filter: blur(14px) saturate(1.3);
-  -webkit-backdrop-filter: blur(14px) saturate(1.3);
-  box-shadow: 0 8px 28px -12px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    0 0 18px -10px rgba(90, 210, 255, 0.5);
-  transition: border-color 0.18s var(--ease), box-shadow 0.18s var(--ease);
+  padding: 10px 12px 11px;
+  border-radius: var(--radius-lg);
+  /* Verre dépoli, au repos déjà : un fond sombre translucide franchement flouté, sur
+     lequel un liseré néon DÉGRADÉ (et non une `border-color` unie, qui ne sait pas faire
+     de dégradé) court sur tout le pourtour. Deux couches de fond : la première peint le
+     verre en `padding-box`, la seconde le liseré en `border-box`. */
+  border: 1px solid transparent;
+  background-image:
+    linear-gradient(165deg, rgba(30, 44, 62, 0.58), rgba(11, 16, 26, 0.72)),
+    linear-gradient(150deg, rgba(127, 227, 255, 0.55), rgba(127, 227, 255, 0.06) 45%, rgba(127, 227, 255, 0.42));
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  backdrop-filter: blur(16px) saturate(1.35);
+  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+  box-shadow:
+    0 10px 30px -14px rgba(0, 0, 0, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 0 20px -12px rgba(90, 210, 255, 0.65);
+  transition: box-shadow 0.2s var(--ease), translate 0.2s var(--ease);
 }
+/* Reflet de verre : une bande claire en diagonale sur le haut du module, qui lui donne son
+   épaisseur. Purement décoratif, donc sous le contenu et insensible aux clics. */
+.recycler-zone::before {
+  content: '';
+  position: absolute;
+  inset: 1px 1px auto;
+  height: 46%;
+  border-radius: calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px) 0 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent);
+  pointer-events: none;
+}
+/* Au survol, le module se soulève d'un cheveu et son halo se réveille : il se signale
+   comme cliquable sans passer au néon plein, qui appartient à l'état « ouvert ». */
+.recycler-zone:hover:not(.blocked) {
+  translate: 0 -1px;
+  box-shadow:
+    0 12px 32px -14px rgba(0, 0, 0, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    0 0 26px -10px rgba(90, 210, 255, 0.8);
+}
+/* ⚠️ Le liseré étant peint en `background-image` (dégradé), `border-color` n'a plus prise
+   sur lui : les états « ouvert »/« révélation » se signalent par l'ombre et par une
+   surcouche de liseré plus vive, pas par la bordure. */
 .recycler-zone.open {
-  border-color: rgba(120, 225, 255, 0.55);
+  background-image:
+    linear-gradient(165deg, rgba(30, 44, 62, 0.62), rgba(11, 16, 26, 0.75)),
+    linear-gradient(150deg, rgba(150, 240, 255, 0.95), rgba(120, 225, 255, 0.35) 45%, rgba(150, 240, 255, 0.9));
   box-shadow: 0 0 0 1px rgba(120, 225, 255, 0.25), 0 0 22px -6px rgba(90, 210, 255, 0.55), var(--shadow-md);
 }
 .recycler-zone.blocked {
@@ -1448,7 +1503,9 @@ input::placeholder {
   animation: recycler-panel-pulse 0.48s ease-in-out;
 }
 .recycler-zone.recycler-reveal {
-  border-color: rgba(255, 214, 130, 0.7);
+  background-image:
+    linear-gradient(165deg, rgba(46, 38, 26, 0.62), rgba(20, 15, 9, 0.75)),
+    linear-gradient(150deg, rgba(255, 226, 160, 0.95), rgba(255, 214, 130, 0.4) 45%, rgba(255, 226, 160, 0.9));
   box-shadow: 0 0 0 1px rgba(255, 214, 130, 0.35), 0 0 26px -4px rgba(255, 200, 110, 0.65), var(--shadow-md);
 }
 @keyframes recycler-panel-pulse {
@@ -1829,12 +1886,13 @@ input::placeholder {
 .hand-fan {
   position: relative;
   z-index: 4;
-  flex-shrink: 0;
+  /* Prend TOUTE la largeur que le Recycleur lui laisse, au lieu d'un `85vw` fixe qui
+     ignorait sa présence et passait dessous. */
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   justify-content: center;
   align-items: flex-end;
-  max-width: 85vw;
-  margin-inline: auto;
   padding: clamp(12px, 2.4vh, 40px) 10px 0;
 }
 .hand-card {
@@ -2038,7 +2096,11 @@ input::placeholder {
      actif au lieu de se faire face en diagonale.
      La ligne centrale se lit en miroir de part et d'autre du « VS » :
      [terrain joueur] [actif joueur] VS [actif adverse] [terrain adverse]. */
-  grid-template-columns: minmax(var(--rail-min), 1fr) auto min-content auto min-content auto minmax(var(--rail-min), 1fr);
+  /* `minmax(0, 1fr)` sur les deux rails : ils absorbent l'espace restant sur un grand
+     écran, mais peuvent descendre jusqu'à 0 quand la ligne centrale (terrains + actifs)
+     réclame tout. Avec un plancher `--rail-min`, la somme des colonnes finissait par
+     dépasser la largeur disponible et le plateau débordait sur la droite. */
+  grid-template-columns: minmax(0, 1fr) auto min-content auto min-content auto minmax(0, 1fr);
   /* `minmax(0, 1fr)` et non `auto` : la rangée occupe exactement les 100% que
      `.battle-line` vient de recevoir, avec la permission explicite de descendre sous la
      taille de contenu minimale de ses colonnes (le rail, en particulier) au lieu de la
@@ -2118,6 +2180,12 @@ input::placeholder {
      partager entre ses cartes. Centré, sa hauteur restait celle de son CONTENU -- exactement
      le problème qu'on essaie de résoudre. */
   align-self: stretch;
+  /* Largeur VISÉE, jamais imposée : la piste de grille est en `minmax(0, 1fr)` et peut
+     devenir plus étroite que ça sur un petit écran -- `max-width: 100%` fait alors
+     rétrécir le rail au lieu de le laisser déborder. */
+  width: var(--rail-w);
+  max-width: 100%;
+  justify-self: center;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -2146,6 +2214,16 @@ input::placeholder {
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  /* La colonne ne dépasse jamais la hauteur de la rangée : terrain + objet lié se serrent
+     plutôt que de pousser le plateau hors de l'écran. */
+  max-height: 100%;
+  min-height: 0;
+}
+/* Le libellé de l'objet lié se distingue de celui du terrain, juste au-dessus de la
+   vignette qu'il annonce. */
+.zone-label-attached {
+  margin-top: 2px;
+  color: var(--warn);
 }
 .zone-label {
   font-size: 0.66rem;
@@ -2624,20 +2702,30 @@ input::placeholder {
 }
 .attached-object-rail {
   display: flex;
-  flex-direction: column;
+  /* En LIGNE et non plus en colonne : les objets liés vivent maintenant sous le terrain,
+     où la place manque en hauteur mais pas en largeur. Au-delà de deux, ils se serrent
+     plutôt que d'allonger la colonne. */
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 4px;
+  min-height: 0;
 }
 .attached-object-card .tcg-card {
-  /* Nettement plus petite que le personnage : un accessoire accroché à la carte, pas une
-     carte de plus sur la table. */
-  width: clamp(52px, 7.5vh, 76px);
+  /* Dérivée de la carte de terrain (72 %) : assez grande pour qu'on reconnaisse l'objet
+     d'un coup d'oeil depuis l'autre bout du plateau, mais franchement plus petite que le
+     terrain au-dessus -- ça reste un accessoire accroché au personnage. */
+  width: var(--attached-card-w);
   border-color: var(--warn);
-  box-shadow: 0 0 0 1px rgba(224, 168, 63, 0.35), var(--shadow-sm);
+  box-shadow: 0 0 0 1px rgba(224, 168, 63, 0.45), 0 0 14px -6px rgba(224, 168, 63, 0.8), var(--shadow-sm);
 }
 .attached-object-card .tcg-card-name-banner {
-  font-size: 0.5rem;
-  padding: 2px 3px;
-  line-height: 1.15;
+  font-size: 0.58rem;
+  padding: 2px 4px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .attached-object-chips {
@@ -2685,14 +2773,16 @@ input::placeholder {
   display: flex;
   flex-direction: column;
   align-items: center;
-  /* Réduit (6px -> 4px) : à cinq réservistes, chaque pixel de gap est un pixel de moins
-     pour lire les PV. */
   gap: 4px;
-  /* Prend TOUT l'espace que le rail lui laisse après le cimetière (taille fixe, cf.
+  /* Prend TOUTE la hauteur que le rail lui laisse après le cimetière (taille fixe, cf.
      `.graveyard-pile-zone` plus bas) -- pas un `min-height` choisi à la main. */
   flex: 1 1 0;
   min-height: 0;
   width: 100%;
+  /* Les cartes gardent leur format 2,5:1 et l'espace qui reste se répartit ENTRE elles :
+     plus de grand vide sous la dernière, la colonne est occupée du haut jusqu'en bas.
+     (Avec des emplacements qui grandissaient, c'est le ratio de la carte qui sautait.) */
+  justify-content: space-between;
 }
 .bench-column-empty {
   padding: 10px 6px;
@@ -2708,7 +2798,11 @@ input::placeholder {
    à rétrécir sous 88px au lieu de forcer le rail à déborder. */
 .bench-card-wrap {
   position: relative;
-  flex: 1 1 0;
+  /* Taille naturelle = celle de la carte (`--bench-card-h`), mais l'emplacement PEUT
+     rétrécir : c'est ce qui évite tout débordement quand cinq cartes ne tiennent plus à
+     leur taille de confort (fenêtre très basse). Il ne GRANDIT pas, sinon l'espace en trop
+     gonflerait chaque carte au lieu de se placer entre elles. */
+  flex: 0 1 var(--bench-card-h);
   min-height: 0;
   width: 100%;
   /* Colonne (comme `.bench-column` elle-même) et non ligne : c'est ce qui permet à la
@@ -5042,11 +5136,17 @@ input::placeholder {
   z-index: 9;
   width: 320px;
   min-width: 240px;
-  /* `resize` a besoin d'un `overflow` non-visible pour que la poignée apparaisse. */
   max-width: min(90vw, 640px);
+  /* Hauteur DÉFINIE (et non dictée par le contenu) : sans elle, `resize: both` n'a rien à
+     étirer sur la verticale et la poignée ne fait bouger que la largeur. */
+  height: 46dvh;
+  min-height: 140px;
+  max-height: 88dvh;
   display: flex;
   flex-direction: column;
-  resize: horizontal;
+  /* Les deux axes, à la souris. `resize` a besoin d'un `overflow` non-visible pour que la
+     poignée apparaisse. */
+  resize: both;
   overflow: auto;
   background: rgba(21, 26, 36, 0.92);
   backdrop-filter: blur(10px);
@@ -5069,6 +5169,9 @@ input::placeholder {
   visibility: visible;
 }
 .event-log-head {
+  /* Ne se laisse pas comprimer quand on rétrécit le panneau à la poignée : c'est la liste
+     qui absorbe la réduction (`flex: 1 1 auto` plus bas), jamais l'en-tête. */
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -5105,7 +5208,10 @@ input::placeholder {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 46dvh;
+  /* La liste occupe ce que la poignée laisse au panneau, au lieu de porter sa propre
+     hauteur maximale -- sinon étirer le panneau vers le bas n'agrandissait pas la liste. */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   scroll-behavior: smooth;
 }
@@ -6163,14 +6269,19 @@ textarea {
     padding-left: 18px;
     padding-right: 18px;
   }
-  /* Plus de place pour flotter à gauche sans recouvrir l'éventail : le recycleur
-     redevient une barre horizontale posée au-dessus de la main. */
+  /* Trop étroit pour deux colonnes : la main repasse en pleine largeur et le Recycleur
+     redevient une barre horizontale posée au-dessus d'elle. */
+  .hand-dock {
+    flex-direction: column;
+    align-items: stretch;
+  }
   .recycler-zone {
-    position: static;
+    order: 0;
     flex-direction: row;
     align-items: center;
     flex-wrap: wrap;
     width: auto;
+    align-self: stretch;
     margin: 0 18px;
     padding: 6px 8px;
   }
@@ -6196,9 +6307,7 @@ textarea {
   }
   .event-log-drawer {
     width: min(300px, calc(100vw - 20px));
-  }
-  .event-log-drawer ul {
-    max-height: 34dvh;
+    height: 40dvh;
   }
 
   .modal {
@@ -6597,9 +6706,10 @@ textarea {
   background-origin: border-box;
   background-clip: padding-box, border-box;
   box-shadow: var(--shadow-md), 0 0 16px -4px rgba(240, 212, 137, 0.5);
-  /* Durée de vie alignée sur PROC_ROLL_DURATION_MS (gameEvents.ts) : la roue doit rester
-     à l'écran plus longtemps que sa propre rotation, sinon elle disparaît en tournant. */
-  animation: proc-wheel-in 2.8s var(--ease) forwards;
+  /* Durée de vie alignée sur PROC_ROLL_DURATION_MS (gameEvents.ts) : 2 s de rotation
+     + 1 s pour lire le verdict. La roue doit rester à l'écran plus longtemps que sa
+     propre rotation, sinon elle disparaîtrait en tournant. */
+  animation: proc-wheel-in 3s var(--ease) forwards;
 }
 /* Léger halo qui respire tout le temps du lancer, pour marquer le suspense de l'attente.
    Neutre dans les deux cas : il s'efface quand le verdict tombe, et c'est le flash qui
@@ -6611,7 +6721,7 @@ textarea {
   border-radius: 999px;
   pointer-events: none;
   background: radial-gradient(ellipse at center, rgba(240, 212, 137, 0.28), transparent 70%);
-  animation: proc-wheel-breathe 1.1s ease-in-out infinite, proc-ring-out 0.3s ease-out 1.7s forwards;
+  animation: proc-wheel-breathe 1.1s ease-in-out infinite, proc-ring-out 0.3s ease-out 1.9s forwards;
 }
 @keyframes proc-wheel-breathe {
   0%,
@@ -6634,10 +6744,10 @@ textarea {
 }
 /* Verdict : la pastille prend la couleur du résultat À L'ARRIVÉE de l'aiguille, pas avant. */
 .proc-wheel.hit {
-  animation: proc-wheel-in-hit 2.8s var(--ease) forwards, proc-hit-color 0.35s ease-out 1.75s forwards;
+  animation: proc-wheel-in-hit 3s var(--ease) forwards, proc-hit-color 0.35s ease-out 2s forwards;
 }
 .proc-wheel.miss {
-  animation: proc-wheel-in 2.8s var(--ease) forwards, proc-miss-color 0.35s ease-out 1.75s forwards;
+  animation: proc-wheel-in 3s var(--ease) forwards, proc-miss-color 0.35s ease-out 2s forwards;
 }
 @keyframes proc-hit-color {
   to {
@@ -6666,7 +6776,7 @@ textarea {
   background: radial-gradient(circle at 46px 50%, rgba(190, 255, 240, 0.5), rgba(80, 240, 200, 0.55) 40%, rgba(60, 190, 255, 0.28) 62%, transparent 78%);
   opacity: 0;
   /* Le flash tombe pile quand l'aiguille se fige (proc-needle-spin, 1,8 s). */
-  animation: proc-hit-flash 0.65s ease-out 1.75s forwards;
+  animation: proc-hit-flash 0.65s ease-out 2s forwards;
 }
 /* Échec : voile rouge sombre, bref, sans éclat -- l'équivalent discret du flash. */
 .proc-wheel.miss::after {
@@ -6677,7 +6787,7 @@ textarea {
   pointer-events: none;
   background: radial-gradient(circle at 40px 50%, rgba(224, 85, 95, 0.45), rgba(90, 20, 30, 0.3) 55%, transparent 78%);
   opacity: 0;
-  animation: proc-hit-flash 0.65s ease-out 1.75s forwards;
+  animation: proc-hit-flash 0.65s ease-out 2s forwards;
 }
 /* Onde de choc : un anneau qui part de la roue et se dilate en s'effaçant, calé sur le
    même instant que le flash. Deux calques auraient demandé un pseudo-élément de plus, donc
@@ -6690,7 +6800,7 @@ textarea {
   border: 2px solid rgba(120, 245, 205, 0.95);
   pointer-events: none;
   opacity: 0;
-  animation: proc-shockwave 0.65s ease-out 1.75s forwards;
+  animation: proc-shockwave 0.65s ease-out 2s forwards;
 }
 @keyframes proc-shockwave {
   0% {
@@ -6789,7 +6899,7 @@ textarea {
   background: conic-gradient(from 0deg, transparent 0deg 250deg, rgba(127, 227, 255, 0.9) 320deg, rgba(255, 255, 255, 0.95) 355deg, transparent 360deg);
   mask: radial-gradient(circle, transparent 62%, #000 66%, #000 84%, transparent 88%);
   -webkit-mask: radial-gradient(circle, transparent 62%, #000 66%, #000 84%, transparent 88%);
-  animation: proc-ring-spin 0.55s linear 3, proc-ring-out 0.3s ease-out 1.65s forwards;
+  animation: proc-ring-spin 0.5s linear 4, proc-ring-out 0.3s ease-out 1.85s forwards;
 }
 .proc-wheel.miss .proc-wheel-dial::before {
   background: conic-gradient(from 0deg, transparent 0deg 250deg, rgba(224, 140, 145, 0.85) 320deg, rgba(255, 235, 235, 0.9) 355deg, transparent 360deg);
@@ -6815,9 +6925,10 @@ textarea {
   box-shadow: 0 0 7px rgba(255, 233, 174, 0.95), 0 0 3px rgba(0, 0, 0, 0.8);
   translate: -50% -100%;
   transform-origin: 50% 100%;
-  /* 1,8 s (rallongée d'1 s) : la décélération finale se lit nettement mieux, ce qui
-     construit le suspense juste avant le verdict. */
-  animation: proc-needle-spin 1.8s cubic-bezier(0.16, 0.7, 0.1, 1) forwards;
+  /* EXACTEMENT 2 s de rotation : c'est la durée de référence du jet, celle sur laquelle
+     tout le reste (anneau, verdict, flash, badge) est calé. Changer ce nombre veut dire
+     changer les cinq délais `2s` ci-dessous ET `PROC_ROLL_DURATION_MS` (gameEvents.ts). */
+  animation: proc-needle-spin 2s cubic-bezier(0.16, 0.7, 0.1, 1) forwards;
 }
 /* Freinage : l'aiguille dépasse sa cible, revient, et vibre de moins en moins avant de se
    caler. Les écarts sont exprimés en degrés absolus autour de `--spin`, donc indépendants
@@ -6871,7 +6982,7 @@ textarea {
   font-size: 1.5rem;
   font-weight: 800;
   opacity: 0;
-  animation: proc-verdict-in 0.3s var(--ease) 1.75s forwards;
+  animation: proc-verdict-in 0.3s var(--ease) 2s forwards;
 }
 @keyframes proc-verdict-in {
   0% {
@@ -6922,7 +7033,7 @@ textarea {
   font-weight: 800;
   letter-spacing: 0.08em;
   opacity: 0;
-  animation: proc-badge-in 0.35s ease-out 1.75s forwards;
+  animation: proc-badge-in 0.35s ease-out 2s forwards;
 }
 .proc-wheel.hit .proc-wheel-badge {
   color: #eafff3;

@@ -433,7 +433,8 @@ const TABLE_EVENT_DURATION_MS = 2000;
  * décélération se lire) ET laisser le temps de lire le verdict qu'elle désigne : plus
  * courte, la roue disparaissait avant même d'avoir fini de tourner.
  */
-const PROC_ROLL_DURATION_MS = 2800;
+/** 2 s de rotation (`proc-needle-spin`, styles.css) + 1 s pour lire le verdict. */
+const PROC_ROLL_DURATION_MS = 3000;
 /** Assez long pour lire la carte en grand, assez court pour ne pas freiner la partie. */
 const SPOTLIGHT_DURATION_MS = 1700;
 /** Couvre le dash de l'attaquant (~260 ms) et la secousse de la cible, marge comprise. */
