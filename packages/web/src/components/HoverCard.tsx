@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -53,12 +54,12 @@ interface HoverCardApi {
 const HoverCardCtx = createContext<HoverCardApi | null>(null);
 
 /**
- * Encombrement du panneau d'inspection. Sert uniquement à décider de quel côté de la carte
- * survolée il s'ouvre : les deux nombres doivent rester alignés sur la CSS, sinon le
- * panneau est placé comme s'il était plus gros qu'il ne l'est et bascule à gauche sans
- * raison.
+ * Encombrement du panneau d'inspection. Ces deux nombres DOIVENT rester alignés sur la CSS
+ * de `.ins-panel` : ils avaient divergé (340 ici, 360 là), et le panneau se posait 20 px
+ * trop à droite, à cheval sur le banc. `clampIntoBand` est le filet qui rattrape ce genre
+ * de dérive après coup, mais mieux vaut que le calcul soit juste du premier coup.
  */
-const PANEL_WIDTH = 340;
+const PANEL_WIDTH = 360;
 const PANEL_MAX_HEIGHT = 460;
 /**
  * Délai par défaut avant l'aperçu au survol : celui du deck-builder, où l'on parcourt une
@@ -80,11 +81,53 @@ interface PinnedState {
   payload: HoverPayload;
 }
 
+/**
+ * Bande centrale du plateau : ce qu'il y a entre les deux rails latéraux. Le panneau y est
+ * confiné, ce qui garantit qu'il ne recouvre JAMAIS un banc -- ni celui de gauche, ni celui
+ * de droite. Hors partie (deck-builder), il n'y a pas de rail : toute la fenêtre fait
+ * office de bande.
+ */
+function centralBand(): { min: number; max: number } {
+  const left = document.querySelector('.rail-self')?.getBoundingClientRect();
+  const right = document.querySelector('.rail-opp')?.getBoundingClientRect();
+  const min = left ? left.right + 8 : 8;
+  const max = right ? right.left - 8 : window.innerWidth - 8;
+  // Bande trop étroite pour le panneau (fenêtre minuscule) : on retombe sur la fenêtre
+  // entière plutôt que de produire un intervalle vide.
+  return max - min < PANEL_WIDTH ? { min: 8, max: window.innerWidth - 8 } : { min, max };
+}
+
+/**
+ * Recadrage APRÈS montage, sur les mesures réelles du panneau et des rails.
+ *
+ * `anchoredStyle` calcule une position au moment du rendu, à partir d'un relevé qui peut
+ * déjà être périmé (une illustration qui finit de charger décale les colonnes de la grille,
+ * et le panneau se retrouvait à cheval sur le banc de droite). Ce dernier mot, lui, est
+ * pris quand tout est en place -- c'est lui qui garantit l'absence de recouvrement.
+ */
+function clampIntoBand(el: HTMLDivElement | null): void {
+  if (!el) return;
+  const band = centralBand();
+  const rect = el.getBoundingClientRect();
+  const corrected = Math.min(Math.max(band.min, rect.left), Math.max(band.min, band.max - rect.width));
+  if (Math.abs(corrected - rect.left) > 0.5) el.style.left = `${corrected}px`;
+}
+
 function anchoredStyle(rect: DOMRect): CSSProperties {
-  const spaceRight = window.innerWidth - rect.right;
-  const left = spaceRight > PANEL_WIDTH + 16 ? rect.right + 12 : Math.max(8, rect.left - PANEL_WIDTH - 12);
-  const top = Math.min(Math.max(8, rect.top), Math.max(8, window.innerHeight - PANEL_MAX_HEIGHT - 8));
-  return { left, top };
+  const band = centralBand();
+  // Le panneau se colle au bord de la bande OPPOSÉ à la carte survolée. Deux garanties d'un
+  // coup, sans arbitrage fragile sur la place disponible : il reste toujours dans la bande
+  // (donc ne recouvre jamais un banc), et toujours du côté opposé à ce qu'on inspecte (donc
+  // ne recouvre jamais la carte qu'on est en train de lire). La bande fait ~900 px pour un
+  // panneau de 360 : il y a toujours la place des deux côtés.
+  const cardIsOnTheRight = rect.left + rect.width / 2 > (band.min + band.max) / 2;
+  const left = cardIsOnTheRight ? band.min : Math.max(band.min, band.max - PANEL_WIDTH);
+
+  // La main du joueur occupe le bas de l'écran : le panneau s'arrête au-dessus d'elle.
+  const floor = document.querySelector('.hand-dock')?.getBoundingClientRect().top ?? window.innerHeight;
+  const maxHeight = Math.max(200, Math.min(PANEL_MAX_HEIGHT, floor - 16));
+  const top = Math.min(Math.max(8, rect.top), Math.max(8, floor - maxHeight - 8));
+  return { left, top, maxHeight };
 }
 
 /**
@@ -107,6 +150,7 @@ function panelBody(payload: HoverPayload): ReactNode {
 
 export function HoverCardProvider({ children }: { children: ReactNode }) {
   const [anchored, setAnchored] = useState<AnchoredState | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [pinned, setPinned] = useState<PinnedState | null>(null);
   const hideTimer = useRef<number | null>(null);
   const showTimer = useRef<number | null>(null);
@@ -121,6 +165,13 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => clearTimers, [clearTimers]);
+
+  // Dernier mot sur la position, pris une fois le panneau posé : React réutilise le même
+  // noeud d'un survol à l'autre, donc un rappel de `ref` ne suffirait pas -- il ne se
+  // redéclencherait jamais après le premier.
+  useLayoutEffect(() => {
+    if (anchored) clampIntoBand(panelRef.current);
+  }, [anchored]);
 
   const show = useCallback(
     (payload: HoverPayload, target: HTMLElement) => {
@@ -211,6 +262,7 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
       {anchored && (
         <div
           className="ins-panel"
+          ref={panelRef}
           style={anchoredStyle(anchored.rect)}
           onMouseEnter={cancelHide}
           onMouseLeave={hide}
