@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   BASE_CRITICAL_CHANCE_PERCENT,
   BASE_CRITICAL_MULTIPLIER,
@@ -144,10 +145,21 @@ function GlossaryPanel({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
-  return (
-    <>
-      <div className="glossary-backdrop" onClick={onClose} />
-      <aside className="glossary-panel" role="dialog" aria-label="Glossaire des effets">
+  // Portail vers `document.body` : le bouton qui ouvre ce panneau vit dans `.board-header`,
+  // qui porte à la fois un `clip-path` (biseau du HUD) et un `backdrop-filter` -- les deux
+  // créent un bloc de confinement pour tout descendant en `position: fixed`. Sans portail,
+  // le panneau restait un enfant de `.board-header` et se retrouvait rogné par son biseau
+  // et cadré sur sa boîte (une simple barre en haut de l'écran) au lieu du plein écran :
+  // c'est tout l'effet « cassé/rogné en haut à droite » signalé. Le portail fait sortir le
+  // panneau de cette sous-arborescence, quoi que `.board-header` fasse par ailleurs.
+  return createPortal(
+    <div className="modal-backdrop glossary-backdrop" onClick={onClose}>
+      <div
+        className="modal glossary-panel"
+        role="dialog"
+        aria-label="Glossaire des effets"
+        onClick={(e) => e.stopPropagation()}
+      >
         <header className="glossary-header">
           <h3>Glossaire des effets</h3>
           <button className="hover-card-close" onClick={onClose} aria-label="Fermer">
@@ -181,8 +193,9 @@ function GlossaryPanel({ onClose }: { onClose: () => void }) {
             ))}
           </section>
         </div>
-      </aside>
-    </>
+      </div>
+    </div>,
+    document.body
   );
 }
 

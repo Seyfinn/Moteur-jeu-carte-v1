@@ -80,6 +80,14 @@ export type TableEvent =
   | { kind: 'coin-flip'; id: number; label: string };
 
 /**
+ * L'objet réellement tiré par le Recycleur, connu uniquement du joueur qui l'a activé (le
+ * moteur pose cette entrée avec `privateTo`, donc `getPlayerView` la retire déjà pour
+ * l'adversaire -- ce qu'on reçoit ici est forcément le nôtre). Sert à jouer le Card-Flip de
+ * révélation avec la vraie carte plutôt qu'un dos générique.
+ */
+export type RecycleReveal = { id: number; cardId: string };
+
+/**
  * Carte mise en avant plein écran au moment où elle est jouée -- objet, terrain, ou le
  * personnage dont on déclenche une capacité. Les deux joueurs la voient : elle est
  * construite à partir du journal, que le serveur diffuse aux deux camps.
@@ -108,7 +116,8 @@ type Classified =
   | { anchor: 'proc'; proc: DistributiveOmit<ProcRoll, 'id'> }
   | { anchor: 'spotlight'; spotlight: Omit<CardSpotlight, 'id'> }
   | { anchor: 'impact'; targetInstanceId: string; attackerInstanceId?: string; tier: ImpactTier }
-  | { anchor: 'ko-flight'; flight: Omit<KoFlight, 'id'> };
+  | { anchor: 'ko-flight'; flight: Omit<KoFlight, 'id'> }
+  | { anchor: 'recycle-reveal'; reveal: Omit<RecycleReveal, 'id'> };
 
 /**
  * Mémoire de lecture d'un lot d'entrées de journal. L'entrée `damage` ne nomme que sa
@@ -287,6 +296,14 @@ function classifyLogEntry(entry: LogEntry, state: GameState, ctx: BatchContext):
       ];
     }
 
+    // L'entrée publique (compte seulement) ne porte pas de `cardId` -- seule l'entrée
+    // privée, réservée au joueur qui a activé le Recycleur, en porte un.
+    case 'recycle': {
+      const cardId = d['cardId'] as string | undefined;
+      if (!cardId) return [];
+      return [{ anchor: 'recycle-reveal', reveal: { cardId } }];
+    }
+
     case 'coin-flip': {
       const result = d['result'] as string | undefined;
       return [{ anchor: 'table', event: { kind: 'coin-flip', label: result === 'heads' ? 'Pile' : 'Face' } }];
@@ -412,14 +429,19 @@ const CHARACTER_BADGE_DURATION_MS = 1300;
 const TABLE_EVENT_DURATION_MS = 2000;
 /**
  * Durée de vie d'une mini-roue à l'écran. Elle doit couvrir la rotation de l'aiguille
- * (`proc-needle-spin`, 0,8 s) ET laisser le temps de lire le verdict qu'elle désigne :
- * plus courte, la roue disparaissait avant même d'avoir fini de tourner.
+ * (`proc-needle-spin`, 1,8 s -- rallongée d'une seconde pour laisser le suspense de la
+ * décélération se lire) ET laisser le temps de lire le verdict qu'elle désigne : plus
+ * courte, la roue disparaissait avant même d'avoir fini de tourner.
  */
-const PROC_ROLL_DURATION_MS = 1800;
+const PROC_ROLL_DURATION_MS = 2800;
 /** Assez long pour lire la carte en grand, assez court pour ne pas freiner la partie. */
 const SPOTLIGHT_DURATION_MS = 1700;
 /** Couvre le dash de l'attaquant (~260 ms) et la secousse de la cible, marge comprise. */
 const IMPACT_DURATION_MS = 700;
+/** Fenêtre pendant laquelle le Recycleur peut lire la révélation : le Card-Flip lui-même
+ *  dure moins longtemps, mais la carte doit rester disponible le temps que l'animation de
+ *  sacrifice (jouée AVANT que ce log n'arrive) ait fini de tourner. */
+const RECYCLE_REVEAL_DURATION_MS = 2200;
 /** Secousse du plateau. Assez longue pour couvrir le plus lourd des paliers (cataclysme),
  *  les paliers plus légers s'arrêtant d'eux-mêmes -- leur animation CSS est plus courte. */
 const BOARD_QUAKE_MS = 900;
@@ -440,6 +462,7 @@ export function useGameEvents(state: GameState): {
   /** Non nul pendant qu'un gros coup fait trembler la table entière, avec sa violence. */
   boardQuake: BoardQuake | null;
   koFlights: KoFlight[];
+  recycleReveals: RecycleReveal[];
 } {
   const [characterBadges, setCharacterBadges] = useState<Array<CharacterBadge & { characterInstanceId: string }>>([]);
   const [tableEvents, setTableEvents] = useState<TableEvent[]>([]);
@@ -448,6 +471,7 @@ export function useGameEvents(state: GameState): {
   const [impacts, setImpacts] = useState<Array<CharacterImpact & { characterInstanceId: string }>>([]);
   const [boardQuake, setBoardQuake] = useState<BoardQuake | null>(null);
   const [koFlights, setKoFlights] = useState<KoFlight[]>([]);
+  const [recycleReveals, setRecycleReveals] = useState<RecycleReveal[]>([]);
   const seqRef = useRef(0);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   // Match.create() logs the initiative coin flip before the very first broadcast either player
@@ -464,6 +488,7 @@ export function useGameEvents(state: GameState): {
     const newSpotlights: CardSpotlight[] = [];
     const newImpacts: Array<CharacterImpact & { characterInstanceId: string }> = [];
     const newKoFlights: KoFlight[] = [];
+    const newRecycleReveals: RecycleReveal[] = [];
     let quakeTier: ImpactTier | null = null;
 
     // La main qui passe d'un camp à l'autre, pas le numéro de manche : un tour de jeu
@@ -518,6 +543,8 @@ export function useGameEvents(state: GameState): {
             }
           } else if (classified.anchor === 'ko-flight') {
             newKoFlights.push({ ...classified.flight, id: ++seqRef.current });
+          } else if (classified.anchor === 'recycle-reveal') {
+            newRecycleReveals.push({ ...classified.reveal, id: ++seqRef.current });
           } else {
             newTableEvents.push({ ...classified.event, id: ++seqRef.current } as TableEvent);
           }
@@ -575,6 +602,14 @@ export function useGameEvents(state: GameState): {
         );
       }
     }
+    if (newRecycleReveals.length > 0) {
+      setRecycleReveals((list) => [...list, ...newRecycleReveals]);
+      for (const r of newRecycleReveals) {
+        timersRef.current.push(
+          setTimeout(() => setRecycleReveals((list) => list.filter((x) => x.id !== r.id)), RECYCLE_REVEAL_DURATION_MS)
+        );
+      }
+    }
     if (newSpotlights.length > 0) {
       // Plusieurs cartes jouées dans le même lot (une carte qui en déclenche une autre) se
       // suivent au lieu de se superposer : chacune attend la fin de la précédente.
@@ -606,5 +641,5 @@ export function useGameEvents(state: GameState): {
   const impactsByCharacter = new Map<string, CharacterImpact>();
   for (const i of impacts) impactsByCharacter.set(i.characterInstanceId, i);
 
-  return { badgesByCharacter, tableEvents, procRolls, spotlights, impactsByCharacter, boardQuake, koFlights };
+  return { badgesByCharacter, tableEvents, procRolls, spotlights, impactsByCharacter, boardQuake, koFlights, recycleReveals };
 }

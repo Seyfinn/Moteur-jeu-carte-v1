@@ -41,6 +41,7 @@ function ProcWheelItem({ proc }: { proc: ProcRoll }) {
           {proc.percent > 0 && <span className="proc-wheel-percent"> {proc.percent}%</span>}
         </span>
         {proc.characterName && <span className="proc-wheel-who">{proc.characterName}</span>}
+        <span className="proc-wheel-badge">{proc.hit ? 'RÉUSSITE' : 'ÉCHEC'}</span>
       </div>
     </div>
   );

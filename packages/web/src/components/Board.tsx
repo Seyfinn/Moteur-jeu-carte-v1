@@ -512,7 +512,7 @@ export function Board({ conn }: { conn: GameConnection }) {
   const state = conn.state!;
   const you = conn.you!;
   const opponentId = otherPlayer(you);
-  const { badgesByCharacter, tableEvents, procRolls, spotlights, impactsByCharacter, boardQuake, koFlights } =
+  const { badgesByCharacter, tableEvents, procRolls, spotlights, impactsByCharacter, boardQuake, koFlights, recycleReveals } =
     useGameEvents(state);
   // La roue d'initiative ne se joue qu'une fois, à l'ouverture : `phase` quitte 'setup'
   // dès la mise en place terminée, donc une reconnexion en cours de partie ne la rejoue
@@ -778,6 +778,7 @@ export function Board({ conn }: { conn: GameConnection }) {
         objectDenial={turnGate ?? objectDenial(state, you)}
         terrainDenial={turnGate ?? terrainDenial(state, you)}
         recycleGate={turnGate}
+        recycleReveal={recycleReveals[recycleReveals.length - 1] ?? null}
         onPlayObject={(objectInstanceId) => conn.applyAction({ kind: 'play-object', objectInstanceId })}
         onPlayTerrain={(terrainInstanceId) => conn.applyAction({ kind: 'play-terrain', terrainInstanceId })}
         onRecycle={(objectInstanceIds) => conn.applyAction({ kind: 'recycle-objects', objectInstanceIds })}

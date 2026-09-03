@@ -1,10 +1,12 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { RECYCLE_OBJECT_COST, type GameState, type PlayerId, type PlayerState } from 'engine';
+import { CardArt } from './CardArt';
 import { CardFrame, FaceDownCard } from './CardFrame';
 import { useCardInspect, useHoverCard, type HoverPayload } from './HoverCard';
 import { characterDetailBody, hiddenCardDetailBody, objectDetailBody, terrainDetailBody } from './cardDetails';
 import { characterName, objectCardDenial, objectName, recycleDenial, terrainName } from './boardActions';
 import { usePointerCoarse } from '../hooks/usePointerCoarse';
+import type { RecycleReveal } from './gameEvents';
 
 export type HandSlot =
   | { kind: 'object'; id: string; cardId: string }
@@ -177,47 +179,100 @@ function PlayerHandCard({
   );
 }
 
+/** Durée de l'implosion des 3 slots, avant que la carte tirée ne se révèle. */
+const RECYCLE_SACRIFICE_MS = 480;
+/** Card-flip + tenue + envol vers la main, en un seul souffle. */
+const RECYCLE_REVEAL_MS = 700;
+
 /**
- * Le Recycleur d'Objets, à gauche de l'éventail : 3 objets de la main contre 1 objet tiré
- * au hasard dans la réserve. Utilisable autant de fois qu'on veut dans son tour, sans
- * toucher au budget d'objets jouables -- d'où une zone à part, et non une entrée du panneau
- * de commandes où tout le reste coûte l'action ou le tour.
+ * Le Recycleur d'Objets, en pastille de verre dépoli ancrée en bas-droite : 3 objets de la
+ * main contre 1 objet tiré au hasard dans la réserve. Utilisable autant de fois qu'on veut
+ * dans son tour, sans toucher au budget d'objets jouables -- d'où une zone à part, et non
+ * une entrée du panneau de commandes où tout le reste coûte l'action ou le tour.
+ *
+ * `phase` porte la mise en scène de la validation : les 3 réceptacles implosent
+ * (`sacrifice`), puis la carte tirée se révèle en grand par-dessus le module avant de
+ * glisser vers la main (`reveal`). Le reste du temps (`idle`), la zone se contente
+ * d'afficher les 3 emplacements vides ou en cours de remplissage.
  */
 function RecyclerZone({
   denial,
-  selectedCount,
+  slotCards,
   open,
+  phase,
+  revealCardId,
   onOpen,
   onCancel,
   onSubmit,
   onBlocked,
 }: {
   denial: string | null;
-  selectedCount: number;
+  /** Les cartes réellement posées dans les réceptacles, dans l'ordre où on les a cochées. */
+  slotCards: string[];
   open: boolean;
+  phase: 'idle' | 'sacrifice' | 'reveal';
+  revealCardId: string | null;
   onOpen: () => void;
   onCancel: () => void;
   onSubmit: () => void;
   onBlocked: (reason: string) => void;
 }) {
+  const selectedCount = slotCards.length;
   const ready = selectedCount === RECYCLE_OBJECT_COST;
+  const busy = phase !== 'idle';
 
   return (
-    <div className={`recycler-zone${open ? ' open' : ''}${denial ? ' blocked' : ''}`}>
-      <span className="recycler-title">♻️ Recycleur</span>
+    <div className={`recycler-zone${open ? ' open' : ''}${denial ? ' blocked' : ''}${busy ? ` recycler-${phase}` : ''}`}>
+      <span className="recycler-title">
+        <span className="recycler-title-icon" aria-hidden="true">
+          ♻
+        </span>
+        Recycleur
+        {/* Le compteur vit dans le titre : il est lisible en permanence, panneau ouvert ou
+            non, au lieu d'apparaître seulement pendant la sélection. */}
+        <span className={`recycler-tally${ready ? ' ready' : ''}`}>
+          {selectedCount}/{RECYCLE_OBJECT_COST}
+        </span>
+      </span>
+
+      {/* Trois réceptacles aux proportions d'une carte : vides, ils montrent la place à
+          remplir ; remplis, ils portent l'illustration réelle de la carte cochée, qui est
+          ce qui rend la sélection lisible d'un coup d'oeil. */}
+      <div className="recycler-slots" aria-hidden="true">
+        {Array.from({ length: RECYCLE_OBJECT_COST }, (_, i) => {
+          const cardId = slotCards[i];
+          return (
+            <span
+              key={i}
+              className={`recycler-slot${cardId ? ' filled' : ''}${cardId && phase === 'sacrifice' ? ' sacrifice' : ''}`}
+              // `--slot-pull` envoie chaque réceptacle vers le CENTRE de la rangée pendant
+              // le sacrifice : sans ce décalage, les trois cartes rétrécissaient chacune
+              // dans leur colonne et rien n'était « aspiré » nulle part.
+              style={
+                {
+                  '--slot-delay': `${i * 70}ms`,
+                  '--slot-pull': `${(1 - i) * 32}px`,
+                } as CSSProperties
+              }
+            >
+              {cardId ? <CardArt cardId={cardId} kind="object" /> : <span className="recycler-slot-ghost">♻</span>}
+            </span>
+          );
+        })}
+        {/* Vortex d'aspiration, au centre des trois réceptacles au moment du sacrifice. */}
+        {phase === 'sacrifice' && <span className="recycler-vortex" />}
+      </div>
+
       {open ? (
         <>
-          <span className="recycler-count">
-            <strong>{selectedCount}</strong>/{RECYCLE_OBJECT_COST}
-          </span>
           <span className="recycler-hint">
-            {ready ? 'Prêt à échanger' : `Choisissez ${RECYCLE_OBJECT_COST - selectedCount} objet(s) dans votre main`}
+            {ready ? '✦ Prêt à recycler' : `Choisissez ${RECYCLE_OBJECT_COST - selectedCount} objet(s) dans votre main`}
           </span>
           <div className="recycler-actions">
-            <button className="recycler-confirm" disabled={!ready} onClick={onSubmit}>
-              Échanger
+            <button className={`recycler-confirm${ready ? ' ready' : ''}`} disabled={!ready || busy} onClick={onSubmit}>
+              Recycler
             </button>
-            <button className="recycler-cancel" onClick={onCancel}>
+            <button className="recycler-cancel" disabled={busy} onClick={onCancel}>
               Annuler
             </button>
           </div>
@@ -228,11 +283,25 @@ function RecyclerZone({
           <button
             className="recycler-open"
             title={denial ?? 'Sacrifier 3 objets de votre main pour en tirer un au hasard'}
+            disabled={busy}
             onClick={() => (denial ? onBlocked(denial) : onOpen())}
           >
             Recycler
           </button>
         </>
+      )}
+
+      {/* ⚠️ `recycler-reveal-layer`, surtout pas `recycler-reveal` : le panneau porte déjà
+          cette classe-là pendant la phase (`recycler-${phase}`), et la règle de position
+          absolue de ce calque s'appliquait alors AU PANNEAU, qui décollait de son coin. */}
+      {phase === 'reveal' && revealCardId && (
+        <div className="recycler-reveal-layer" aria-hidden="true">
+          <div className="recycler-reveal-rays" />
+          <div className="recycler-reveal-burst" />
+          <div className="recycler-reveal-card">
+            <CardFrame cardId={revealCardId} kind="object" name={objectName(revealCardId)} size="small" orientation="portrait" />
+          </div>
+        </div>
       )}
     </div>
   );
@@ -246,6 +315,7 @@ export function PlayerHand({
   objectDenial,
   terrainDenial,
   recycleGate,
+  recycleReveal,
   onPlayObject,
   onPlayTerrain,
   onRecycle,
@@ -258,6 +328,9 @@ export function PlayerHand({
   terrainDenial: string | null;
   /** Refus qui prime sur celui du moteur (tour adverse, choix en attente, partie finie). */
   recycleGate: string | null;
+  /** La dernière carte tirée par NOTRE Recycleur (le serveur ne nous en révèle jamais un
+   *  autre) -- pilote le Card-Flip de révélation, indépendamment du délai réseau. */
+  recycleReveal: RecycleReveal | null;
   onPlayObject: (instanceId: string) => void;
   onPlayTerrain: (instanceId: string) => void;
   onRecycle: (objectInstanceIds: string[]) => void;
@@ -267,6 +340,39 @@ export function PlayerHand({
   const [recycling, setRecycling] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const recycleUnavailable = recycleGate ?? recycleDenial(state, you);
+
+  // Mise en scène de la validation : implosion des 3 slots, puis révélation de la carte
+  // tirée. Le sacrifice est purement local (il n'a besoin d'aucune donnée serveur) ; la
+  // révélation, elle, attend le `recycleReveal` que le log renvoie -- ce qui peut prendre
+  // un aller-retour réseau, d'où le calage sur un timestamp plutôt qu'un simple minuteur.
+  const [animPhase, setAnimPhase] = useState<'idle' | 'sacrifice' | 'reveal'>('idle');
+  const [revealCardId, setRevealCardId] = useState<string | null>(null);
+  // Les cartes sacrifiées quittent la main dès que le serveur a répondu : sans cette copie,
+  // les réceptacles se videraient d'un coup au lieu d'imploser avec leur illustration.
+  const [sacrificedCards, setSacrificedCards] = useState<string[]>([]);
+  const submitTsRef = useRef(0);
+  const handledRevealIdRef = useRef<number | null>(null);
+  const phaseTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => () => phaseTimersRef.current.forEach(clearTimeout), []);
+
+  useEffect(() => {
+    if (!recycleReveal || recycleReveal.id === handledRevealIdRef.current) return;
+    // On n'anime que la révélation qui suit NOTRE propre validation, jamais une carte issue
+    // d'un autre canal -- `animPhase` n'est mis à 'sacrifice' que par `submit()` ci-dessous.
+    if (animPhase !== 'sacrifice') return;
+    handledRevealIdRef.current = recycleReveal.id;
+    const elapsed = performance.now() - submitTsRef.current;
+    const delay = Math.max(0, RECYCLE_SACRIFICE_MS - elapsed);
+    phaseTimersRef.current.push(
+      setTimeout(() => {
+        setRevealCardId(recycleReveal.cardId);
+        setAnimPhase('reveal');
+        phaseTimersRef.current.push(setTimeout(() => setAnimPhase('idle'), RECYCLE_REVEAL_MS));
+      }, delay)
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recycleReveal, animPhase]);
 
   // La sélection ne survit ni à la fin du tour, ni à une main qui change sous nos pieds
   // (l'échange lui-même, un objet volé par une carte adverse) : sans ça, on garderait des
@@ -294,9 +400,18 @@ export function PlayerHand({
   };
 
   const submit = () => {
+    submitTsRef.current = performance.now();
+    setSacrificedCards(selected.map((id) => player.objects[id]?.cardId).filter((id): id is string => Boolean(id)));
+    setAnimPhase('sacrifice');
     onRecycle(selected);
     setSelected([]);
     setRecycling(false);
+    // Filet de sécurité : la phase `sacrifice` attend une révélation qui pourrait ne jamais
+    // venir (action refusée par le serveur, déconnexion). Sans ce retour forcé à l'état de
+    // repos, le module resterait grisé pour le restant de la partie.
+    phaseTimersRef.current.push(
+      setTimeout(() => setAnimPhase((phase) => (phase === 'sacrifice' ? 'idle' : phase)), RECYCLE_SACRIFICE_MS + 2500)
+    );
   };
 
   // Le refus global (pas votre tour, quota d'objets épuisé) prime : il empêche de jouer
@@ -340,8 +455,16 @@ export function PlayerHand({
     <div className="hand-dock">
       <RecyclerZone
         denial={recycleUnavailable}
-        selectedCount={selected.length}
+        slotCards={
+          animPhase === 'sacrifice'
+            ? sacrificedCards
+            : animPhase === 'reveal'
+              ? [] // les réceptacles ont fini d'imploser : place à la carte qui se révèle
+              : selected.map((id) => player.objects[id]?.cardId).filter((id): id is string => Boolean(id))
+        }
         open={recycling}
+        phase={animPhase}
+        revealCardId={revealCardId}
         onOpen={() => setRecycling(true)}
         onCancel={() => {
           setRecycling(false);
