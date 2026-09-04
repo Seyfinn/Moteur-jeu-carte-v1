@@ -648,171 +648,180 @@ export function Board({ conn }: { conn: GameConnection }) {
     <div
       className={`board${targeting ? ' targeting' : ''}${ambience ? ` ${ambience}` : ''}${boardQuake ? ` board-quake board-quake-${boardQuake.tier}` : ''}`}
     >
-      {/* HUD flottant : trois blocs en grille pour que la capsule de tour soit centrée sur
-          la fenêtre et non sur ce qui reste entre ses voisins -- avec `space-between`, elle
-          se décalait dès que le Mode Pioche ajoutait son compteur de piles. */}
-      <header className={`board-header${myTurn ? ' my-turn' : ''}`}>
-        <div className="board-header-side left">
-          <span className="board-header-room">
-            Salon <strong>{conn.roomCode}</strong>
-          </span>
-          {drawMode && (
-            <span
-              className="board-header-piles"
-              title="Cartes restantes dans les piles. Celle des terrains est commune aux deux joueurs."
-            >
-              🂠 {me.drawPiles.characterCardIds.length} · 🎒 {me.drawPiles.objectCardIds.length} · 🗺️{' '}
-              {state.sharedTerrainPile.length}
+      {/* Les deux rails encadrent TOUT le plateau, du haut de la fenêtre jusqu'en bas : le
+          banc n'est plus coincé entre l'en-tête et la main, et n'abandonne plus les deux
+          coins du bas au vide. Tout le reste (en-tête, arène, main, Recycleur) vit dans la
+          bande centrale, qui se recentre donc d'elle-même entre les deux bancs. */}
+      <div className="board-body">
+        <div className="rail rail-self">
+          {drawMode && <CharacterHand player={me} isSelf max={DRAW_MODE_MAX_CHARACTER_HAND} />}
+          <GraveyardPile player={me} title="Votre cimetière" orientation="landscape" />
+          <BenchRow
+            player={me}
+            isSelf
+            badgesByCharacter={badgesByCharacter}
+            state={state}
+            you={you}
+            conn={conn}
+            turnGate={turnGate}
+            targeting={targeting}
+            impactsByCharacter={impactsByCharacter}
+          />
+        </div>
+
+        <div className="board-center">
+        {/* HUD flottant : trois blocs en grille pour que la capsule de tour soit centrée sur
+            la bande centrale et non sur ce qui reste entre ses voisins -- avec `space-between`,
+            elle se décalait dès que le Mode Pioche ajoutait son compteur de piles. */}
+        <header className={`board-header${myTurn ? ' my-turn' : ''}`}>
+          <div className="board-header-side left">
+            <span className="board-header-room">
+              Salon <strong>{conn.roomCode}</strong>
             </span>
-          )}
-        </div>
-        <div className={`board-turn-capsule${myTurn ? ' mine' : ' theirs'}`}>
-          <span className="board-turn-number">Tour {state.turnNumber}</span>
-          <strong className="board-turn-state">{myTurn ? 'À vous de jouer' : `${opponentName} joue`}</strong>
-        </div>
-        <div className="board-header-side right">
-          <span className="board-header-budget" title="Cartes encore jouables pendant votre tour">
-            🎒 {Math.max(0, maxObjects - me.objectsPlayedThisTurn)} · 🗺️{' '}
-            {Math.max(0, maxTerrains - me.terrainsPlayedThisTurn)}
-          </span>
-          <EffectsGlossaryButton />
-          {/* Leaving was only possible from the result screen: a player whose opponent
-              never comes back had no way out short of reloading. */}
-          <ForfeitButton onForfeit={conn.forfeit} />
-          <button className="board-leave" onClick={conn.leave} title="Quitter la partie et revenir au lobby">
-            Quitter
-          </button>
-        </div>
-      </header>
+            {drawMode && (
+              <span
+                className="board-header-piles"
+                title="Cartes restantes dans les piles. Celle des terrains est commune aux deux joueurs."
+              >
+                🂠 {me.drawPiles.characterCardIds.length} · 🎒 {me.drawPiles.objectCardIds.length} · 🗺️{' '}
+                {state.sharedTerrainPile.length}
+              </span>
+            )}
+          </div>
+          <div className={`board-turn-capsule${myTurn ? ' mine' : ' theirs'}`}>
+            <span className="board-turn-number">Tour {state.turnNumber}</span>
+            <strong className="board-turn-state">{myTurn ? 'À vous de jouer' : `${opponentName} joue`}</strong>
+          </div>
+          <div className="board-header-side right">
+            <span className="board-header-budget" title="Cartes encore jouables pendant votre tour">
+              🎒 {Math.max(0, maxObjects - me.objectsPlayedThisTurn)} · 🗺️{' '}
+              {Math.max(0, maxTerrains - me.terrainsPlayedThisTurn)}
+            </span>
+            <EffectsGlossaryButton />
+            {/* Leaving was only possible from the result screen: a player whose opponent
+                never comes back had no way out short of reloading. */}
+            <ForfeitButton onForfeit={conn.forfeit} />
+            <button className="board-leave" onClick={conn.leave} title="Quitter la partie et revenir au lobby">
+              Quitter
+            </button>
+          </div>
+        </header>
 
-      {conn.opponentDisconnected && <p className="warning">L'adversaire s'est déconnecté.</p>}
-      {errorMessage && (
-        <ActionErrorBanner
-          message={errorMessage}
-          onDismiss={() => {
-            setLocalError(null);
-            conn.clearError();
-          }}
+        {conn.opponentDisconnected && <p className="warning">L'adversaire s'est déconnecté.</p>}
+        {errorMessage && (
+          <ActionErrorBanner
+            message={errorMessage}
+            onDismiss={() => {
+              setLocalError(null);
+              conn.clearError();
+            }}
+          />
+        )}
+
+        <TableEventBanners events={tableEvents} />
+        <ProcWheels rolls={procRolls} />
+        <CardSpotlights spotlights={spotlights} />
+        <KoFlights flights={koFlights} />
+        <HeatHazeFilter />
+
+        <div className="arena">
+          <OpponentHand player={opponent} />
+
+          <div className="battlefield">
+            <div className="battle-line">
+            <div className="zone zone-terrain-self">
+              <TerrainSlot player={me} side="self" attachments={attachmentsOf(me)} />
+            </div>
+
+            <div className="zone zone-active-self">
+              <ActiveSlot
+                char={activeOf(me)}
+                badges={badgesByCharacter.get(me.activeCharacterInstanceId ?? '')}
+                side="self"
+                targeting={targeting}
+                state={state}
+                impact={impactsByCharacter.get(me.activeCharacterInstanceId ?? '')}
+                hud={{
+                  label: `${me.displayName || 'Vous'} (vous)`,
+                  lost: drawMode ? me.charactersLost : null,
+                  alive: aliveOf(me),
+                  // Dénominateur pris sur le roster complet, pas sur vivants+cimetière :
+                  // pendant la mise en place personne n'est encore sur le plateau et le
+                  // compteur affichait un « 0/0 » qui ne veut rien dire.
+                  total: Object.keys(me.characters).length,
+                  isTheirTurn: myTurn,
+                }}
+                actions={
+                  <CommandPanel state={state} you={you} conn={conn} onStartSwitch={() => setSwitchMode(true)} />
+                }
+              />
+            </div>
+
+            {/* Ligne de front : elle sépare les deux moitiés du plateau et donne au duel un
+                centre lisible, là où les deux actifs se faisaient face sans repère. */}
+            <div className="zone zone-vs" aria-hidden="true">
+              <span className="vs-line" />
+              <span className="vs-badge">VS</span>
+              <span className="vs-line" />
+            </div>
+
+            <div className="zone zone-active-opp">
+              <ActiveSlot
+                char={activeOf(opponent)}
+                badges={badgesByCharacter.get(opponent.activeCharacterInstanceId ?? '')}
+                side="opponent"
+                targeting={targeting}
+                state={state}
+                impact={impactsByCharacter.get(opponent.activeCharacterInstanceId ?? '')}
+                hud={{
+                  label: opponentName,
+                  lost: drawMode ? opponent.charactersLost : null,
+                  alive: aliveOf(opponent),
+                  total: Object.keys(opponent.characters).length,
+                  isTheirTurn: !myTurn,
+                }}
+              />
+            </div>
+
+            <div className="zone zone-terrain-opp">
+              <TerrainSlot player={opponent} side="opponent" attachments={attachmentsOf(opponent)} />
+            </div>
+
+            </div>
+          </div>
+        </div>
+
+        <PlayerHand
+          state={state}
+          you={you}
+          player={me}
+          objectDenial={turnGate ?? objectDenial(state, you)}
+          terrainDenial={turnGate ?? terrainDenial(state, you)}
+          recycleGate={turnGate}
+          recycleReveal={recycleReveals[recycleReveals.length - 1] ?? null}
+          onPlayObject={(objectInstanceId) => conn.applyAction({ kind: 'play-object', objectInstanceId })}
+          onPlayTerrain={(terrainInstanceId) => conn.applyAction({ kind: 'play-terrain', terrainInstanceId })}
+          onRecycle={(objectInstanceIds) => conn.applyAction({ kind: 'recycle-objects', objectInstanceIds })}
+          onBlocked={setLocalError}
         />
-      )}
+        </div>
 
-      <TableEventBanners events={tableEvents} />
-      <ProcWheels rolls={procRolls} />
-      <CardSpotlights spotlights={spotlights} />
-      <KoFlights flights={koFlights} />
-      <HeatHazeFilter />
-
-      <div className="arena">
-        <OpponentHand player={opponent} />
-
-        <div className="battlefield">
-          <div className="battle-line">
-          <div className="rail rail-self">
-            {drawMode && <CharacterHand player={me} isSelf max={DRAW_MODE_MAX_CHARACTER_HAND} />}
-            <GraveyardPile player={me} title="Votre cimetière" orientation="landscape" />
-            <BenchRow
-              player={me}
-              isSelf
-              badgesByCharacter={badgesByCharacter}
-              state={state}
-              you={you}
-              conn={conn}
-              turnGate={turnGate}
-              targeting={targeting}
-              impactsByCharacter={impactsByCharacter}
-            />
-          </div>
-
-          <div className="zone zone-terrain-self">
-            <TerrainSlot player={me} side="self" attachments={attachmentsOf(me)} />
-          </div>
-
-          <div className="zone zone-active-self">
-            <ActiveSlot
-              char={activeOf(me)}
-              badges={badgesByCharacter.get(me.activeCharacterInstanceId ?? '')}
-              side="self"
-              targeting={targeting}
-              state={state}
-              impact={impactsByCharacter.get(me.activeCharacterInstanceId ?? '')}
-              hud={{
-                label: `${me.displayName || 'Vous'} (vous)`,
-                lost: drawMode ? me.charactersLost : null,
-                alive: aliveOf(me),
-                // Dénominateur pris sur le roster complet, pas sur vivants+cimetière :
-                // pendant la mise en place personne n'est encore sur le plateau et le
-                // compteur affichait un « 0/0 » qui ne veut rien dire.
-                total: Object.keys(me.characters).length,
-                isTheirTurn: myTurn,
-              }}
-              actions={
-                <CommandPanel state={state} you={you} conn={conn} onStartSwitch={() => setSwitchMode(true)} />
-              }
-            />
-          </div>
-
-          {/* Ligne de front : elle sépare les deux moitiés du plateau et donne au duel un
-              centre lisible, là où les deux actifs se faisaient face sans repère. */}
-          <div className="zone zone-vs" aria-hidden="true">
-            <span className="vs-line" />
-            <span className="vs-badge">VS</span>
-            <span className="vs-line" />
-          </div>
-
-          <div className="zone zone-active-opp">
-            <ActiveSlot
-              char={activeOf(opponent)}
-              badges={badgesByCharacter.get(opponent.activeCharacterInstanceId ?? '')}
-              side="opponent"
-              targeting={targeting}
-              state={state}
-              impact={impactsByCharacter.get(opponent.activeCharacterInstanceId ?? '')}
-              hud={{
-                label: opponentName,
-                lost: drawMode ? opponent.charactersLost : null,
-                alive: aliveOf(opponent),
-                total: Object.keys(opponent.characters).length,
-                isTheirTurn: !myTurn,
-              }}
-            />
-          </div>
-
-          <div className="zone zone-terrain-opp">
-            <TerrainSlot player={opponent} side="opponent" attachments={attachmentsOf(opponent)} />
-          </div>
-
-          <div className="rail rail-opp">
-            {drawMode && <CharacterHand player={opponent} isSelf={false} max={DRAW_MODE_MAX_CHARACTER_HAND} />}
-            <GraveyardPile player={opponent} title="Cimetière adverse" orientation="landscape" />
-            <BenchRow
-              player={opponent}
-              isSelf={false}
-              badgesByCharacter={badgesByCharacter}
-              state={state}
-              you={you}
-              conn={conn}
-              turnGate={turnGate}
-              targeting={targeting}
-              impactsByCharacter={impactsByCharacter}
-            />
-          </div>
-          </div>
+        <div className="rail rail-opp">
+          {drawMode && <CharacterHand player={opponent} isSelf={false} max={DRAW_MODE_MAX_CHARACTER_HAND} />}
+          <GraveyardPile player={opponent} title="Cimetière adverse" orientation="landscape" />
+          <BenchRow
+            player={opponent}
+            isSelf={false}
+            badgesByCharacter={badgesByCharacter}
+            state={state}
+            you={you}
+            conn={conn}
+            turnGate={turnGate}
+            targeting={targeting}
+            impactsByCharacter={impactsByCharacter}
+          />
         </div>
       </div>
-
-      <PlayerHand
-        state={state}
-        you={you}
-        player={me}
-        objectDenial={turnGate ?? objectDenial(state, you)}
-        terrainDenial={turnGate ?? terrainDenial(state, you)}
-        recycleGate={turnGate}
-        recycleReveal={recycleReveals[recycleReveals.length - 1] ?? null}
-        onPlayObject={(objectInstanceId) => conn.applyAction({ kind: 'play-object', objectInstanceId })}
-        onPlayTerrain={(terrainInstanceId) => conn.applyAction({ kind: 'play-terrain', terrainInstanceId })}
-        onRecycle={(objectInstanceIds) => conn.applyAction({ kind: 'recycle-objects', objectInstanceIds })}
-        onBlocked={setLocalError}
-      />
 
       <EventLog log={state.log} you={you} />
 
