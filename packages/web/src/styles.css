@@ -1042,13 +1042,14 @@ input::placeholder {
   /* Banc au format paysage assumé : nettement plus large que haut. Les PV vivent dans la
      colonne de droite de la carte, donc une entrée ne coûte que la hauteur de la vignette
      -- c'est ce qui permet de la doubler sans que cinq réservistes ne débordent du rail. */
-  --bench-card-w: clamp(178px, 14vw, 360px);
-  /* DÉRIVÉE de la largeur, pas réglée à part : la carte de banc garde ainsi son format
-     paysage 2,5:1 à toutes les tailles, au lieu de dépendre de l'accord fragile entre deux
-     `clamp()` indépendants (l'un finissait par plafonner avant l'autre et le ratio partait
-     à la dérive). Le `min()` avec la hauteur d'écran est le garde-fou : cinq cartes + les
-     espaces entre elles doivent toujours tenir dans le rail. */
-  --bench-card-h: min(calc(var(--bench-card-w) / 2.5), 15vh);
+  --bench-card-w: clamp(178px, 15.5vw, 360px);
+  /* PLAFOND de hauteur, plus un ratio imposé. Le rail court désormais sur toute la hauteur
+     du plateau : à 2,5:1 strict, cinq cartes n'en occupaient qu'un peu plus de la moitié et
+     le reste partait en espaces béants entre elles. La carte grandit donc jusqu'à ce
+     plafond pour remplir sa part de colonne, et s'aplatit (jusqu'au plancher posé par
+     `min-height`, cf. `.bench-column .tcg-card.tcg-card-landscape`) quand la fenêtre est
+     basse. Elle reste toujours nettement plus large que haute. */
+  --bench-card-h: clamp(78px, 16vh, 176px);
   --gy-card-w: clamp(96px, 13vh, 132px);
   --card-pile-w: clamp(54px, 7.5vh, 82px);
   /* Le terrain a quitté le rail pour la ligne centrale : il y a la place d'en montrer
@@ -1074,9 +1075,9 @@ input::placeholder {
      carte + colonne. */
   --cmd-col-w: clamp(52px, 3.9vw, 72px);
   /* Largeur VISÉE du rail, dérivée de la carte de banc (+ les 8 px de marge intérieure de
-     chaque côté). Ce n'est plus un plancher imposé à la grille (les pistes sont en
-     `minmax(0, 1fr)`, cf. `.battle-line`) mais la largeur que le rail demande quand il y a
-     la place -- ce qui laisse le plateau rétrécir proprement au lieu de déborder. */
+     chaque côté). Jamais un plancher : c'est la largeur que le rail demande quand il y a la
+     place, et il rétrécit (`flex-shrink`, cf. `.rail`) dès que la bande centrale réclame
+     tout -- ce qui laisse le plateau se resserrer proprement au lieu de déborder. */
   --rail-w: calc(var(--bench-card-w) + 18px);
   position: relative;
   /* Le combat tient dans l'écran, un point c'est tout : pas de largeur maximale (elle
@@ -1365,6 +1366,47 @@ input::placeholder {
   font-variant-numeric: tabular-nums;
 }
 
+/* Corps du plateau : [banc joueur] [bande centrale] [banc adverse], sur TOUTE la hauteur.
+   Les rails ont quitté la ligne de bataille (où ils étaient coincés entre l'en-tête et la
+   main, laissant les deux coins du bas vides) pour devenir les deux colonnes latérales du
+   plateau entier. */
+.board-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 10px;
+}
+/* Tout ce qui n'est pas un banc : en-tête, arène, main et Recycleur. Cette colonne se
+   recentre d'elle-même entre les deux rails -- c'est ce qui recentre du même coup la barre
+   du haut, et ce qui rentre le Recycleur vers l'intérieur au lieu de le laisser sous le
+   banc adverse. */
+.board-center {
+  flex: 1 1 auto;
+  /* Largeur PLANCHER de la bande : exactement ce que réclame la ligne de bataille (deux
+     actifs + la colonne de commandes + les deux terrains + la ligne de front et les
+     gouttières). Ce sont les rails qui cèdent quand la fenêtre se resserre -- c'est ce que
+     faisaient déjà leurs pistes de grille `minmax(0, 1fr)` quand ils étaient DANS la ligne
+     de bataille, et sans ce plancher le duel se retrouvait à moitié caché sous le banc
+     adverse dès 1280px de large. `min(100%, ...)` pour qu'un plancher plus large que le
+     plateau lui-même ne pousse jamais rien hors de l'écran.
+     Le détail du calcul : les deux portraits + la colonne de commandes + les deux terrains
+     + la pastille « VS » (même `clamp` que `.vs-badge`) + 70px de gouttières (les six de la
+     grille, plus celle qui sépare le portrait de sa colonne de commandes). */
+  min-width: min(
+    100%,
+    calc(
+      2 * var(--active-card-w) + var(--cmd-col-w) + 2 * var(--terrain-card-w) +
+        clamp(38px, 4.4vh, 54px) + 70px
+    )
+  );
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .arena {
   flex: 1;
   min-height: 0;
@@ -1452,18 +1494,21 @@ input::placeholder {
      de dégradé) court sur tout le pourtour. Deux couches de fond : la première peint le
      verre en `padding-box`, la seconde le liseré en `border-box`. */
   border: 1px solid transparent;
+  /* Au REPOS, le néon reste une simple arête : il ne s'allume franchement qu'au survol et à
+     l'ouverture (règles plus bas). Le module doit se lire comme une plaque de verre posée
+     sur la table, pas comme une enseigne. */
   background-image:
-    linear-gradient(165deg, rgba(30, 44, 62, 0.58), rgba(11, 16, 26, 0.72)),
-    linear-gradient(150deg, rgba(127, 227, 255, 0.55), rgba(127, 227, 255, 0.06) 45%, rgba(127, 227, 255, 0.42));
+    linear-gradient(165deg, rgba(30, 44, 62, 0.5), rgba(10, 15, 24, 0.68)),
+    linear-gradient(150deg, rgba(127, 227, 255, 0.34), rgba(127, 227, 255, 0.03) 45%, rgba(127, 227, 255, 0.24));
   background-origin: border-box;
   background-clip: padding-box, border-box;
-  backdrop-filter: blur(16px) saturate(1.35);
-  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
   box-shadow:
-    0 10px 30px -14px rgba(0, 0, 0, 0.95),
-    inset 0 1px 0 rgba(255, 255, 255, 0.09),
-    0 0 20px -12px rgba(90, 210, 255, 0.65);
-  transition: box-shadow 0.2s var(--ease), translate 0.2s var(--ease);
+    0 12px 34px -16px rgba(0, 0, 0, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 0 18px -14px rgba(90, 210, 255, 0.5);
+  transition: box-shadow 0.2s var(--ease), translate 0.2s var(--ease), background-image 0.2s var(--ease);
 }
 /* Reflet de verre : une bande claire en diagonale sur le haut du module, qui lui donne son
    épaisseur. Purement décoratif, donc sous le contenu et insensible aux clics. */
@@ -1480,8 +1525,11 @@ input::placeholder {
    comme cliquable sans passer au néon plein, qui appartient à l'état « ouvert ». */
 .recycler-zone:hover:not(.blocked) {
   translate: 0 -1px;
+  background-image:
+    linear-gradient(165deg, rgba(34, 50, 70, 0.56), rgba(11, 16, 26, 0.7)),
+    linear-gradient(150deg, rgba(127, 227, 255, 0.62), rgba(127, 227, 255, 0.08) 45%, rgba(127, 227, 255, 0.5));
   box-shadow:
-    0 12px 32px -14px rgba(0, 0, 0, 0.95),
+    0 14px 34px -14px rgba(0, 0, 0, 0.95),
     inset 0 1px 0 rgba(255, 255, 255, 0.11),
     0 0 26px -10px rgba(90, 210, 255, 0.8);
 }
@@ -1558,14 +1606,23 @@ input::placeholder {
 .recycler-slots {
   position: relative;
   display: flex;
-  gap: 5px;
+  gap: 6px;
   justify-content: center;
-  padding: 3px 0 2px;
+  /* Plateau ENCASTRÉ : une gorge creusée dans le verre, dans laquelle les trois réceptacles
+     sont posés. Sans elle ils flottaient sur le fond du module et se lisaient comme trois
+     puces décoratives plutôt que comme les logements d'une machine. */
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(140, 200, 230, 0.14);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.34), rgba(0, 0, 0, 0.14));
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.5),
+    0 1px 0 rgba(255, 255, 255, 0.05);
 }
 .recycler-slot {
   position: relative;
-  width: 27px;
-  height: 38px;
+  width: 30px;
+  height: 42px;
   border-radius: 4px;
   overflow: hidden;
   display: grid;
@@ -2096,27 +2153,20 @@ input::placeholder {
      actif au lieu de se faire face en diagonale.
      La ligne centrale se lit en miroir de part et d'autre du « VS » :
      [terrain joueur] [actif joueur] VS [actif adverse] [terrain adverse]. */
-  /* `minmax(0, 1fr)` sur les deux rails : ils absorbent l'espace restant sur un grand
-     écran, mais peuvent descendre jusqu'à 0 quand la ligne centrale (terrains + actifs)
-     réclame tout. Avec un plancher `--rail-min`, la somme des colonnes finissait par
-     dépasser la largeur disponible et le plateau débordait sur la droite. */
+  /* Les deux colonnes extrêmes sont des RESSORTS VIDES (`.` dans les zones ci-dessous) :
+     les bancs ne sont plus dans cette grille, mais le duel doit rester centré dans la bande.
+     `minmax(0, 1fr)` leur permet de descendre jusqu'à 0 quand la ligne centrale (terrains +
+     actifs) réclame tout, au lieu de pousser le plateau hors de l'écran. */
   grid-template-columns: minmax(0, 1fr) auto min-content auto min-content auto minmax(0, 1fr);
   /* `minmax(0, 1fr)` et non `auto` : la rangée occupe exactement les 100% que
      `.battle-line` vient de recevoir, avec la permission explicite de descendre sous la
-     taille de contenu minimale de ses colonnes (le rail, en particulier) au lieu de la
-     forcer à grandir pour l'accueillir. */
+     taille de contenu minimale de ses colonnes au lieu de les forcer à grandir. */
   grid-template-rows: minmax(0, 1fr);
-  grid-template-areas: 'railS terrS activeS vs activeO terrO railO';
+  grid-template-areas: '. terrS activeS vs activeO terrO .';
   align-content: stretch;
   column-gap: 10px;
 }
 
-.rail-self {
-  grid-area: railS;
-}
-.rail-opp {
-  grid-area: railO;
-}
 .zone-active-self {
   grid-area: activeS;
 }
@@ -2172,20 +2222,18 @@ input::placeholder {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
-/* Rails latéraux : cimetière et terrain, chacun de son côté de l'écran. */
+/* Rails latéraux : le cimetière puis le banc, chacun de son côté de l'écran, sur toute la
+   hauteur du plateau. */
 .rail {
-  /* `stretch`, pas `center` : le rail doit occuper exactement la hauteur de sa
-     colonne de grille (celle-ci vaut maintenant 100% de `.battlefield`, cf. `.battle-
-     line`) pour que le banc, à l'intérieur, sache combien d'espace il a réellement à
-     partager entre ses cartes. Centré, sa hauteur restait celle de son CONTENU -- exactement
-     le problème qu'on essaie de résoudre. */
+  /* `stretch` : le rail occupe TOUTE la hauteur du plateau (`.board-body`), pas seulement
+     celle de la ligne de bataille -- c'est ce qui donne au banc, à l'intérieur, la hauteur
+     réelle à partager entre ses cartes, et ce qui supprime le vide sous lui. */
   align-self: stretch;
-  /* Largeur VISÉE, jamais imposée : la piste de grille est en `minmax(0, 1fr)` et peut
-     devenir plus étroite que ça sur un petit écran -- `max-width: 100%` fait alors
-     rétrécir le rail au lieu de le laisser déborder. */
-  width: var(--rail-w);
-  max-width: 100%;
-  justify-self: center;
+  /* Largeur VISÉE, jamais imposée : `flex-shrink: 1` laisse le rail rétrécir quand la bande
+     centrale (terrains + actifs) réclame tout, au lieu de pousser le plateau hors de
+     l'écran. */
+  flex: 0 1 var(--rail-w);
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -2779,9 +2827,10 @@ input::placeholder {
   flex: 1 1 0;
   min-height: 0;
   width: 100%;
-  /* Les cartes gardent leur format 2,5:1 et l'espace qui reste se répartit ENTRE elles :
-     plus de grand vide sous la dernière, la colonne est occupée du haut jusqu'en bas.
-     (Avec des emplacements qui grandissaient, c'est le ratio de la carte qui sautait.) */
+  /* Sans effet tant que les emplacements se partagent toute la colonne (`flex: 1 1 0` sur
+     `.bench-card-wrap`), mais c'est le filet : si l'un d'eux venait à ne plus grandir, les
+     réservistes se répartiraient encore du haut jusqu'en bas plutôt que de s'entasser en
+     haut en laissant un grand vide sous le dernier. */
   justify-content: space-between;
 }
 .bench-column-empty {
@@ -2792,17 +2841,15 @@ input::placeholder {
   letter-spacing: 0.08em;
   white-space: nowrap;
 }
-/* Chaque emplacement reçoit une part STRICTEMENT ÉGALE de la hauteur du banc
-   (`flex: 1 1 0`, base zéro) : que le banc compte 1 ou 5 réservistes, les emplacements se
-   partagent exactement ce qu'il y a, jamais plus. `min-height: 0` est ce qui les autorise
-   à rétrécir sous 88px au lieu de forcer le rail à déborder. */
+/* Un emplacement de réserviste, et la carte centrée dedans. */
 .bench-card-wrap {
   position: relative;
-  /* Taille naturelle = celle de la carte (`--bench-card-h`), mais l'emplacement PEUT
-     rétrécir : c'est ce qui évite tout débordement quand cinq cartes ne tiennent plus à
-     leur taille de confort (fenêtre très basse). Il ne GRANDIT pas, sinon l'espace en trop
-     gonflerait chaque carte au lieu de se placer entre elles. */
-  flex: 0 1 var(--bench-card-h);
+  /* `flex: 1 1 0` : chaque emplacement prend une part STRICTEMENT ÉGALE de la colonne,
+     qu'il y en ait 1 ou 5. C'est ce qui répartit les réservistes sur toute la hauteur du
+     rail sans jamais les coller aux deux extrémités -- ce que faisait `space-between` seul
+     dès qu'il n'en restait que deux. La carte, elle, est centrée dans son emplacement et
+     plafonnée par `--bench-card-h`. */
+  flex: 1 1 0;
   min-height: 0;
   width: 100%;
   /* Colonne (comme `.bench-column` elle-même) et non ligne : c'est ce qui permet à la
@@ -2845,16 +2892,16 @@ input::placeholder {
    soit ce qu'on écrivait ici). La troisième classe tranche l'égalité pour de bon, sans
    dépendre de l'ordre des règles dans le fichier. */
 .bench-column .tcg-card.tcg-card-landscape {
-  aspect-ratio: 2.5 / 1;
-  /* Grandit pour occuper toute la hauteur de son emplacement (`flex-grow` normal sur
-     l'axe vertical d'un wrap en colonne), plafonné par `--bench-card-h` -- pas de
-     `height: 100%`, cf. le commentaire sur `.bench-card-wrap`. La largeur suit
-     automatiquement via `aspect-ratio`, elle aussi plafonnée (`--bench-card-w`). */
+  /* La LARGEUR est celle du rail, la HAUTEUR vient de l'emplacement (`flex-grow` normal sur
+     l'axe vertical d'un wrap en colonne) -- pas de `height: 100%`, cf. le commentaire sur
+     `.bench-card-wrap`. Plus d'`aspect-ratio` imposé : il bridait la hauteur à
+     largeur/2,5 et laissait le reste du rail vide. Les deux bornes le remplacent -- la
+     carte ne devient jamais plus haute que `--bench-card-h`, ni plus plate que 3,2:1. */
   flex: 1 1 auto;
-  width: auto;
+  width: 100%;
   max-width: var(--bench-card-w);
+  min-height: calc(var(--bench-card-w) / 3.2);
   max-height: var(--bench-card-h);
-  min-height: 0;
   min-width: 0;
 }
 .bench-column .tcg-card-landscape .tcg-card-lane {
@@ -4998,17 +5045,29 @@ input::placeholder {
   --cmd-glow: rgba(150, 162, 186, 0.9);
 }
 
-/* Panneau contextuel d'une rubrique : il tombe SOUS la colonne, aligné sur son bord droit.
-   Les deux autres placements évidents masquent une carte de personnage -- à gauche celle du
-   joueur, à droite celle de l'adversaire, puisque la colonne est coincée entre les deux.
-   La bande sous les portraits, elle, est vide. */
+/* Panneau contextuel d'une rubrique. Il tombe SOUS la colonne de touches, aligné sur son
+   bord droit -- les deux autres placements évidents masquent une carte de personnage (à
+   gauche celle du joueur, à droite celle de l'adversaire, la colonne étant coincée entre
+   les deux), tandis que la bande sous les portraits est libre.
+
+   ⚠️ Il est monté par un PORTAIL sur `document.body`, donc en coordonnées ÉCRAN (`fixed`) :
+   `top`/`left`/`max-height` sont posés en ligne par `CommandPopover`, qui mesure la place
+   réellement disponible. Posé en `absolute` dans le plateau, il se faisait trancher par
+   l'`overflow: hidden` de `.arena` dès qu'une carte avait quatre attaques (Escanor), et les
+   dernières lignes devenaient inatteignables. Aucune `max-height` en dur ici : elle vient
+   de la mesure, sinon la liste se retrouverait bridée deux fois. */
 .cmd-popover {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 26;
+  position: fixed;
+  /* Au-dessus du plateau (le portail le sort de son contexte d'empilement, donc il passe
+     devant tout ce qu'il contient), mais SOUS le panneau d'inspection (`.ins-panel`, 50),
+     qui est le seul autre calque monté hors du plateau : c'est lui qui porte la description
+     de l'option survolée, il doit rester lisible par-dessus la liste. Les projections de
+     carte et les roues de pourcentage, elles, vivent dans le plateau -- aucun z-index ne
+     peut les faire passer devant ; c'est la fermeture de la rubrique au clic
+     (`onPick`) qui garantit qu'elles ne sont jamais recouvertes. */
+  z-index: 45;
   width: max(240px, 19vw);
-  max-height: 32vh;
+  max-width: calc(100vw - 16px);
   display: flex;
   flex-direction: column;
   padding: 8px;
@@ -5059,7 +5118,9 @@ input::placeholder {
   letter-spacing: 0.08em;
   color: var(--text-dim);
 }
-/* Le panneau ne dépasse jamais la hauteur du portrait : au-delà, la liste défile. */
+/* La liste prend ce que le panneau lui laisse (celui-ci porte la `max-height` mesurée) et
+   défile au-delà : toutes les attaques d'un personnage restent atteignables, quel que soit
+   leur nombre. */
 .cmd-options {
   display: flex;
   flex-direction: column;
@@ -5130,18 +5191,27 @@ input::placeholder {
    Le tiroir reste monté fermé (translaté hors écran) pour que l'ouverture soit une vraie
    glissade, et non une apparition sèche. */
 .event-log-drawer {
+  /* Hauteur de repos, en variable : c'est elle qui sert AUSSI à calculer `top` ci-dessous,
+     pour que le tiroir garde exactement sa place d'origine (bas-gauche, 10px du bord) sans
+     être ancré par le bas. */
+  --log-h: 46dvh;
   position: fixed;
   left: 0;
-  bottom: 10px;
+  /* Ancré par le HAUT, et non par le bas. Ancré par le bas, la poignée de `resize` (coin
+     bas-droit) fuyait le curseur : agrandir la fenêtre la faisait grandir vers le HAUT, le
+     bas restant cloué à 10px du bord. Ancrée par le haut, la poignée suit le pointeur --
+     et la fenêtre ne peut alors pas déborder de l'écran, puisque le pointeur ne le peut pas
+     non plus. */
+  top: max(8px, calc(100dvh - var(--log-h) - 10px));
   z-index: 9;
   width: 320px;
   min-width: 240px;
   max-width: min(90vw, 640px);
   /* Hauteur DÉFINIE (et non dictée par le contenu) : sans elle, `resize: both` n'a rien à
      étirer sur la verticale et la poignée ne fait bouger que la largeur. */
-  height: 46dvh;
+  height: var(--log-h);
   min-height: 140px;
-  max-height: 88dvh;
+  max-height: 92dvh;
   display: flex;
   flex-direction: column;
   /* Les deux axes, à la souris. `resize` a besoin d'un `overflow` non-visible pour que la
@@ -6296,9 +6366,6 @@ textarea {
     font-size: 0.76rem;
     gap: 5px;
   }
-  .cmd-options {
-    max-height: 30dvh;
-  }
   .cmd-option-detail.blocked {
     max-width: 45vw;
   }
@@ -6306,8 +6373,8 @@ textarea {
     max-width: min(260px, 86vw);
   }
   .event-log-drawer {
+    --log-h: 40dvh;
     width: min(300px, calc(100vw - 20px));
-    height: 40dvh;
   }
 
   .modal {
@@ -6335,9 +6402,6 @@ textarea {
 /* Portable 768p : la colonne « main adverse / plateau / main du joueur » est haute, et
    c'est la hauteur qui manque en premier -- pas la largeur. */
 @media (max-height: 800px) {
-  .cmd-options {
-    max-height: 172px;
-  }
   .event-log-drawer ul {
     max-height: 168px;
   }
