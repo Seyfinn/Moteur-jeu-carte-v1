@@ -29,8 +29,10 @@ export function CardPreviewPanel({
   return (
     <>
       <CardFrame cardId={card.cardId} kind={card.kind} name={card.name} size="large" unique={card.unique} />
-      <div className="card-preview-text">
-        <div className="hover-card-title">{title ?? card.name}</div>
+      {/* Le texte est ce qu'un lecteur d'écran doit annoncer : la vignette à côté n'est
+          qu'une image de la même carte. */}
+      <div className="card-preview-text" role="tooltip" aria-label={title ?? card.name}>
+        <h3 className="hover-card-title">{title ?? card.name}</h3>
         {subtitle && <div className="hover-card-subtitle">{subtitle}</div>}
         <div className="hover-card-content">{body}</div>
       </div>

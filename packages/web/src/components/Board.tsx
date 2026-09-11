@@ -40,6 +40,7 @@ import {
 } from './boardActions';
 import { AttachedObjectCards } from './AttachedObjects';
 import { KoFlights } from './KoFlight';
+import { CardFlourishes, StrikeBolts } from './BoardFx';
 import { useGameEvents, type CharacterBadge, type CharacterImpact } from './gameEvents';
 import { TableEventBanners } from './gameEventBadges';
 import type { GameConnection } from '../net/useGameConnection';
@@ -52,11 +53,22 @@ import type { GameConnection } from '../net/useGameConnection';
  */
 function ForfeitButton({ onForfeit }: { onForfeit: () => void }) {
   const [confirming, setConfirming] = useState(false);
+  const cancelRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!confirming) return;
     const timer = setTimeout(() => setConfirming(false), 6000);
-    return () => clearTimeout(timer);
+    // Le focus se pose sur « Non », jamais sur « Oui » : un Entrée réflexe (le même qui
+    // vient d'ouvrir la confirmation) ne doit pas pouvoir conclure la partie. Échap ferme.
+    cancelRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setConfirming(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('keydown', onKey);
+    };
   }, [confirming]);
 
   if (!confirming) {
@@ -65,6 +77,8 @@ function ForfeitButton({ onForfeit }: { onForfeit: () => void }) {
         className="board-leave"
         onClick={() => setConfirming(true)}
         title="Abandonner : la victoire revient immédiatement à l'adversaire"
+        aria-haspopup="true"
+        aria-expanded={false}
       >
         Abandonner
       </button>
@@ -72,12 +86,12 @@ function ForfeitButton({ onForfeit }: { onForfeit: () => void }) {
   }
 
   return (
-    <span className="board-forfeit-confirm">
+    <span className="board-forfeit-confirm" role="group" aria-label="Confirmer l'abandon">
       Abandonner ?
-      <button className="board-leave danger" onClick={onForfeit}>
+      <button className="board-leave danger" onClick={onForfeit} title="La partie est perdue sur-le-champ">
         Oui
       </button>
-      <button className="board-leave" onClick={() => setConfirming(false)}>
+      <button className="board-leave" ref={cancelRef} onClick={() => setConfirming(false)}>
         Non
       </button>
     </span>
@@ -97,9 +111,15 @@ function ActionErrorBanner({ message, onDismiss }: { message: string; onDismiss:
   }, [message]);
 
   return (
-    <p className="error action-error">
-      {message}
-      <button className="action-error-dismiss" onClick={onDismiss} aria-label="Fermer">
+    // `role="alert"` : un lecteur d'écran annonce le refus dès qu'il apparaît, sans que le
+    // joueur ait à aller le chercher. La clé sur le message rejoue l'animation d'entrée
+    // quand un second refus remplace le premier -- sinon la bannière semblait figée.
+    <p className="error action-error" role="alert" key={message}>
+      <span className="action-error-icon" aria-hidden="true">
+        ⚠
+      </span>
+      <span className="action-error-text">{message}</span>
+      <button className="action-error-dismiss" onClick={onDismiss} aria-label="Fermer le message" title="Fermer">
         ×
       </button>
     </p>
@@ -128,6 +148,14 @@ function TerrainSlot({
     body: terrain ? terrainDetailBody(terrain.cardId) : null,
   });
 
+  // Le dernier tour d'un terrain est le moment où l'on décide de le renouveler ou d'en
+  // profiter une dernière fois : la pastille passe en alerte pour qu'on ne le rate pas.
+  const remaining = terrain?.remainingTurns;
+  const remainingLabel =
+    remaining === undefined
+      ? 'Permanent'
+      : `${remaining} tour${remaining > 1 ? 's' : ''} restant${remaining > 1 ? 's' : ''}`;
+
   return (
     <div className={`terrain-slot-zone ${side}`}>
       <span className="zone-label">Terrain</span>
@@ -141,21 +169,30 @@ function TerrainSlot({
           // La durée restante d'un terrain commande la plupart des décisions autour de
           // lui, et elle n'était lisible qu'en comptant les tours à la main.
           footer={
-            <span className="terrain-remaining">
-              {terrain.remainingTurns === undefined
-                ? '∞'
-                : `${terrain.remainingTurns} tour${terrain.remainingTurns > 1 ? 's' : ''}`}
+            <span
+              className={`terrain-remaining${remaining === undefined ? ' permanent' : remaining <= 1 ? ' urgent' : ''}`}
+              title={remainingLabel}
+              aria-label={remainingLabel}
+            >
+              <span aria-hidden="true">{remaining === undefined ? '∞' : '⏳'}</span>
+              {remaining !== undefined && (
+                <span aria-hidden="true">
+                  {remaining} tour{remaining > 1 ? 's' : ''}
+                </span>
+              )}
             </span>
           }
         />
       ) : (
         // Emplacement vide dessiné aux cotes d'une vraie carte : la ligne centrale garde
-        // sa symétrie, terrain posé ou non, au lieu de se décaler à chaque pose.
-        <div className="terrain-slot-empty">
+        // sa symétrie, terrain posé ou non, au lieu de se décaler à chaque pose. Le
+        // libellé ne parle d'agir que côté joueur : « Poser un Terrain » sur l'emplacement
+        // adverse invitait à un geste impossible.
+        <div className="terrain-slot-empty" role="img" aria-label="Aucun terrain">
           <span className="terrain-slot-empty-icon" aria-hidden="true">
             🗺️
           </span>
-          <span className="terrain-slot-empty-label">Poser un Terrain</span>
+          <span className="terrain-slot-empty-label">{side === 'self' ? 'Poser un Terrain' : 'Aucun terrain'}</span>
         </div>
       )}
       {attachments.length > 0 && (
@@ -183,7 +220,12 @@ function HeatHazeFilter() {
       <defs>
         <filter id="fx-heat-haze" x="-8%" y="-8%" width="116%" height="116%">
           <feTurbulence type="fractalNoise" baseFrequency="0.014 0.05" numOctaves="2" seed="3" result="noise">
-            <animate attributeName="baseFrequency" dur="4s" values="0.014 0.05;0.02 0.075;0.014 0.05" repeatCount="indefinite" />
+            <animate
+              attributeName="baseFrequency"
+              dur="4s"
+              values="0.014 0.05;0.02 0.075;0.014 0.05"
+              repeatCount="indefinite"
+            />
           </feTurbulence>
           <feDisplacementMap in="SourceGraphic" in2="noise" scale="3.5" xChannelSelector="R" yChannelSelector="G" />
         </filter>
@@ -200,6 +242,8 @@ interface CombatantHud {
   /** Mode Pioche : éliminations subies par ce camp. À DRAW_MODE_ELIMINATIONS_TO_WIN, il perd. */
   lost: number | null;
   isTheirTurn: boolean;
+  /** Notre camp : le bandeau ajoute l'étiquette « vous » à côté du nom. */
+  isSelf: boolean;
 }
 
 /**
@@ -208,15 +252,30 @@ interface CombatantHud {
  * géant, tout ce texte volait la place de l'illustration, qui est justement ce que ce
  * format met en avant.
  */
-function CombatHud({ hud, char, side }: { hud: CombatantHud; char: CharacterInstance | undefined; side: 'self' | 'opponent' }) {
+function CombatHud({
+  hud,
+  char,
+  side,
+}: {
+  hud: CombatantHud;
+  char: CharacterInstance | undefined;
+  side: 'self' | 'opponent';
+}) {
   const vitals = char ? characterVitals(char) : null;
+  const rosterLabel = `${hud.alive} personnage${hud.alive > 1 ? 's' : ''} en jeu sur ${hud.total}`;
 
   return (
     <div className={`combat-hud ${side}${hud.isTheirTurn ? ' active-turn' : ''}`}>
       <div className="combat-hud-identity">
-        {/* Diode de tour : elle s'allume pour le camp qui a la main. */}
+        {/* Diode de tour : elle s'allume pour le camp qui a la main. La couleur reprend
+            celle de la capsule du HUD (doré = nous, rouge = l'adversaire), pour qu'un seul
+            code couleur dise « qui joue » partout sur le plateau. */}
         <span className="combat-hud-diode" aria-hidden="true" />
-        <span className="combat-hud-name">{hud.label}</span>
+        <span className="combat-hud-name" title={hud.label}>
+          {hud.label}
+        </span>
+        {hud.isSelf && <em className="combat-hud-you">vous</em>}
+        {hud.isTheirTurn && <span className="combat-hud-sr">, en train de jouer</span>}
         {hud.lost !== null && (
           <span
             className={`combat-hud-elims${hud.lost >= DRAW_MODE_ELIMINATIONS_TO_WIN - 2 ? ' critical' : ''}`}
@@ -225,26 +284,37 @@ function CombatHud({ hud, char, side }: { hud: CombatantHud; char: CharacterInst
             ☠ {hud.lost}/{DRAW_MODE_ELIMINATIONS_TO_WIN}
           </span>
         )}
-        <span className="combat-hud-roster" title="Personnages encore en jeu">
-          {hud.alive}/{hud.total}
+        <span className="combat-hud-roster" title={rosterLabel} aria-label={rosterLabel}>
+          <span aria-hidden="true">👥</span>
+          <span aria-hidden="true">
+            {hud.alive}/{hud.total}
+          </span>
         </span>
       </div>
       {vitals ? (
         // Le liseré bleu autour de la jauge matérialise le bouclier : une réserve à manger
         // AVANT les PV, donc dessinée autour d'eux plutôt qu'à côté.
         <div
-          className={`combat-hud-hp${vitals.shieldTotal > 0 ? ' shielded' : ''}`}
+          className={`combat-hud-hp${vitals.shieldTotal > 0 ? ' shielded' : ''}${vitals.pct <= 25 ? ' low' : ''}`}
           style={{ ['--hp-hue' as string]: Math.round(vitals.pct * 1.2) }}
           title={vitals.shieldTotal > 0 ? `${vitals.shieldTotal} points de bouclier` : undefined}
+          role="meter"
+          aria-label={`Points de vie de ${characterName(char!.cardId)}`}
+          aria-valuemin={0}
+          aria-valuemax={char!.currentMaxHP}
+          aria-valuenow={vitals.currentHP}
+          aria-valuetext={`${vitals.currentHP} sur ${char!.currentMaxHP}${
+            vitals.shieldTotal > 0 ? `, plus ${vitals.shieldTotal} de bouclier` : ''
+          }`}
         >
           <div className={`combat-hud-hp-fill${vitals.pct <= 25 ? ' low' : ''}`} style={{ width: `${vitals.pct}%` }} />
-          <span className="combat-hud-hp-text">
+          <span className="combat-hud-hp-text" aria-hidden="true">
             {vitals.currentHP} / {char!.currentMaxHP}
             {vitals.shieldTotal > 0 && <em className="combat-hud-shield">+{vitals.shieldTotal} 🛡</em>}
           </span>
         </div>
       ) : (
-        <div className="combat-hud-hp empty" />
+        <div className="combat-hud-hp empty" role="img" aria-label="Aucun personnage actif" />
       )}
     </div>
   );
@@ -304,7 +374,12 @@ function ActiveSlot({
             hideVitals
           />
         ) : (
-          <div className="active-slot-empty">Aucun personnage actif</div>
+          <div className="active-slot-empty" role="img" aria-label="Aucun personnage actif">
+            <span className="active-slot-empty-icon" aria-hidden="true">
+              ⚔
+            </span>
+            <span>Aucun personnage actif</span>
+          </div>
         )}
         {actions}
       </div>
@@ -328,18 +403,54 @@ function BenchMenu({
   onDetails: () => void;
 }) {
   const hover = useHoverCard();
+  const menuRef = useRef<HTMLDivElement>(null);
+  // `onClose` est recréé à chaque rendu du plateau (donc à chaque état reçu du serveur) :
+  // en dépendance de l'effet, il rejouerait le focus initial en boucle et volerait la
+  // navigation au clavier en cours.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  // Le menu s'ouvre au clic sur la carte, mais il doit aussi se parcourir au clavier :
+  // focus sur la première entrée à l'ouverture, Échap pour refermer, flèches pour passer
+  // d'une entrée à l'autre (les entrées grisées restent atteignables : leur raison se lit).
+  useEffect(() => {
+    const menu = menuRef.current;
+    if (!menu) return;
+    const items = () => Array.from(menu.querySelectorAll<HTMLButtonElement>('.bench-menu-item'));
+    items()[0]?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeRef.current();
+        return;
+      }
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      const list = items();
+      if (list.length === 0) return;
+      const index = list.indexOf(document.activeElement as HTMLButtonElement);
+      const next = e.key === 'ArrowDown' ? (index + 1) % list.length : (index - 1 + list.length) % list.length;
+      e.preventDefault();
+      list[next]?.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   return (
-    <div className="bench-menu">
+    <div className="bench-menu" ref={menuRef} role="menu" aria-label={`Actions de ${name}`}>
       <div className="bench-menu-head">{name}</div>
       {options.length === 0 && <p className="bench-menu-empty">Rien à déclencher d'ici.</p>}
       {options.map((option) => (
+        // `aria-disabled` plutôt que `disabled` : une entrée grisée reste focusable, donc
+        // sa raison de blocage se lit au clavier comme à la souris ; le clic, lui, est ignoré.
         <button
           key={option.key}
+          role="menuitem"
           className={`bench-menu-item${option.disabledReason ? ' blocked' : ''}`}
-          disabled={Boolean(option.disabledReason)}
+          aria-disabled={option.disabledReason ? true : undefined}
           title={option.disabledReason ?? undefined}
           onClick={() => {
+            if (option.disabledReason) return;
             // Le mini-menu se referme sur l'action : son `onMouseLeave` ne partira pas, donc
             // l'encart de description doit être fermé à la main.
             hover.hide();
@@ -358,6 +469,7 @@ function BenchMenu({
         </button>
       ))}
       <button
+        role="menuitem"
         className="bench-menu-item ghost"
         onClick={() => {
           onDetails();
@@ -535,8 +647,18 @@ export function Board({ conn }: { conn: GameConnection }) {
   const state = conn.state!;
   const you = conn.you!;
   const opponentId = otherPlayer(you);
-  const { badgesByCharacter, tableEvents, procRolls, spotlights, impactsByCharacter, boardQuake, koFlights, recycleReveals } =
-    useGameEvents(state);
+  const {
+    badgesByCharacter,
+    tableEvents,
+    procRolls,
+    spotlights,
+    impactsByCharacter,
+    boardQuake,
+    koFlights,
+    recycleReveals,
+    strikes,
+    flourishes,
+  } = useGameEvents(state);
   // La roue d'initiative ne se joue qu'une fois, à l'ouverture : `phase` quitte 'setup'
   // dès la mise en place terminée, donc une reconnexion en cours de partie ne la rejoue
   // pas. `useCallback` parce que le plateau se redessine à chaque état reçu du serveur et
@@ -576,7 +698,10 @@ export function Board({ conn }: { conn: GameConnection }) {
           state,
           you,
           (instanceId) => {
-            conn.applyAction({ kind: 'switch', newActiveInstanceId: instanceId });
+            conn.applyAction({
+              kind: 'switch',
+              newActiveInstanceId: instanceId,
+            });
             setSwitchMode(false);
           },
           () => setSwitchMode(false)
@@ -639,6 +764,23 @@ export function Board({ conn }: { conn: GameConnection }) {
   const myTerrainCardId = myTerrainId ? me.terrains[myTerrainId]?.cardId : undefined;
   const ambience = myTerrainCardId ? `board-terrain board-terrain-${myTerrainCardId}` : '';
 
+  // Capsule de tour : « à qui est-ce ? » ne se résume pas à `activePlayerId`. Pendant un
+  // choix du moteur, c'est celui qui doit répondre qui tient la main -- l'adversaire peut
+  // avoir à choisir pendant NOTRE tour (et inversement), et la capsule disait le contraire.
+  const waitingOnOpponent = pendingChoice ? pendingChoice.playerId !== you : !myTurn;
+  const turnState = state.result
+    ? 'Partie terminée'
+    : pendingChoice
+      ? pendingChoice.playerId === you
+        ? 'À vous de choisir'
+        : `${opponentName} choisit`
+      : myTurn
+        ? 'À vous de jouer'
+        : `${opponentName} joue`;
+  const objectsLeft = Math.max(0, maxObjects - me.objectsPlayedThisTurn);
+  const terrainsLeft = Math.max(0, maxTerrains - me.terrainsPlayedThisTurn);
+  const budgetLabel = `Il vous reste ${objectsLeft} objet${objectsLeft > 1 ? 's' : ''} sur ${maxObjects} et ${terrainsLeft} terrain sur ${maxTerrains} à jouer ce tour`;
+
   return (
     // `targeting` allume les cibles légales et éteint le reste du plateau : c'est la
     // classe qui porte cette mise en avant, côté CSS.
@@ -646,7 +788,9 @@ export function Board({ conn }: { conn: GameConnection }) {
     // au gros coup suivant de rejouer l'animation, une classe restée en place ne
     // redémarrerait rien.
     <div
-      className={`board${targeting ? ' targeting' : ''}${ambience ? ` ${ambience}` : ''}${boardQuake ? ` board-quake board-quake-${boardQuake.tier}` : ''}`}
+      className={`board${targeting ? ' targeting' : ''}${ambience ? ` ${ambience}` : ''}${
+        boardQuake ? ` board-quake board-quake-${boardQuake.tier}${boardQuake.critical ? ' board-quake-crit' : ''}` : ''
+      }${canAct ? ' can-act' : ''}`}
     >
       {/* Les deux rails encadrent TOUT le plateau, du haut de la fenêtre jusqu'en bas : le
           banc n'est plus coincé entre l'en-tête et la main, et n'abandonne plus les deux
@@ -670,140 +814,201 @@ export function Board({ conn }: { conn: GameConnection }) {
         </div>
 
         <div className="board-center">
-        {/* HUD flottant : trois blocs en grille pour que la capsule de tour soit centrée sur
+          {/* HUD flottant : trois blocs en grille pour que la capsule de tour soit centrée sur
             la bande centrale et non sur ce qui reste entre ses voisins -- avec `space-between`,
             elle se décalait dès que le Mode Pioche ajoutait son compteur de piles. */}
-        <header className={`board-header${myTurn ? ' my-turn' : ''}`}>
-          <div className="board-header-side left">
-            <span className="board-header-room">
-              Salon <strong>{conn.roomCode}</strong>
-            </span>
-            {drawMode && (
-              <span
-                className="board-header-piles"
-                title="Cartes restantes dans les piles. Celle des terrains est commune aux deux joueurs."
-              >
-                🂠 {me.drawPiles.characterCardIds.length} · 🎒 {me.drawPiles.objectCardIds.length} · 🗺️{' '}
-                {state.sharedTerrainPile.length}
+          <header className={`board-header${myTurn ? ' my-turn' : ''}`}>
+            <div className="board-header-side left">
+              <span className="board-header-room" title="Code du salon, à donner pour inviter">
+                Salon <strong>{conn.roomCode}</strong>
               </span>
+              {drawMode && (
+                <span
+                  className="board-header-piles"
+                  title="Cartes restantes dans les piles. Celle des terrains est commune aux deux joueurs."
+                  aria-label={`Piles : ${me.drawPiles.characterCardIds.length} personnages, ${me.drawPiles.objectCardIds.length} objets, ${state.sharedTerrainPile.length} terrains`}
+                >
+                  🂠 {me.drawPiles.characterCardIds.length} · 🎒 {me.drawPiles.objectCardIds.length} · 🗺️{' '}
+                  {state.sharedTerrainPile.length}
+                </span>
+              )}
+            </div>
+            {/* `aria-live` : le changement de main est annoncé sans qu'on ait à le chercher --
+              c'est LA question qu'on se pose en revenant sur la fenêtre. */}
+            <div
+              className={`board-turn-capsule${waitingOnOpponent ? ' theirs' : ' mine'}${state.result ? ' over' : ''}`}
+              role="status"
+              aria-live="polite"
+            >
+              <span className="board-turn-number">Tour {state.turnNumber}</span>
+              <strong className="board-turn-state">
+                {waitingOnOpponent && !state.result && (
+                  <span className="board-turn-wait" aria-hidden="true">
+                    ⏳
+                  </span>
+                )}
+                {turnState}
+              </strong>
+            </div>
+            <div className="board-header-side right">
+              {/* Budget du tour en deux jetons : chacun s'éteint quand il est épuisé, et les
+                deux s'estompent hors de notre tour (ils ne veulent alors rien dire). */}
+              <span
+                className={`board-header-budget${canAct ? '' : ' idle'}`}
+                title={budgetLabel}
+                aria-label={budgetLabel}
+              >
+                <span className={`board-budget-chip${objectsLeft === 0 ? ' spent' : ''}`} aria-hidden="true">
+                  <span className="board-budget-icon">🎒</span>
+                  <span className="board-budget-count">
+                    {objectsLeft}
+                    <small>/{maxObjects}</small>
+                  </span>
+                </span>
+                <span className={`board-budget-chip${terrainsLeft === 0 ? ' spent' : ''}`} aria-hidden="true">
+                  <span className="board-budget-icon">🗺️</span>
+                  <span className="board-budget-count">
+                    {terrainsLeft}
+                    <small>/{maxTerrains}</small>
+                  </span>
+                </span>
+              </span>
+              <span className="board-header-sep" aria-hidden="true" />
+              <EffectsGlossaryButton />
+              {/* Leaving was only possible from the result screen: a player whose opponent
+                never comes back had no way out short of reloading. */}
+              <ForfeitButton onForfeit={conn.forfeit} />
+              <button className="board-leave" onClick={conn.leave} title="Quitter la partie et revenir au lobby">
+                Quitter
+              </button>
+            </div>
+          </header>
+
+          {/* Ancre de hauteur nulle : les bannières se posent PAR-DESSUS l'arène, sous
+            l'en-tête, au lieu de s'insérer dans le flux et de faire sauter tout le plateau
+            de 40 px à chaque refus d'action. */}
+          <div className="board-notices">
+            {conn.opponentDisconnected && (
+              <p className="warning board-notice" role="status" aria-live="polite">
+                <span aria-hidden="true">⚡</span> L'adversaire s'est déconnecté.
+              </p>
+            )}
+            {errorMessage && (
+              <ActionErrorBanner
+                message={errorMessage}
+                onDismiss={() => {
+                  setLocalError(null);
+                  conn.clearError();
+                }}
+              />
+            )}
+            {/* L'adversaire doit répondre à un choix du moteur : l'attente est annoncée sous
+              la capsule de tour (qui dit déjà « X choisit »), et non plus dans le coin
+              bas-droit, où le Recycleur la recouvrait à moitié. */}
+            {pendingChoice && pendingChoice.playerId !== you && (
+              <div className="waiting-badge" role="status" aria-live="polite">
+                <span className="waiting-badge-dots" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+                <span>{opponentName} réfléchit à son choix…</span>
+                {conn.choiceDeadline !== null && <ChoiceCountdownBadge deadline={conn.choiceDeadline} />}
+              </div>
             )}
           </div>
-          <div className={`board-turn-capsule${myTurn ? ' mine' : ' theirs'}`}>
-            <span className="board-turn-number">Tour {state.turnNumber}</span>
-            <strong className="board-turn-state">{myTurn ? 'À vous de jouer' : `${opponentName} joue`}</strong>
-          </div>
-          <div className="board-header-side right">
-            <span className="board-header-budget" title="Cartes encore jouables pendant votre tour">
-              🎒 {Math.max(0, maxObjects - me.objectsPlayedThisTurn)} · 🗺️{' '}
-              {Math.max(0, maxTerrains - me.terrainsPlayedThisTurn)}
-            </span>
-            <EffectsGlossaryButton />
-            {/* Leaving was only possible from the result screen: a player whose opponent
-                never comes back had no way out short of reloading. */}
-            <ForfeitButton onForfeit={conn.forfeit} />
-            <button className="board-leave" onClick={conn.leave} title="Quitter la partie et revenir au lobby">
-              Quitter
-            </button>
-          </div>
-        </header>
 
-        {conn.opponentDisconnected && <p className="warning">L'adversaire s'est déconnecté.</p>}
-        {errorMessage && (
-          <ActionErrorBanner
-            message={errorMessage}
-            onDismiss={() => {
-              setLocalError(null);
-              conn.clearError();
-            }}
-          />
-        )}
+          <TableEventBanners events={tableEvents} you={you} />
+          <ProcWheels rolls={procRolls} />
+          <CardSpotlights spotlights={spotlights} />
+          <KoFlights flights={koFlights} />
+          {/* Les deux calques qui relient les cartes entre elles (trait de frappe) ou qui
+            débordent de leur cadre (déflagration de critique, évolution, résurrection). */}
+          <StrikeBolts bolts={strikes} />
+          <CardFlourishes flourishes={flourishes} />
+          <HeatHazeFilter />
 
-        <TableEventBanners events={tableEvents} />
-        <ProcWheels rolls={procRolls} />
-        <CardSpotlights spotlights={spotlights} />
-        <KoFlights flights={koFlights} />
-        <HeatHazeFilter />
+          <div className="arena">
+            <OpponentHand player={opponent} />
 
-        <div className="arena">
-          <OpponentHand player={opponent} />
+            <div className="battlefield">
+              <div className="battle-line">
+                <div className="zone zone-terrain-self">
+                  <TerrainSlot player={me} side="self" attachments={attachmentsOf(me)} />
+                </div>
 
-          <div className="battlefield">
-            <div className="battle-line">
-            <div className="zone zone-terrain-self">
-              <TerrainSlot player={me} side="self" attachments={attachmentsOf(me)} />
-            </div>
+                <div className="zone zone-active-self">
+                  <ActiveSlot
+                    char={activeOf(me)}
+                    badges={badgesByCharacter.get(me.activeCharacterInstanceId ?? '')}
+                    side="self"
+                    targeting={targeting}
+                    state={state}
+                    impact={impactsByCharacter.get(me.activeCharacterInstanceId ?? '')}
+                    hud={{
+                      label: me.displayName || 'Vous',
+                      lost: drawMode ? me.charactersLost : null,
+                      alive: aliveOf(me),
+                      // Dénominateur pris sur le roster complet, pas sur vivants+cimetière :
+                      // pendant la mise en place personne n'est encore sur le plateau et le
+                      // compteur affichait un « 0/0 » qui ne veut rien dire.
+                      total: Object.keys(me.characters).length,
+                      isTheirTurn: myTurn,
+                      isSelf: true,
+                    }}
+                    actions={
+                      <CommandPanel state={state} you={you} conn={conn} onStartSwitch={() => setSwitchMode(true)} />
+                    }
+                  />
+                </div>
 
-            <div className="zone zone-active-self">
-              <ActiveSlot
-                char={activeOf(me)}
-                badges={badgesByCharacter.get(me.activeCharacterInstanceId ?? '')}
-                side="self"
-                targeting={targeting}
-                state={state}
-                impact={impactsByCharacter.get(me.activeCharacterInstanceId ?? '')}
-                hud={{
-                  label: `${me.displayName || 'Vous'} (vous)`,
-                  lost: drawMode ? me.charactersLost : null,
-                  alive: aliveOf(me),
-                  // Dénominateur pris sur le roster complet, pas sur vivants+cimetière :
-                  // pendant la mise en place personne n'est encore sur le plateau et le
-                  // compteur affichait un « 0/0 » qui ne veut rien dire.
-                  total: Object.keys(me.characters).length,
-                  isTheirTurn: myTurn,
-                }}
-                actions={
-                  <CommandPanel state={state} you={you} conn={conn} onStartSwitch={() => setSwitchMode(true)} />
-                }
-              />
-            </div>
-
-            {/* Ligne de front : elle sépare les deux moitiés du plateau et donne au duel un
+                {/* Ligne de front : elle sépare les deux moitiés du plateau et donne au duel un
                 centre lisible, là où les deux actifs se faisaient face sans repère. */}
-            <div className="zone zone-vs" aria-hidden="true">
-              <span className="vs-line" />
-              <span className="vs-badge">VS</span>
-              <span className="vs-line" />
-            </div>
+                <div className="zone zone-vs" aria-hidden="true">
+                  <span className="vs-line" />
+                  <span className="vs-badge">VS</span>
+                  <span className="vs-line" />
+                </div>
 
-            <div className="zone zone-active-opp">
-              <ActiveSlot
-                char={activeOf(opponent)}
-                badges={badgesByCharacter.get(opponent.activeCharacterInstanceId ?? '')}
-                side="opponent"
-                targeting={targeting}
-                state={state}
-                impact={impactsByCharacter.get(opponent.activeCharacterInstanceId ?? '')}
-                hud={{
-                  label: opponentName,
-                  lost: drawMode ? opponent.charactersLost : null,
-                  alive: aliveOf(opponent),
-                  total: Object.keys(opponent.characters).length,
-                  isTheirTurn: !myTurn,
-                }}
-              />
-            </div>
+                <div className="zone zone-active-opp">
+                  <ActiveSlot
+                    char={activeOf(opponent)}
+                    badges={badgesByCharacter.get(opponent.activeCharacterInstanceId ?? '')}
+                    side="opponent"
+                    targeting={targeting}
+                    state={state}
+                    impact={impactsByCharacter.get(opponent.activeCharacterInstanceId ?? '')}
+                    hud={{
+                      label: opponentName,
+                      lost: drawMode ? opponent.charactersLost : null,
+                      alive: aliveOf(opponent),
+                      total: Object.keys(opponent.characters).length,
+                      isTheirTurn: !myTurn,
+                      isSelf: false,
+                    }}
+                  />
+                </div>
 
-            <div className="zone zone-terrain-opp">
-              <TerrainSlot player={opponent} side="opponent" attachments={attachmentsOf(opponent)} />
-            </div>
-
+                <div className="zone zone-terrain-opp">
+                  <TerrainSlot player={opponent} side="opponent" attachments={attachmentsOf(opponent)} />
+                </div>
+              </div>
             </div>
           </div>
-        </div>
 
-        <PlayerHand
-          state={state}
-          you={you}
-          player={me}
-          objectDenial={turnGate ?? objectDenial(state, you)}
-          terrainDenial={turnGate ?? terrainDenial(state, you)}
-          recycleGate={turnGate}
-          recycleReveal={recycleReveals[recycleReveals.length - 1] ?? null}
-          onPlayObject={(objectInstanceId) => conn.applyAction({ kind: 'play-object', objectInstanceId })}
-          onPlayTerrain={(terrainInstanceId) => conn.applyAction({ kind: 'play-terrain', terrainInstanceId })}
-          onRecycle={(objectInstanceIds) => conn.applyAction({ kind: 'recycle-objects', objectInstanceIds })}
-          onBlocked={setLocalError}
-        />
+          <PlayerHand
+            state={state}
+            you={you}
+            player={me}
+            objectDenial={turnGate ?? objectDenial(state, you)}
+            terrainDenial={turnGate ?? terrainDenial(state, you)}
+            recycleGate={turnGate}
+            recycleReveal={recycleReveals[recycleReveals.length - 1] ?? null}
+            onPlayObject={(objectInstanceId) => conn.applyAction({ kind: 'play-object', objectInstanceId })}
+            onPlayTerrain={(terrainInstanceId) => conn.applyAction({ kind: 'play-terrain', terrainInstanceId })}
+            onRecycle={(objectInstanceIds) => conn.applyAction({ kind: 'recycle-objects', objectInstanceIds })}
+            onBlocked={setLocalError}
+          />
         </div>
 
         <div className="rail rail-opp">
@@ -828,7 +1033,10 @@ export function Board({ conn }: { conn: GameConnection }) {
       {showInitiativeWheel && (
         <InitiativeWheel
           starterId={state.startingPlayerId}
-          names={{ p1: state.players.p1.displayName, p2: state.players.p2.displayName }}
+          names={{
+            p1: state.players.p1.displayName,
+            p2: state.players.p2.displayName,
+          }}
           onDone={finishWheel}
         />
       )}
@@ -850,12 +1058,6 @@ export function Board({ conn }: { conn: GameConnection }) {
           onAnswer={(answer) => conn.answerChoice(pendingChoice.id, answer)}
           onCancel={pendingChoice.cancellable ? conn.cancelChoice : undefined}
         />
-      )}
-      {pendingChoice && pendingChoice.playerId !== you && (
-        <div className="waiting-badge">
-          En attente du choix de l'adversaire...
-          {conn.choiceDeadline !== null && <ChoiceCountdownBadge deadline={conn.choiceDeadline} />}
-        </div>
       )}
 
       {state.result && <MatchOverModal state={state} you={you} conn={conn} />}

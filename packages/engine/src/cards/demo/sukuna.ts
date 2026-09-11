@@ -58,7 +58,7 @@ export const sukuna: CharacterCardDef = {
     },
     {
       id: 'extension-de-territoire',
-      name: 'Extention de territoire',
+      name: 'Extension de territoire',
       kind: 'passive',
       description: "Tant que la carte Terrain Autel Démoniaque est en jeu (jouée par toi ou l'adversaire), toutes les attaques de Sukuna gagnent +20 dégâts.",
       // Purement descriptif : implémenté via le modifier getEffectiveATK ci-dessous --
@@ -69,7 +69,10 @@ export const sukuna: CharacterCardDef = {
   ],
   modifiers: [
     {
+      // Porte le texte de la passive "Extension de territoire" : un Silence Passif / Ultime
+      // doit donc lui retirer le bonus d'Autel Démoniaque.
       query: 'getEffectiveATK',
+      silencedByPassive: true,
       transform(ctx, current) {
         const characterInstanceId = ctx.query['characterInstanceId'] as string;
         if (characterInstanceId !== ctx.sourceInstanceId) return current;

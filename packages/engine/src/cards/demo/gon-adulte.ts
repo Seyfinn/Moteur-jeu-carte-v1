@@ -6,7 +6,7 @@ const CONTRAT_DE_MORT_DAMAGE = 30;
 
 /**
  * Forme évoluée de Gon. Jamais sélectionnable dans un deck : c'est le `evolvesTo` de `gon`
- * qui la sort du pool, elle n'arrive que par le Sermet de Vengance.
+ * qui la sort du pool, elle n'arrive que par le Serment de Vengeance.
  */
 export const gonAdulte: CharacterCardDef = {
   type: 'character',
@@ -20,7 +20,7 @@ export const gonAdulte: CharacterCardDef = {
   abilities: [
     {
       id: 'contrat-de-mort',
-      name: 'Sermet de Vengance',
+      name: 'Serment de Vengeance',
       kind: 'passive',
       description: 'Contrat de Mort : Gon Adulte subit 30 dégâts auto-infligés à la fin de chacun de ses tours',
       trigger: 'onTurnEnd',

@@ -38,7 +38,7 @@ export const guts: CharacterCardDef = {
       id: 'berserk',
       name: 'Berserk',
       kind: 'passive',
-      description: "Tout les 100 HP que la carte \"Guts\" perd, l'attaque coup d'épée fait 50 dégâts supplémentaires",
+      description: "Tous les 100 HP que la carte \"Guts\" perd, l'attaque coup d'épée fait 50 dégâts supplémentaires",
       trigger: 'afterDamage',
       // Le décompte doit valoir même si Guts encaisse les dégâts depuis le banc (AoE).
       usableFromBench: true,
@@ -77,7 +77,10 @@ export const guts: CharacterCardDef = {
   ],
   modifiers: [
     {
+      // Porte le texte de la passive "Berserk" : silencé, Guts perd le bonus accumulé
+      // (le compteur, lui, reste intact et repart dès que le silence tombe).
       query: 'getEffectiveATK',
+      silencedByPassive: true,
       transform(ctx, current) {
         if (ctx.query['characterInstanceId'] !== ctx.sourceInstanceId) return current;
         const char = findCharacter(ctx.state, ctx.sourceInstanceId);

@@ -57,17 +57,30 @@ export const caitlyn: CharacterCardDef = {
       },
     },
   ],
+  // Deux modifiers et pas un seul, parce que les deux taux ne viennent pas du même texte :
+  // le 33 % de base est celui de l'attaque ("Headshot : cette attaque peut crit"), la montée
+  // à 50 % est celle de la passive "Execution". Un silence passif ne ferme pas les attaques
+  // (cf. CLAUDE.md) : il doit donc faire retomber Caitlyn à 33 %, pas à 5 %.
   modifiers: [
     {
-      // Chance de critique innée d'"Execution", relevée définitivement après un kill.
-      // Un modifier plutôt qu'un statut 'critical' : actif dès le premier tir, et
-      // impossible à dissiper ou à voler avec les statuts.
+      // Le taux de base de Headshot. Un modifier plutôt qu'un statut 'critical' : actif dès
+      // le premier tir, et impossible à dissiper ou à voler avec les statuts.
       query: 'getCriticalPercent',
       transform(ctx, current) {
         if (ctx.query['characterInstanceId'] !== ctx.sourceInstanceId) return current;
+        return Math.max(current as number, BASE_CRIT_PERCENT);
+      },
+    },
+    {
+      // L'amélioration définitive d'"Execution" -- passive imprimée, donc coupée par le
+      // silence passif / ultime.
+      query: 'getCriticalPercent',
+      silencedByPassive: true,
+      transform(ctx, current) {
+        if (ctx.query['characterInstanceId'] !== ctx.sourceInstanceId) return current;
         const self = findCharacter(ctx.state, ctx.sourceInstanceId);
-        const percent = hasStatus(self, EXECUTION_UPGRADED_STATUS_ID) ? EXECUTION_CRIT_PERCENT : BASE_CRIT_PERCENT;
-        return Math.max(current as number, percent);
+        if (!hasStatus(self, EXECUTION_UPGRADED_STATUS_ID)) return current;
+        return Math.max(current as number, EXECUTION_CRIT_PERCENT);
       },
     },
   ],

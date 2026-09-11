@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { getCharacterCard, type GameState, type PendingChoice, type PlayerId } from 'engine';
-import { ChoiceCountdownBadge } from './ChoiceModal';
+import { ChoiceCountdownBadge, selectionHint } from './ChoiceModal';
 
 /**
  * Ciblage sur le plateau : quand le moteur demande de désigner des personnages, on ne
@@ -168,61 +168,98 @@ export function TargetingBar({
   const { selected, min, max } = targeting;
   const enough = selected.length >= min;
   const names = selected.map((id) => nameOf(state, id));
+  const titleId = useId();
+  const cancel = targeting.cancelAction ?? targeting.clear;
+  // Le ciblage n'a rien d'une modale : pas de focus piégé, le plateau EST la zone de
+  // réponse. Mais Échap doit quand même sortir -- d'abord en vidant la sélection en cours
+  // (un clic de trop), puis en annulant l'action quand c'est possible.
+  const canEscape = selected.length > 0 || Boolean(targeting.cancelAction) || Boolean(targeting.immediate);
+  useEffect(() => {
+    if (!canEscape) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      if (selected.length > 0 && !targeting.immediate) targeting.clear();
+      else cancel();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [canEscape, selected.length, targeting, cancel]);
 
   // Ciblage immédiat (le switch) : le clic sur la carte fait tout, la barre n'est plus
   // qu'une consigne et une sortie de secours.
   if (targeting.immediate) {
     return (
-      <div className="targeting-bar" role="dialog" aria-label="Ciblage">
+      <div className="targeting-bar targeting-bar-immediate" role="dialog" aria-labelledby={titleId}>
         <div className="targeting-bar-head">
-          <span className="targeting-bar-prompt">{targeting.prompt}</span>
+          <span className="targeting-bar-kicker" aria-hidden="true">
+            ◎
+          </span>
+          <span className="targeting-bar-prompt" id={titleId}>
+            {targeting.prompt}
+          </span>
         </div>
-        <p className="targeting-bar-status">Cliquez le personnage du banc à envoyer au combat.</p>
+        <p className="targeting-bar-status">Clique le personnage du banc à envoyer au combat.</p>
         <div className="targeting-bar-actions">
-          <button onClick={targeting.clear}>Annuler</button>
+          <button onClick={targeting.clear}>
+            Annuler
+            <kbd className="modal-kbd" aria-hidden="true">
+              Échap
+            </kbd>
+          </button>
         </div>
       </div>
     );
   }
 
+  const missing = min - selected.length;
+
   return (
-    <div className="targeting-bar" role="dialog" aria-label="Ciblage">
+    <div className="targeting-bar" role="dialog" aria-labelledby={titleId}>
       <div className="targeting-bar-head">
-        <span className="targeting-bar-prompt">{targeting.prompt}</span>
+        <span className="targeting-bar-kicker" aria-hidden="true">
+          ◎
+        </span>
+        <span className="targeting-bar-prompt" id={titleId}>
+          {targeting.prompt}
+        </span>
         {deadline !== null && <ChoiceCountdownBadge deadline={deadline} />}
       </div>
 
-      <p className="targeting-bar-status">
+      <div className="targeting-bar-rule">
+        <span className="targeting-bar-hint">{selectionHint(min, max, 'cible')}</span>
+        <span className={`targeting-bar-count${enough ? ' is-ok' : ''}`} aria-live="polite">
+          {selected.length}/{max}
+        </span>
+      </div>
+
+      <p className="targeting-bar-status" aria-live="polite">
         {selected.length === 0 ? (
-          <>
-            Cliquez {max > 1 ? `jusqu'à ${max} cartes` : 'une carte'} en surbrillance sur le plateau
-            {min > 1 && ` (${min} minimum)`}.
-          </>
+          <>Clique {max > 1 ? 'les cartes' : 'la carte'} en surbrillance sur le plateau.</>
         ) : (
           <>
-            Valider ce choix ? <strong>{names.join(', ')}</strong>
-            {max > 1 && (
-              <span className="targeting-bar-count">
-                {' '}
-                — {selected.length}/{max}
-              </span>
-            )}
+            {names.map((name, i) => (
+              <strong key={selected[i]} className="targeting-bar-chip">
+                {name}
+              </strong>
+            ))}
+            {!enough && <span className="targeting-bar-missing"> — encore {missing}</span>}
           </>
         )}
       </p>
 
       <div className="targeting-bar-actions">
         <button className="primary" disabled={!enough} onClick={targeting.confirm}>
-          Valider ce choix
+          {enough ? 'Valider ce choix' : missing > 1 ? `Encore ${missing} cibles` : 'Choisis une cible'}
         </button>
         {/* Un clic malheureux sur une attaque/ability doit pouvoir revenir en arrière, pas
             seulement vider la sélection en cours -- d'où le vrai cancel dès qu'il est
             disponible, même sans rien avoir encore sélectionné. */}
-        <button
-          onClick={targeting.cancelAction ?? targeting.clear}
-          disabled={selected.length === 0 && !targeting.cancelAction}
-        >
-          Annuler
+        <button onClick={cancel} disabled={selected.length === 0 && !targeting.cancelAction}>
+          {targeting.cancelAction ? 'Annuler' : 'Vider'}
+          <kbd className="modal-kbd" aria-hidden="true">
+            Échap
+          </kbd>
         </button>
       </div>
     </div>

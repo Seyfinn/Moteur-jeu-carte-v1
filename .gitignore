@@ -2,3 +2,7 @@
 !.env.development
 node_modules/
 dist/
+
+# Brouillons de debug (pages de repro, dumps de classes CSS) : jamais versionnés.
+.__*
+*.fx.txt

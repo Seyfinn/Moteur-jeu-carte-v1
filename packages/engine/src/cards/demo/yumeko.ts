@@ -34,7 +34,7 @@ export const yumeko: CharacterCardDef = {
   attacks: [
     {
       id: 'mise-a-fond',
-      name: 'Mise a Fond',
+      name: 'Mise à Fond',
       baseATK: 0,
       description: 'Calculé par rapport à Mise à Mort',
       async execute(ctx) {
@@ -122,7 +122,7 @@ Défaite (50 %) : Yumeko subit immédiatement les PV pariés sous forme de dég�
       id: 'bonus',
       name: 'Bonus',
       kind: 'passive',
-      description: "Peut utiliser Mise à Mort sur le Banc, Utilisable qu'une seul fois",
+      description: "Peut utiliser Mise à Mort sur le Banc, Utilisable qu'une seule fois",
       // Purement descriptive : la permission vit dans `usableFromBench` de Mise à mort et
       // dans le modifier 'canAttackFromBench' ci-dessous.
       async execute() {},
@@ -130,7 +130,7 @@ Défaite (50 %) : Yumeko subit immédiatement les PV pariés sous forme de dég�
   ],
   modifiers: [
     {
-      // "Mise a Fond" : les dégâts bonus du pari remporté. Passer par l'ATK effectif plutôt
+      // "Mise à Fond" : les dégâts bonus du pari remporté. Passer par l'ATK effectif plutôt
       // que par une addition dans l'attaque, pour que buffs et malus s'appliquent au total.
       query: 'getEffectiveATK',
       transform(ctx, current) {
@@ -143,7 +143,10 @@ Défaite (50 %) : Yumeko subit immédiatement les PV pariés sous forme de dég�
     },
     {
       // "Bonus" : le tour où la mise est partie du banc, Yumeko peut y porter son attaque.
+      // Porte le texte de la passive "Bonus" : silencée, Yumeko ne peut plus frapper du banc
+      // (la mise, elle, est une capacité active, fermée par le silence actif).
       query: 'canAttackFromBench',
+      silencedByPassive: true,
       vote(ctx) {
         if (ctx.query['characterInstanceId'] !== ctx.sourceInstanceId) return undefined;
         const self = ctx.state.players[ctx.sourceOwnerId].characters[ctx.sourceInstanceId];

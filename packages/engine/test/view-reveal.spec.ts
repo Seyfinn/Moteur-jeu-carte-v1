@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { getPlayerView } from '../src/view.js';
 import { registerTestFixtures, FX_ROSTER } from './fixtures.js';
 import { createReadyMatch } from './test-utils.js';
+import { Match } from '../src/index.js';
 
 beforeAll(() => {
   registerTestFixtures();
@@ -41,5 +42,31 @@ describe('"Ultimate Détective" mechanism (revealsOpponentUnplayedCards flag on 
     const p2View = getPlayerView(match.state, 'p2');
     const p1ObjectIds = match.state.players.p1.unplayedObjectInstanceIds;
     expect(p2View.players.p1.unplayedObjectInstanceIds).not.toEqual(p1ObjectIds);
+  });
+});
+
+describe("la graine du generateur aleatoire ne quitte jamais le serveur", () => {
+  it("est remplacee par une graine morte dans la vue des DEUX joueurs", async () => {
+    const match = await createReadyMatch({
+      p1Name: 'A',
+      p2Name: 'B',
+      p1Roster: FX_ROSTER,
+      p2Roster: FX_ROSTER,
+      seed: 4242,
+    });
+    // Le PRNG est deterministe : connaitre `seed`, c'est connaitre tous les tirages a
+    // venir de la partie (critiques, esquives, jets de pourcentage, pile ou face, carte
+    // rendue par le Recycleur). Un joueur n'a qu'a lire l'etat recu pour savoir si sa
+    // prochaine attaque passe -- la vue doit donc en etre depourvue.
+    const realSeed = match.state.rng.seed;
+    for (const playerId of ['p1', 'p2'] as const) {
+      expect(getPlayerView(match.state, playerId).rng.seed).not.toBe(realSeed);
+    }
+  });
+
+  it("reste identique d'un envoi a l'autre tant que rien ne bouge", () => {
+    // Une graine tiree au hasard a chaque vue ferait re-rendre le client pour rien.
+    const match = Match.create({ p1Name: 'A', p2Name: 'B', p1Roster: FX_ROSTER, p2Roster: FX_ROSTER, seed: 7 });
+    expect(getPlayerView(match.state, 'p1').rng).toEqual(getPlayerView(match.state, 'p1').rng);
   });
 });

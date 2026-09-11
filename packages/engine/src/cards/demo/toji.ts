@@ -24,7 +24,7 @@ export const toji: CharacterCardDef = {
       id: 'aiguillon-celeste',
       name: 'Aiguillon Céleste',
       baseATK: 0,
-      description: 'Infligé 33% des pv par rapport aux pv maximum de la cible',
+      description: 'Inflige 33% des pv par rapport aux pv maximum de la cible',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -64,7 +64,12 @@ Utilisable 1x`,
   modifiers: [
     {
       // "Restriction Céleste" : immunité totale à stun / silence (toutes variantes) / désarmé.
+      // Porte le texte de la passive "Restriction Céleste". Le cas n'est pas théorique :
+      // l'immunité empêche bien qu'on la lui applique, mais un échange de statuts
+      // (Inversion de la Réalité d'Aizen) écrit directement sur la carte sans passer par
+      // `canApplyStatus` -- Toji peut donc hériter d'un silence par ce chemin.
       query: 'canApplyStatus',
+      silencedByPassive: true,
       vote(ctx) {
         if (ctx.query['targetInstanceId'] !== ctx.sourceInstanceId) return undefined;
         if (!IMMUNE_STATUS_IDS.has(ctx.query['statusId'] as string)) return undefined;

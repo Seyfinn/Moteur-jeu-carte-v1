@@ -26,7 +26,7 @@ export const poupeeVoodoo: ObjectCardDef = {
   id: 'poupee-voodoo',
   name: 'Poupée Voodoo',
   description:
-    "Transfert toutes les altérations négatives de n'importe quel personnage (allié ou ennemi) vers un personnage allié de votre choix, ou le personnage ennemi actif.",
+    "Transfère toutes les altérations négatives de n'importe quel personnage (allié ou ennemi) vers un personnage allié de votre choix, ou le personnage ennemi actif.",
   async execute(ctx) {
     const sourcePool = [...ctx.getAllOnBoard(ctx.ownerId), ...ctx.getAllOnBoard(ctx.opponentId)];
     if (sourcePool.length === 0) return;

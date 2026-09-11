@@ -243,13 +243,20 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   « Dague de Ben — 45 ATK ». Un modifier `getEffectiveATK` qui corrigerait l'affichage
   fausserait le calcul de l'attaque déléguée (elle repartirait d'une base déjà décalée). Le
   journal, lui, annonce le vrai nom à chaque coup.
+  → **L'entrée volée doit rester jouable POUR CHROLLO** : sa propre `condition` est
+  réévaluée à chaque coup avec lui pour source (`shared.ts::isRelaunchable`, partagé avec le
+  Spell Thief de Zoé). Sans ce test, voler « Cycle 4 - Soleil » à Escanor donnait 150 ATK à
+  chaque tour en court-circuitant tout le cycle qui la conditionne. Une attaque devenue
+  injouable fait simplement retomber Chrollo sur sa Dague de Ben.
 - **Double Face : Annulation** (active) — *« Condition : L'adversaire doit avoir au moins un
   autre personnage en vie. […] »*
   → Un seul livre à la fois : l'ability est grisée tant qu'une carte est scellée (règle
   confirmée par l'auteur). Grisée aussi sans banc adverse — il faut quelqu'un pour prendre
   le poste que la victime libère.
   → **Chrollo choisit ce qu'il vole** quand la carte en offre plusieurs (Levi a 2 attaques,
-  Roi des esprits 3) ; seuls les actifs manuellement activables sont volables. **L'adversaire
+  Roi des esprits 3) ; seuls les actifs manuellement activables sont volables. La liste
+  proposée est filtrée par la même règle que ci-dessus : une entrée qui ne s'ouvrira jamais
+  pour lui n'est pas offerte, plutôt que d'être un piège. **L'adversaire
   choisit** qui monte au poste actif : c'est son équipe.
   → Le sceau (`chrollo-scellement`) est posé **avant** le switch, sinon le garde
   `canSwitchAny` ne verrait rien et la victime pourrait être remontée dans la foulée.
@@ -257,7 +264,9 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   d'un personnage sont déclarées en dur, il n'y a pas moyen d'en greffer une à chaud sur
   « Double Face ». Sa description reprend mot pour mot la phrase de la carte qui annonce ce
   vol, et elle n'est activable que quand un livre est ouvert. Relancée avec **Chrollo pour
-  source** (même principe que le Spell Thief de Zoé).
+  source** (même principe que le Spell Thief de Zoé), donc soumise au même filtre de
+  `condition`, et elle **reprend le coût** de la capacité d'origine : celle qui fermait le
+  tour de sa propriétaire ferme aussi celui de Chrollo (`ctx.scratch` → `endsTurn`).
 - **Contrainte** (passive, `onTurnStart`) — le troisième paragraphe de Double Face, que la
   carte imprimée intitule elle-même « Contrainte ». Entrée séparée obligatoire : une
   capacité activable ne peut pas, en plus, réagir à un event.
@@ -407,7 +416,8 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   depuis le cycle 3), soit 55 % : cinq montées d'affilée arrivent une fois sur vingt.
   → Cycle 1 déjà atteint + Échec : pas de décrément (resterait sous 1), remplacé par le
   statut générique `disarmed` pendant 1 tour (retiré avant son tour suivant, donc actif
-  seulement pour le reste du tour en cours).
+  seulement pour le reste du tour en cours), avec `ticksOnBench: true` — sans quoi un repli
+  au banc dans la foulée gelait la durée et le désarmement ressortait des tours plus tard.
 
 ### Guts — 250 HP
 
@@ -909,8 +919,14 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
 - **Surcroissance** (passive) — *« Son attaque gagne 10 de dégâts supplémentaires tous les
   100 HP max qu'il a en plus de ses 400HP max de base. »* → modifier `getEffectiveATK`
   calculé sur `currentMaxHP`, donc il redescend si Mundo subit du valeur lock.
+  - Le modifier porte le texte d'une **passive imprimée** : il déclare donc
+    `silencedByPassive` et tombe sous Silence Passif / Ultime (voir la note transverse en
+    fin de fichier).
 - **Eveil** (active, 1×/partie) — *« Mundo gagne l'équivalent de ses HP manquants en HP max.
   Ensuite, il régénère instantanément tous ses HP. »*
+  - `condition` : Mundo doit avoir des dégâts. À pleine vie, « l'équivalent de ses HP
+    manquants » vaut zéro et la capacité brûlait son unique utilisation de la partie sans
+    rien faire.
   - Moteur : `raiseMaxHP(dégâts subis)` monte le plafond **et** les PV actuels d'autant (l'écart
     au plafond ne bouge pas), donc Mundo est toujours amoché après coup ; le soin qui suit vise
     le reliquat de dégâts relu **après** la montée, et le remet à fond sur son nouveau maximum.
@@ -973,7 +989,9 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
 - **Esprit de soin** (0 ATK) — *« Soigne un personnage allié au choix (actif ou banc) de
   40 HP. »* — c'est une **attaque**, elle termine donc le tour comme les autres.
 - **Explosion d'esprits** (active, 1×/partie) — *« Lance les 3 esprits en même temps. Ne peut
-  pas attaquer ce tour. »* → pose `disarmed` pour le tour en cours.
+  pas attaquer ce tour. »* → pose `disarmed` pour le tour en cours, avec `ticksOnBench: true`
+  (les durées sont suspendues au banc : sans ce champ, un repli juste après gelait le
+  désarmement, qui ressortait des tours plus tard).
 
 ### Sion — 500 HP
 
@@ -1047,6 +1065,8 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   l'actif. »* → `forceSwitch`, qui contourne `canSwitchStandard` (un stun sur l'actif ne
   l'arrête donc pas). Seul `chained` (Chaînes) bloque encore le départ, dans
   `zones.switchActive`.
+  → `condition` : banc allié non vide. Sans elle, la capacité restait activable sans personne
+  à faire monter et brûlait son unique utilisation de la partie pour rien.
 
 ### Toji — 250 HP
 
@@ -1088,7 +1108,9 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     même pour coller au texte).
   - **Le boost d'ATK (branche 40%) dure le tour EN COURS**, pas le prochain tour de Yugi
     (`remainingTurns: 1`, sans le `+1` des statuts posés après le tick du porteur — comme
-    Potion force, posé pendant le propre tour de Yugi donc avant son tick suivant).
+    Potion force, posé pendant le propre tour de Yugi donc avant son tick suivant). Avec
+    `ticksOnBench: true`, comme tout buff cadré sur un tour : sans ça, un Yugi renvoyé au banc
+    juste après gelait la durée et le bonus revenait intact bien plus tard.
   - **Tirage à 6 branches inégales sans roue à l'écran** : `ProcWheel` ne sait montrer
     qu'un jet binaire (réussi/raté sur UN taux), pas une table à 6 issues. Le tirage utilise
     donc `randomInt(ctx.state.rng, 100)` comparé à des seuils cumulés (40/60/75/79/80/100),
@@ -1150,6 +1172,8 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   Ultime pendant 1 tour. »*
 - **Portail Dimensionnel** (active, 2×/partie) — *« Switch gratuitement avec un personnage du
   banc allié de votre choix. »*
+  - `condition` : banc allié non vide. Sans elle, la capacité restait activable sans personne
+    avec qui échanger et consommait l'une des deux charges de la partie pour rien.
 - **Spell Thief** (active) — *« Rejoue immédiatement la dernière capacité active utilisée par
   l'adversaire, mais lancée par Zoé. Rechargement : 3 tours. »*
   - Moteur : la mémoire n'est **pas** une passive de Zoé. C'est le moteur qui retient, pour
@@ -1168,6 +1192,18 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     porteur d'origine rend moins. Rien n'est volé si le personnage d'origine a changé de forme
     depuis et ne porte plus la capacité. Le rechargement est un statut de cooldown, avec
     `ticksOnBench: true` comme toutes les recharges.
+  - **La `condition` de la capacité volée est jugée sur ZOÉ** (`shared.ts::isRelaunchable`,
+    partagé avec l'Actif volé de Chrollo). Elle s'exécute avec Zoé pour source : un compteur
+    qui vit chez son propriétaire ne la suit pas. Sans ce test, Spell Thief brûlait ses 3
+    tours de recharge sur une capacité sans objet dans ses mains — voire se retournait contre
+    elle (le Living Forge d'Ornn l'immobilisait 3 tours sans le moindre matériau).
+  - **Le coût de la capacité volée est repris tel quel** : celle qui ferme le tour de son
+    propriétaire (« Manipulation » de Makima) ferme aussi celui de Zoé. Transmis d'`execute`
+    à `endsTurn` par `ctx.scratch`, sur le contexte que `match.ts` partage entre les deux.
+  - ⚠️ Les deux camps peuvent aligner chacun leur Zoé. Comme la condition consultée est
+    elle-même un Spell Thief, la question rebondissait d'une Zoé à l'autre sans fin :
+    `isRelaunchable` porte un garde de ré-entrance (sûr parce qu'une `condition` est
+    synchrone) qui coupe la boucle en refusant le vol. Couvert par `zoe-spell-thief.spec.ts`.
 
 ---
 
@@ -1361,7 +1397,7 @@ mort. Un exemplaire. »*
 - Le remplacement après un KO n'est pas concerné (il ne passe pas par `switchActive`) : un
   personnage mort n'est plus enchaîné.
 
-### Chasseur de prime — objet à lier
+### Chasseur De Prime — objet à lier
 
 *« Le porteur doit mettre KO deux personnages adverses s'il réussis le porteur gagne
 définitivement +40 ATK et 50 de Shield. »*
@@ -2067,3 +2103,45 @@ alors qu'il refusait celui de tout le monde. C'est déjà la règle de son immun
 juste en dessous (« immunisé contre tous les dégâts **adverses** »), et sans cette
 distinction le passage généralisé ci-dessus aurait empêché son possesseur de soigner,
 équiper ou buffer son propre banc.
+
+---
+
+## Note transverse — les passives codées en modifier et le silence
+
+`silencedByPassive: true` (voir CLAUDE.md) existait depuis L'Infini de Gojo, mais seules
+trois cartes le portaient. Or la règle est générale : **un modifier qui porte le texte d'une
+capacité PASSIVE imprimée doit tomber sous Silence Passif / Ultime**, puisqu'un modifier vit
+tant que la carte est en jeu et ne passe jamais par `canUseAbility`. Toutes les passives
+concernées le déclarent désormais :
+
+| Carte | Passive imprimée | Ce que le silence coupe maintenant |
+| --- | --- | --- |
+| Mundo | Surcroissance | le bonus d'ATK par tranche de 100 HP max |
+| Guts | Berserk | le bonus d'ATK par palier de dégâts subis (le compteur, lui, reste) |
+| Hulk | Énervement | le bonus d'ATK par stack (les stacks restent) |
+| Sukuna | Extension de territoire | les +20 dégâts d'Autel Démoniaque |
+| Bakugo | Sueur Nitroglycérine | la synergie +70 contre une cible en Burn |
+| Aki | Vision du Futur | les +40 par objet adverse (la réserve reste) |
+| Aizen | Hypnose Absolue | la redirection de 40 % vers son banc |
+| Muzan | Sang Maudit | le poison redevient des dégâts soignables |
+| Levi | Traque | l'accès au banc adverse sous 60 HP |
+| Yumeko | Bonus | l'attaque depuis le banc |
+| Toji | Restriction Céleste | l'immunité stun / silence / désarmé |
+| Caitlyn | Execution | la montée de 33 % à 50 % de critique |
+
+Deux cas méritent une note :
+
+- **Caitlyn** a fallu couper en **deux modifiers**. Ses 33 % de base viennent du texte de
+  l'attaque (« Headshot : cette attaque peut crit »), pas de la passive — et le silence
+  passif ne ferme pas les attaques (CLAUDE.md). Un seul modifier marqué aurait fait
+  retomber Caitlyn à 5 % au lieu de 33 %.
+- **Toji** : le cas n'est pas théorique alors même que son immunité couvre les silences.
+  Un échange de statuts (Inversion de la Réalité d'Aizen) écrit directement sur la carte
+  sans passer par `canApplyStatus` — il peut donc hériter d'un silence par ce chemin.
+
+Restent **volontairement** non marqués : le critique de Black Flash (Todo) et l'Aura Solaire
+d'Escanor, qui portent le texte d'une **attaque** ; les seuils et sceaux de Makima, Chrollo
+et Chainsaw Man, qui viennent d'une capacité **active** ; le bonus par forge d'Ornn, qui est
+le texte de son attaque ; et la réserve de **Mana Barrier** de Blitzcrank — le modifier n'y
+est pas l'effet continu d'une passive mais la plomberie d'un bouclier **déjà acquis** (un
+`addShield` ordinaire ne se silence pas davantage).

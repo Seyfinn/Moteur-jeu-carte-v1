@@ -39,7 +39,10 @@ export const bakugo: CharacterCardDef = {
   ],
   modifiers: [
     {
+      // Porte le texte de la passive "Sueur Nitroglycérine" : la synergie avec Burn tombe
+      // sous Silence Passif / Ultime.
       query: 'getEffectiveATK',
+      silencedByPassive: true,
       transform(ctx, current) {
         const characterInstanceId = ctx.query['characterInstanceId'] as string;
         if (characterInstanceId !== ctx.sourceInstanceId) return current;

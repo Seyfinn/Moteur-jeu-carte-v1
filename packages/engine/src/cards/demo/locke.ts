@@ -121,7 +121,7 @@ Cette attaque inflige a 65% de chance d'infliger silence ultime si Locke attaque
       id: 'purgatoire',
       name: 'Purgatoire',
       kind: 'passive',
-      description: "Si l'ennemi au poste actif est à 10% de ses hp max ou moins, l'execute immédiatement.",
+      description: "Si l'ennemi au poste actif est à 10% de ses hp max ou moins, l'exécute immédiatement.",
       // "immédiatement" veut dire dès que l'actif adverse SE RETROUVE sous le seuil, peu
       // importe comment : un coup classique (Marteau, un allié de Locke, un tic de
       // poison/brûlure/saignement -- afterDamage), un switch/remplacement qui amène un

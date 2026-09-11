@@ -81,7 +81,7 @@ export const gon: CharacterCardDef = {
   abilities: [
     {
       id: 'sermet-de-vengance',
-      name: 'Sermet de Vengance',
+      name: 'Serment de Vengeance',
       kind: 'passive',
       description:
         "Au début de la partie, une carte adverse est secrètement désignée comme Cible (révélée au Tour 10 à l'adversaire). Si la Cible est éliminée, Gon évolue en Gon Adulte et soigne tous ses PV.",
@@ -122,7 +122,7 @@ export const gon: CharacterCardDef = {
             // de l'adversaire (view.ts). Le camp de Gon apprend donc sa Cible tout de
             // suite, l'autre n'en saura rien avant la révélation du tour 10.
             ctx.log(
-              `Sermet de Vengance : votre Cible est ${cardName(ctx.getCharacter(targetInstanceId).cardId)}`,
+              `Serment de Vengeance : votre Cible est ${cardName(ctx.getCharacter(targetInstanceId).cardId)}`,
               { kind: 'info', privateTo: ctx.ownerId, characterInstanceId: targetInstanceId }
             );
             return;
@@ -142,7 +142,7 @@ export const gon: CharacterCardDef = {
               },
               { skipEvasionRoll: true } // une désignation ne s'esquive pas
             );
-            ctx.log(`${cardName(target.cardId)} est la Cible du Sermet de Vengance de Gon`, {
+            ctx.log(`${cardName(target.cardId)} est la Cible du Serment de Vengeance de Gon`, {
               kind: 'status',
               characterInstanceId: record.targetInstanceId,
             });

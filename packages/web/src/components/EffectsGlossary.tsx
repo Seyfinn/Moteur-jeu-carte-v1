@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   BASE_CRITICAL_CHANCE_PERCENT,
@@ -135,15 +135,57 @@ const BASE_RULES = [
   'Ne s’applique pas au Burn, au Poison et au Bleed.',
 ];
 
+/**
+ * Recherche sans accents ni casse : « brulure » doit trouver « Brûlure », « esq » trouver
+ * « Esquive ». On normalise les deux côtés plutôt que d'exiger du joueur la bonne graphie.
+ */
+function fold(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
 function GlossaryPanel({ onClose }: { onClose: () => void }) {
-  // Échap ferme le volet : même sortie clavier que les autres panneaux du plateau.
+  const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Échap ferme le volet : même sortie clavier que les autres panneaux du plateau. Sauf si
+  // le champ de recherche a du texte : le premier Échap l'efface, le second ferme -- c'est
+  // le comportement attendu d'un filtre, et ça évite de perdre le panneau en voulant juste
+  // recommencer une recherche.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape') return;
+      if (searchRef.current && document.activeElement === searchRef.current && searchRef.current.value) {
+        setQuery('');
+        return;
+      }
+      onClose();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
+
+  // Le focus entre dans le champ de recherche à l'ouverture (on vient chercher UN effet
+  // précis, autant pouvoir le taper tout de suite) et revient sur le bouton d'origine à la
+  // fermeture, pour qu'un joueur au clavier ne retombe pas sur `body`.
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    searchRef.current?.focus({ preventScroll: true });
+    return () => opener?.focus?.({ preventScroll: true });
+  }, []);
+
+  const needle = fold(query.trim());
+  const visible = useMemo(
+    () => (needle ? ENTRIES.filter((e) => fold(`${e.name} ${e.text}`).includes(needle)) : ENTRIES),
+    [needle]
+  );
+  const rulesVisible = !needle || BASE_RULES.some((rule) => fold(rule).includes(needle));
+
+  const jumpTo = (id: string) => {
+    document.getElementById(`glossary-${id}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  };
 
   // Portail vers `document.body` : le bouton qui ouvre ce panneau vit dans `.board-header`,
   // qui porte à la fois un `clip-path` (biseau du HUD) et un `backdrop-filter` -- les deux
@@ -157,21 +199,68 @@ function GlossaryPanel({ onClose }: { onClose: () => void }) {
       <div
         className="modal glossary-panel"
         role="dialog"
-        aria-label="Glossaire des effets"
+        aria-modal="true"
+        aria-labelledby="glossary-title"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="glossary-header">
-          <h3>Glossaire des effets</h3>
-          <button className="hover-card-close" onClick={onClose} aria-label="Fermer">
+          <h3 id="glossary-title">Glossaire des effets</h3>
+          <button className="hover-card-close" onClick={onClose} aria-label="Fermer le glossaire (Échap)" title="Fermer (Échap)">
             ×
           </button>
+          <div className="glossary-search">
+            <span className="glossary-search-icon" aria-hidden="true">
+              🔍
+            </span>
+            <input
+              ref={searchRef}
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Filtrer un effet (poison, silence, esquive…)"
+              aria-label="Filtrer les effets"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            {query && (
+              <button className="glossary-search-clear" onClick={() => setQuery('')} aria-label="Effacer le filtre" title="Effacer">
+                ×
+              </button>
+            )}
+          </div>
+          {/* Sommaire : une puce par effet, à la couleur de son badge, qui fait défiler
+              jusqu'à l'entrée. Masqué pendant un filtre -- la liste filtrée EST déjà le
+              sommaire, et deux rangées de puces pour trois résultats ne servent à rien. */}
+          {!needle && (
+            <nav className="glossary-toc" aria-label="Sommaire du glossaire">
+              {ENTRIES.map((entry) => (
+                <button
+                  key={entry.id}
+                  className="glossary-toc-chip"
+                  style={{ ['--glossary-accent' as string]: STATUS_TONE_COLOR[entry.tone] }}
+                  onClick={() => jumpTo(entry.id)}
+                >
+                  <span aria-hidden="true">{entry.icon}</span> {entry.name}
+                </button>
+              ))}
+              <button className="glossary-toc-chip glossary-toc-rules" onClick={() => jumpTo('rules')}>
+                Règles de base
+              </button>
+            </nav>
+          )}
         </header>
 
         <div className="glossary-scroll">
+          {visible.length === 0 && !rulesVisible && (
+            <p className="glossary-empty" role="status">
+              Aucun effet ne correspond à « {query.trim()} ».
+            </p>
+          )}
           <ul className="glossary-list">
-            {ENTRIES.map((entry) => (
+            {visible.map((entry) => (
               <li
                 key={entry.id}
+                id={`glossary-${entry.id}`}
                 className="glossary-entry"
                 style={{ ['--glossary-accent' as string]: STATUS_TONE_COLOR[entry.tone] }}
               >
@@ -186,12 +275,19 @@ function GlossaryPanel({ onClose }: { onClose: () => void }) {
             ))}
           </ul>
 
-          <section className="glossary-rules">
-            <h4>Règles de base</h4>
-            {BASE_RULES.map((rule) => (
-              <p key={rule}>{rule}</p>
-            ))}
-          </section>
+          {rulesVisible && (
+            <section className="glossary-rules" id="glossary-rules">
+              <h4>Règles de base</h4>
+              {BASE_RULES.map((rule) => (
+                <p key={rule}>{rule}</p>
+              ))}
+            </section>
+          )}
+          {needle && (
+            <p className="glossary-result-count" role="status">
+              {visible.length === 0 ? 'Aucun effet' : visible.length === 1 ? '1 effet' : `${visible.length} effets`} sur {ENTRIES.length}
+            </p>
+          )}
         </div>
       </div>
     </div>,
@@ -208,6 +304,8 @@ export function EffectsGlossaryButton() {
         className="board-leave glossary-button"
         onClick={() => setOpen(true)}
         title="Consulter les effets et les règles de base"
+        aria-haspopup="dialog"
+        aria-expanded={open}
       >
         {/* Le libellé disparaît sous 760px : la barre du haut y est déjà pleine, et c'est
             l'indicateur de tour qui doit garder la place. */}

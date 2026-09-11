@@ -12,6 +12,7 @@ import {
   CardPreviewProvider,
   DeckContentsPanel,
   SECTIONS,
+  SECTION_ICON,
   splitBySubgroup,
   useCardPreview,
   type CardKind,
@@ -32,6 +33,7 @@ function DraftCardTile({
   entry,
   count,
   disabledAdd,
+  disabledRemove,
   blockedReason,
   onAdd,
   onRemove,
@@ -39,6 +41,7 @@ function DraftCardTile({
   entry: DeckPoolEntry;
   count: number;
   disabledAdd: boolean;
+  disabledRemove: boolean;
   blockedReason: string | null;
   onAdd: () => void;
   onRemove: () => void;
@@ -67,25 +70,33 @@ function DraftCardTile({
       footer={
         <>
           {blockedReason && <span className="deck-card-blocked">{blockedReason}</span>}
+          {/* Mêmes pastilles que l'éditeur de deck (`deck-step`) : le joueur qui vient de
+              construire un deck retrouve exactement le même geste ici, « + » bleu compris. */}
           <div className="deck-card-stepper">
             <button
               type="button"
+              className="deck-step deck-step-minus"
               onClick={(e) => {
                 e.stopPropagation();
                 onRemove();
               }}
-              disabled={count === 0}
+              disabled={disabledRemove}
+              aria-label={`Retirer ${entry.name}`}
             >
               −
             </button>
-            <span>{count}</span>
+            <span className={count > 0 ? 'deck-step-count taken' : 'deck-step-count'} aria-live="polite">
+              {count}
+            </span>
             <button
               type="button"
+              className="deck-step deck-step-plus"
               onClick={(e) => {
                 e.stopPropagation();
                 onAdd();
               }}
               disabled={disabledAdd}
+              aria-label={`Ajouter ${entry.name}`}
             >
               +
             </button>
@@ -122,6 +133,7 @@ export function DraftScreen({ conn, pool }: { conn: GameConnection; pool: DraftP
   const submitted = conn.you ? conn.draftSubmittedBy.includes(conn.you) : false;
   const opponentSubmitted = conn.draftSubmittedBy.some((id) => id !== conn.you);
   const issue = draftIssue(roster, pool);
+  const pickedCount = roster.characterCardIds.length + roster.objectCardIds.length + roster.terrainCardIds.length;
 
   function add(key: DeckSectionKey, id: string) {
     setRoster((prev) => {
@@ -155,10 +167,14 @@ export function DraftScreen({ conn, pool }: { conn: GameConnection; pool: DraftP
     <CardPreviewProvider>
       <div className="lobby-screen">
         <LobbyBackground />
-        <div className="lobby-shell">
+        {/* `draft-shell` élargit le gabarit du salon : trois grilles de cartes et le panneau
+            « Mon équipe » ne tiennent pas dans les 1000 px prévus pour deux panneaux de menu. */}
+        <div className="lobby-shell draft-shell">
           <header className="lobby-topbar">
             <div className="lobby-brand">
-              <span className="lobby-brand-mark">🎲</span>
+              <span className="lobby-brand-mark" aria-hidden="true">
+                🎲
+              </span>
               <div className="lobby-brand-text">
                 <h1>Mode Aléatoire</h1>
                 <p className="lobby-tagline">
@@ -166,7 +182,7 @@ export function DraftScreen({ conn, pool }: { conn: GameConnection; pool: DraftP
                 </p>
               </div>
             </div>
-            <nav className="lobby-tabs">
+            <nav className="lobby-tabs" aria-label="Navigation du salon">
               {/* Une phase de draft sans sortie enfermerait le joueur : même geste que
                   l'abandon en partie, il quitte le salon et revient au lobby. */}
               <button type="button" className="lobby-tab" onClick={conn.leave}>
@@ -176,53 +192,134 @@ export function DraftScreen({ conn, pool }: { conn: GameConnection; pool: DraftP
           </header>
 
           <div className="deck-editor-layout">
-            <div className="deck-editor">
-              {submitted ? (
-                <p className="lobby-resuming">
-                  Équipe validée. En attente de votre adversaire...
-                </p>
-              ) : (
-                <>
-                  {opponentSubmitted && (
-                    <p className="lobby-resuming">Votre adversaire a validé son équipe.</p>
-                  )}
-                  <div className="draft-submit-bar">
-                    <button type="button" className="lobby-cta" onClick={() => conn.submitDraft(roster)} disabled={issue !== null}>
-                      <span className="lobby-cta-label">Valider mon équipe</span>
-                      <span className="lobby-cta-sub">{issue ?? 'Prêt à jouer'}</span>
-                    </button>
+            <div className={submitted ? 'deck-editor draft-locked' : 'deck-editor'}>
+              {/* Barre d'état collée en haut du défilement : la progression des trois
+                  familles, l'action de validation et l'état de l'adversaire restent visibles
+                  quelle que soit la grille en cours de lecture. */}
+              <div className="draft-submit-bar">
+                {submitted ? (
+                  <div className="draft-waiting" role="status" aria-live="polite">
+                    <span className="draft-spinner" aria-hidden="true" />
+                    <div className="draft-waiting-text">
+                      <strong className="draft-waiting-title">Équipe validée</strong>
+                      <span className="draft-waiting-sub">
+                        {opponentSubmitted
+                          ? 'Votre adversaire est prêt, la partie démarre…'
+                          : 'En attente de votre adversaire…'}
+                      </span>
+                    </div>
                   </div>
-                </>
-              )}
+                ) : (
+                  <>
+                    <div className="draft-progress" role="group" aria-label="Progression de la sélection">
+                      {SECTIONS.map((section) => {
+                        const taken = roster[section.key].length;
+                        const full = taken >= section.max;
+                        return (
+                          <span
+                            key={section.key}
+                            className={full ? 'draft-progress-chip full' : 'draft-progress-chip'}
+                            aria-label={`${section.title} : ${taken} sur ${section.max}`}
+                          >
+                            <span aria-hidden="true">{SECTION_ICON[section.type]}</span>
+                            <span className="draft-progress-label">{section.title}</span>
+                            <span className="draft-progress-count">
+                              {taken}/{section.max}
+                            </span>
+                            <span className="draft-progress-bar" aria-hidden="true">
+                              <span style={{ width: `${Math.min(100, (taken / section.max) * 100)}%` }} />
+                            </span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                    <div className="draft-submit-actions">
+                      <button
+                        type="button"
+                        className="draft-reset"
+                        onClick={() => setRoster(EMPTY_ROSTER)}
+                        disabled={pickedCount === 0}
+                        title="Retirer toutes les cartes sélectionnées"
+                      >
+                        Tout retirer
+                      </button>
+                      <button
+                        type="button"
+                        className={issue === null ? 'lobby-cta draft-cta ready' : 'lobby-cta draft-cta'}
+                        onClick={() => conn.submitDraft(roster)}
+                        disabled={issue !== null}
+                      >
+                        <span className="lobby-cta-label">Valider mon équipe</span>
+                        <span className="lobby-cta-sub" aria-live="polite">
+                          {issue ?? 'Équipe complète, prêt à jouer'}
+                        </span>
+                      </button>
+                    </div>
+                    <p
+                      className={opponentSubmitted ? 'draft-opponent done' : 'draft-opponent'}
+                      role="status"
+                      aria-live="polite"
+                    >
+                      <span className="draft-opponent-dot" aria-hidden="true" />
+                      {opponentSubmitted
+                        ? 'Votre adversaire a validé son équipe et vous attend.'
+                        : 'Votre adversaire compose encore son équipe.'}
+                    </p>
+                  </>
+                )}
+              </div>
 
-              {conn.error && <p className="error">{conn.error}</p>}
+              {conn.error && (
+                <p className="error" role="alert">
+                  {conn.error}
+                </p>
+              )}
 
               {SECTIONS.map((section) => {
                 const selected = roster[section.key];
                 const entries = poolByType[section.type];
+                const full = selected.length >= section.max;
                 return (
-                  <div className="deck-section" key={section.key}>
-                    <div className="deck-section-head">
-                      <h2>
-                        {section.title}{' '}
-                        <span className="deck-section-count">
-                          ({selected.length}/{section.max})
-                        </span>
-                      </h2>
+                  <section className={`deck-section deck-section-${section.type}`} key={section.key} aria-labelledby={`draft-section-${section.key}`}>
+                    <div className="draft-section-head">
+                      <span className="deck-section-icon" aria-hidden="true">
+                        {SECTION_ICON[section.type]}
+                      </span>
+                      <h2 id={`draft-section-${section.key}`}>{section.title}</h2>
+                      <span className={full ? 'draft-section-count full' : 'draft-section-count'}>
+                        {selected.length}/{section.max}
+                      </span>
+                      <span className="draft-section-hint">
+                        {full ? 'Famille au complet' : `Choisissez ${section.max} cartes parmi ${entries.length} tirées`}
+                      </span>
+                      {/* Même jauge que l'éditeur de deck : au milieu de trois grilles, « où en
+                          suis-je sur cette famille ? » doit se lire sans compter les pastilles. */}
+                      <div className={full ? 'deck-section-meter full' : 'deck-section-meter'} aria-hidden="true">
+                        <span style={{ width: `${Math.min(100, (selected.length / section.max) * 100)}%` }} />
+                      </div>
                     </div>
                     {splitBySubgroup(section.type, entries, (entry) => entry.equipment === true).map((group) => (
                       <div key={group.key}>
-                        {group.title && <h4 className="deck-subgroup-header">{group.title}</h4>}
+                        {group.title && (
+                          <h3 className="deck-subgroup-header">
+                            {group.title}
+                            {group.hint && <span className="deck-subgroup-hint">{group.hint}</span>}
+                          </h3>
+                        )}
                         <div className="deck-card-grid">
                           {group.entries.map((entry) => {
                             const count = countOf(selected, entry.id);
+                            const blockedReason = blockedReasonFor(section.key, entry);
                             return (
                               <DraftCardTile
                                 key={entry.id}
                                 entry={entry}
                                 count={count}
-                                disabledAdd={submitted || blockedReasonFor(section.key, entry) !== null || selected.length >= section.max}
-                                blockedReason={blockedReasonFor(section.key, entry)}
+                                disabledAdd={submitted || blockedReason !== null || full}
+                                // Une équipe validée est partie au serveur : la retoucher ici
+                                // ne changerait rien en face, autant fermer les deux boutons.
+                                disabledRemove={submitted || count === 0}
+                                blockedReason={blockedReason}
                                 onAdd={() => add(section.key, entry.id)}
                                 onRemove={() => remove(section.key, entry.id)}
                               />
@@ -231,7 +328,7 @@ export function DraftScreen({ conn, pool }: { conn: GameConnection; pool: DraftP
                         </div>
                       </div>
                     ))}
-                  </div>
+                  </section>
                 );
               })}
             </div>

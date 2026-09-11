@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { CharacterInstance, ObjectInstance, PlayerState, TerrainInstance } from 'engine';
 import { graveyardRectKey, trackCardRect } from './cardRects';
 import { CardArt } from './CardArt';
@@ -66,22 +66,67 @@ function readGraveyard(player: PlayerState): GraveyardContents {
 }
 
 function GraveyardModal({ contents, title, onClose }: { contents: GraveyardContents; title: string; onClose: () => void }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKeyDown);
+    // Le focus entre dans la modale avec elle : sans ça, Tab continuait de parcourir le
+    // plateau derrière le voile, et Échap restait le seul moyen d'en sortir au clavier.
+    closeRef.current?.focus();
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
+  const sections: { key: string; label: string; unit: string; count: number; cards: ReactNode }[] = [
+    {
+      key: 'characters',
+      label: 'Personnages',
+      unit: 'perso',
+      count: contents.characters.length,
+      cards: contents.characters.map((char) => (
+        <CharacterCard key={char.instanceId} char={char} isActive={false} isKOable size="small" />
+      )),
+    },
+    {
+      key: 'objects',
+      label: 'Objets',
+      unit: 'objet',
+      count: contents.objects.length,
+      cards: contents.objects.map((obj) => <DeadCardTile key={obj.instanceId} cardId={obj.cardId} kind="object" />),
+    },
+    {
+      key: 'terrains',
+      label: 'Terrains',
+      unit: 'terrain',
+      count: contents.terrains.length,
+      cards: contents.terrains.map((terrain) => <DeadCardTile key={terrain.instanceId} cardId={terrain.cardId} kind="terrain" />),
+    },
+  ];
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal graveyard-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal graveyard-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="graveyard-modal-title"
+        onClick={(e) => e.stopPropagation()}
+      >
         <header className="graveyard-modal-head">
-          <h3>
+          <h3 id="graveyard-modal-title">
             {title} <span className="graveyard-modal-count">{contents.total}</span>
           </h3>
-          <button className="hover-card-close graveyard-modal-close" onClick={onClose} aria-label="Fermer">
+          {/* Le détail par famille en tête, pour ne pas avoir à dérouler la liste. */}
+          <span className="graveyard-modal-tally" aria-hidden="true">
+            {sections.map((s) => (
+              <span key={s.key} className={s.count === 0 ? 'empty' : undefined}>
+                {s.count} {s.unit}
+                {s.count > 1 ? 's' : ''}
+              </span>
+            ))}
+          </span>
+          <button ref={closeRef} className="hover-card-close graveyard-modal-close" onClick={onClose} aria-label="Fermer">
             ×
           </button>
         </header>
@@ -89,38 +134,17 @@ function GraveyardModal({ contents, title, onClose }: { contents: GraveyardConte
         <div className="graveyard-modal-scroll">
           {contents.total === 0 && <p className="graveyard-modal-empty">Le cimetière est vide.</p>}
 
-          {contents.characters.length > 0 && (
-            <section className="graveyard-modal-section">
-              <h4>Personnages ({contents.characters.length})</h4>
-              <div className="graveyard-modal-grid">
-                {contents.characters.map((char) => (
-                  <CharacterCard key={char.instanceId} char={char} isActive={false} isKOable size="small" />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {contents.objects.length > 0 && (
-            <section className="graveyard-modal-section">
-              <h4>Objets ({contents.objects.length})</h4>
-              <div className="graveyard-modal-grid">
-                {contents.objects.map((obj) => (
-                  <DeadCardTile key={obj.instanceId} cardId={obj.cardId} kind="object" />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {contents.terrains.length > 0 && (
-            <section className="graveyard-modal-section">
-              <h4>Terrains ({contents.terrains.length})</h4>
-              <div className="graveyard-modal-grid">
-                {contents.terrains.map((terrain) => (
-                  <DeadCardTile key={terrain.instanceId} cardId={terrain.cardId} kind="terrain" />
-                ))}
-              </div>
-            </section>
-          )}
+          {/* Les trois familles sont toujours listées, dans le même ordre, même vides : la
+              liste garde la même forme d'une ouverture à l'autre et se lit d'un coup d'oeil. */}
+          {contents.total > 0 &&
+            sections.map((s) => (
+              <section key={s.key} className={`graveyard-modal-section${s.count === 0 ? ' empty' : ''}`}>
+                <h4>
+                  {s.label} <span className="graveyard-modal-section-count">{s.count}</span>
+                </h4>
+                {s.count > 0 ? <div className="graveyard-modal-grid">{s.cards}</div> : <p className="graveyard-modal-empty">Aucun</p>}
+              </section>
+            ))}
         </div>
       </div>
     </div>
@@ -146,6 +170,21 @@ export function GraveyardPile({
     trackCardRect(graveyardRectKey(player.id), pileRef.current);
   });
 
+  // À la fermeture, le focus revient sur la pile : c'est de là qu'on est parti, et sans ce
+  // retour il tombait sur `body`, au début du plateau, pour qui navigue au clavier.
+  const close = useCallback(() => {
+    setOpen(false);
+    pileRef.current?.focus();
+  }, []);
+
+  const parts = [
+    contents.characters.length > 0 ? `${contents.characters.length} perso${contents.characters.length > 1 ? 's' : ''}` : null,
+    contents.objects.length > 0 ? `${contents.objects.length} objet${contents.objects.length > 1 ? 's' : ''}` : null,
+    contents.terrains.length > 0 ? `${contents.terrains.length} terrain${contents.terrains.length > 1 ? 's' : ''}` : null,
+  ].filter(Boolean);
+  const summary =
+    contents.total === 0 ? 'vide' : `${contents.total} carte${contents.total > 1 ? 's' : ''} (${parts.join(', ')})`;
+
   return (
     <div className="graveyard-pile-zone">
       <span className="zone-label">Cimetière</span>
@@ -153,16 +192,25 @@ export function GraveyardPile({
         ref={pileRef}
         className={`graveyard-pile graveyard-pile-${orientation}${contents.total === 0 ? ' empty' : ''}`}
         onClick={() => setOpen(true)}
-        title={`${title} — ${contents.total} carte${contents.total > 1 ? 's' : ''}`}
+        title={`${title} — ${summary}`}
+        aria-label={`${title} — ${summary}. Ouvrir la liste`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
       >
         {contents.topCard ? (
           <CardArt cardId={contents.topCard.cardId} kind={contents.topCard.kind} />
         ) : (
-          <span className="graveyard-pile-empty-icon">⚰️</span>
+          <span className="graveyard-pile-empty-icon" aria-hidden="true">
+            ⚰️
+          </span>
         )}
-        <span className="graveyard-pile-count">{contents.total}</span>
+        {/* Le nombre reste affiché même à zéro : une pile sans chiffre se lit comme une
+            pile dont on n'a pas encore l'information. */}
+        <span className="graveyard-pile-count" aria-hidden="true">
+          {contents.total}
+        </span>
       </button>
-      {open && <GraveyardModal contents={contents} title={title} onClose={() => setOpen(false)} />}
+      {open && <GraveyardModal contents={contents} title={title} onClose={close} />}
     </div>
   );
 }

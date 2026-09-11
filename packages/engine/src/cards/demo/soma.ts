@@ -48,7 +48,7 @@ export const soma: CharacterCardDef = {
       name: 'Menu Surprise',
       kind: 'active',
       description:
-        `Ne peut pas être utiliser les 2 prochains tours après avoir été utilisé
+        `Ne peut pas être utilisée les 2 prochains tours après avoir été utilisé
 Soma cuisine un plat mystérieux et force le personnage sur le poste actif adverse à choisir instantanément entre deux options :
 Manger le plat : Si vous mangez le plat vous soigne de 80 HP, mais l'extase culinaire Stun 1 tour.
 Refuser le plat : Si vous refusez le plat, vous subissez 50 dégâts et Silence passif pendant 1 tour

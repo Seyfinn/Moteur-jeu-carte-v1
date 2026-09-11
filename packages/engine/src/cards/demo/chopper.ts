@@ -11,7 +11,8 @@ const POISON_REMAINING_TURNS = 1;
 const TRAQUE_HEAL_AMOUNT = 70;
 const TRAQUE_COOLDOWN_EFFECTIVE_TURNS = 6;
 // Posé sur soi-même pendant son propre tour -> +1 (même correction que Spell Thief de
-// Zoé, voir zoe.ts) : utilisée au tour N, réutilisable au tour N+4.
+// Zoé, voir zoe.ts) : utilisée au tour N, elle saute les 6 tours suivants et revient au
+// tour N+7.
 const TRAQUE_COOLDOWN_REMAINING_TURNS = TRAQUE_COOLDOWN_EFFECTIVE_TURNS + 1;
 const TRAQUE_COOLDOWN_STATUS_ID = 'chopper-traque-cooldown';
 
@@ -51,7 +52,7 @@ export const chopper: CharacterCardDef = {
       id: 'traque',
       name: 'Traque',
       kind: 'active',
-      description: `Soigne un personnage allié au choix (actif ou banc) de 70 HP même depuis le banc utilisable une fois tout les 6 tours.
+      description: `Soigne un personnage allié au choix (actif ou banc) de 70 HP même depuis le banc utilisable une fois tous les 6 tours.
 `,
       usableFromBench: true,
       condition(ctx) {

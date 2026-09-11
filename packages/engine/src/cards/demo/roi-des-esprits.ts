@@ -114,6 +114,9 @@ export const roiDesEsprits: CharacterCardDef = {
           label: "Explosion d'esprits",
           sourceCardInstanceId: ctx.sourceInstanceId,
           remainingTurns: 1,
+          // « ce round » et rien de plus : les durées sont suspendues au banc, donc sans ce
+          // champ un repli juste après gèle le désarmement, qui ressort des tours plus tard.
+          ticksOnBench: true,
         });
 
         await espritDeGlace.execute(ctx);

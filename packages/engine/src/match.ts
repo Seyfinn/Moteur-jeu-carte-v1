@@ -729,9 +729,6 @@ export class Match {
   private async handlePlayObject(playerId: PlayerId, objectInstanceId: string): Promise<boolean> {
     const state = this.state;
     const player = state.players[playerId];
-    const obj = player.objects[objectInstanceId]!;
-    const def = getObjectCard(obj.cardId);
-
     const isSecondObject = player.objectsPlayedThisTurn >= 1;
     zones.moveObjectFromPoolToInPlay(state, playerId, objectInstanceId);
     player.objectsPlayedThisTurn += 1;
@@ -979,9 +976,15 @@ export class Match {
         const target = findCharacter(state, targetInstanceId);
         const attribution = {
           sourceInstanceId: options?.attackerInstanceId,
-          sourceOwnerId: options?.attackerInstanceId
-            ? zones.safeFindCharacterOwner(state, options.attackerInstanceId)
-            : undefined,
+          // Le camp d'où vient le coup, même quand aucun PERSONNAGE n'en est la source :
+          // un objet ou un terrain n'a pas d'`attackerInstanceId` mais renseigne bien
+          // `attackerOwnerId`, et sans ce repli le payload `afterDamage` annonçait des
+          // dégâts venus de nulle part -- une carte défensive n'avait alors aucun moyen
+          // d'y distinguer un coup adverse d'un coût payé par son propre camp.
+          sourceOwnerId:
+            (options?.attackerInstanceId
+              ? zones.safeFindCharacterOwner(state, options.attackerInstanceId)
+              : undefined) ?? options?.attackerOwnerId,
           damageSource: options?.source,
         };
 

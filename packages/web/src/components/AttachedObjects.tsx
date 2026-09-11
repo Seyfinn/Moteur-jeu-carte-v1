@@ -28,9 +28,11 @@ function AttachedObjectCard({ object }: { object: AttachedObjectView }) {
 export function AttachedObjectCards({ objects }: { objects: AttachedObjectView[] }) {
   if (objects.length === 0) return null;
   return (
-    <div className="attached-object-rail" aria-label="Objets liés">
+    <div className="attached-object-rail" role="list" aria-label="Objets liés">
       {objects.map((object) => (
-        <AttachedObjectCard key={object.instanceId} object={object} />
+        <div key={object.instanceId} role="listitem" className="attached-object-slot">
+          <AttachedObjectCard object={object} />
+        </div>
       ))}
     </div>
   );
@@ -51,7 +53,10 @@ export function AttachedObjectChips({ objects }: { objects: AttachedObjectView[]
     <div className="attached-object-chips" aria-hidden="true">
       {objects.map((object) => (
         <span key={object.instanceId} className="attached-object-chip" title={`${object.name} — objet lié`}>
-          <img src={`/cards/${object.cardId}.png`} alt="" />
+          <img src={`/cards/${object.cardId}.png`} alt="" draggable={false} />
+          {/* Le logo « à lier » sur la pastille elle-même : à 20 px, une illustration
+              seule ne dit pas qu'il s'agit d'un objet accroché plutôt que d'un statut. */}
+          <span className="attached-object-chip-mark">🔗</span>
         </span>
       ))}
     </div>

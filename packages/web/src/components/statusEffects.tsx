@@ -257,8 +257,11 @@ export function StatusEffectLayers({ statuses }: { statuses: StatusLike[] }) {
   if (visuals.length === 0) return null;
   return (
     <>
-      {visuals.map((v) => (
-        <div key={v.className} className={`fx-layer ${v.className}`}>
+      {/* `--fx-i` : rang du calque, lu par la CSS pour empiler les icônes de coin l'une
+          sous l'autre. Sans lui, poison + brûlure + bonus d'ATK posaient leurs trois
+          symboles exactement au même pixel, et seul le dernier se lisait. */}
+      {visuals.map((v, i) => (
+        <div key={v.className} className={`fx-layer ${v.className}`} style={{ ['--fx-i' as string]: i }}>
           <Particles kind={v.particles} bleedStacks={bleedStacks} />
         </div>
       ))}

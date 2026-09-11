@@ -8,7 +8,7 @@ const ATTACKS_BEFORE_EVOLUTION = 3;
 export const KAYN_ASSASSIN_CARD_ID = 'kayn-assassin';
 export const RHAAST_CARD_ID = 'rhaast';
 
-/** Voie retenue par « Eveil du Darkin », relue au moment de la transformation. */
+/** Voie retenue par « Éveil du Darkin », relue au moment de la transformation. */
 const PATH_STATUS_ID = 'kayn-darkin-path';
 /**
  * Compteur d'attaques portées. Pas de `remainingTurns` : il ne doit jamais être retiré
@@ -23,7 +23,7 @@ function pathOf(ctx: EffectContext): string | undefined {
 }
 
 async function askPath(ctx: EffectContext): Promise<string> {
-  return ctx.chooseOption('Eveil du Darkin : quelle voie Kayn emprunte-t-il ?', [
+  return ctx.chooseOption('Éveil du Darkin : quelle voie Kayn emprunte-t-il ?', [
     { key: RHAAST_CARD_ID, label: 'La voie de Rhaast', card: { cardId: RHAAST_CARD_ID, kind: 'character' } },
     {
       key: KAYN_ASSASSIN_CARD_ID,
@@ -96,16 +96,16 @@ export const kayn: CharacterCardDef = {
       name: 'Faux du Darkin',
       kind: 'passive',
       description:
-        'Après 3 attaques, kayn de transforme immédiatement, selon la voie qu’il a choisi. Double ses hp actuels lors de la transformation.',
+        'Après 3 attaques, Kayn se transforme immédiatement, selon la voie qu’il a choisi. Double ses hp actuels lors de la transformation.',
       // Purement descriptive : le compteur et la transformation vivent dans l'AttackDef.
       async execute() {},
     },
     {
       id: 'eveil-du-darkin',
-      name: 'Eveil du Darkin',
+      name: 'Éveil du Darkin',
       kind: 'passive',
       description:
-        'Dès que Kayn est posé, le joueur décide si Kayn choisi la voie de Rhaast ou la voie de l’assassin.',
+        'Dès que Kayn est posé, le joueur décide si Kayn choisit la voie de Rhaast ou la voie de l’assassin.',
       trigger: 'onBecomeActive',
       // Il n'existe pas d'event « personnage posé » : tout le monde est en jeu dès le
       // départ. L'arrivée au poste actif (y compris comme actif de départ, reason 'setup')

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  attacksAvailableTo,
   getCharacterCard,
   getCriticalPercent,
   getEvasionPercent,
@@ -29,6 +30,12 @@ export type ProcRoll = {
   hit: boolean;
   percent: number;
   characterName: string;
+  /**
+   * Carte du personnage que le jet concerne. La roue en fait son moyeu : un jet sans visage
+   * oblige à lire un nom pour savoir de qui on parle, au moment précis où l'écran demande
+   * qu'on regarde ailleurs. Absente si l'instance n'est plus résoluble (carte déjà partie).
+   */
+  cardId?: string;
   /** Libellé affiché sous la roue. Absent pour l'esquive et le critique, qui ont le leur. */
   label?: string;
 };
@@ -63,7 +70,7 @@ function tierFor(amount: number, critical: boolean): ImpactTier {
 }
 
 /** Rôle d'une carte dans un échange de coups : elle porte, ou elle encaisse. */
-export type CharacterImpact = { id: number; role: 'attacker' | 'target'; tier: ImpactTier };
+export type CharacterImpact = { id: number; role: 'attacker' | 'target'; tier: ImpactTier; critical: boolean };
 
 /**
  * Une carte qui vient de mourir, gardée en vie le temps de son animation alors que le
@@ -72,8 +79,30 @@ export type CharacterImpact = { id: number; role: 'attacker' | 'target'; tier: I
  */
 export type KoFlight = { id: number; instanceId: string; cardId: string; ownerId: PlayerId };
 
+/**
+ * Trait de frappe tiré d'un personnage vers celui qui encaisse. C'est ce qui RELIE les deux
+ * cartes d'un échange : sans lui, le bond de l'attaquant et la secousse de la cible sont
+ * deux animations sans rapport visible, aux deux bouts d'un plateau large. Rejoué en calque
+ * fixe à partir des positions relevées (cf. `cardRects.ts`), comme le vol d'une carte morte.
+ */
+export type StrikeBolt = {
+  id: number;
+  fromInstanceId: string;
+  toInstanceId: string;
+  tier: ImpactTier;
+  critical: boolean;
+};
+
+/**
+ * Éclat ponctuel joué SUR une carte, mais dessiné par-dessus le plateau plutôt que dans le
+ * calque d'effets de la carte : un anneau de souffle ou une colonne de lumière doit pouvoir
+ * déborder du cadre, que l'`overflow: hidden` de `.tcg-card` rognerait net.
+ */
+export type CardFlourishKind = 'crit' | 'evolve' | 'revive' | 'shield-hit';
+export type CardFlourish = { id: number; characterInstanceId: string; kind: CardFlourishKind };
+
 /** Secousse de la table entière : son palier décide de l'amplitude et de la durée. */
-export type BoardQuake = { id: number; tier: ImpactTier };
+export type BoardQuake = { id: number; tier: ImpactTier; critical: boolean };
 
 export type TableEvent =
   | { kind: 'turn-transition'; id: number; endingPlayerId: PlayerId; endingName: string; startingPlayerId: PlayerId; startingName: string; turnNumber: number }
@@ -115,7 +144,9 @@ type Classified =
   | { anchor: 'table'; event: DistributiveOmit<TableEvent, 'id'> }
   | { anchor: 'proc'; proc: DistributiveOmit<ProcRoll, 'id'> }
   | { anchor: 'spotlight'; spotlight: Omit<CardSpotlight, 'id'> }
-  | { anchor: 'impact'; targetInstanceId: string; attackerInstanceId?: string; tier: ImpactTier }
+  | { anchor: 'impact'; targetInstanceId: string; attackerInstanceId?: string; tier: ImpactTier; critical: boolean }
+  | { anchor: 'strike'; strike: Omit<StrikeBolt, 'id'> }
+  | { anchor: 'flourish'; flourish: Omit<CardFlourish, 'id'> }
   | { anchor: 'ko-flight'; flight: Omit<KoFlight, 'id'> }
   | { anchor: 'recycle-reveal'; reveal: Omit<RecycleReveal, 'id'> };
 
@@ -129,13 +160,18 @@ interface BatchContext {
   criticalPending: boolean;
 }
 
-function characterName(state: GameState, instanceId: string | undefined): string {
+/**
+ * Le personnage que la roue nomme : son nom pour la ligne de texte, sa carte pour le moyeu.
+ * Les deux sortent de la même instance, d'où un seul lecteur -- et un id de carte inconnu du
+ * registre reste exploitable pour l'illustration même si le nom, lui, se dérobe.
+ */
+function procSubject(state: GameState, instanceId: string | undefined): { characterName: string; cardId?: string } {
   const char = findCharacter(state, instanceId);
-  if (!char) return '';
+  if (!char) return { characterName: '' };
   try {
-    return getCharacterCard(char.cardId).name;
+    return { characterName: getCharacterCard(char.cardId).name, cardId: char.cardId };
   } catch {
-    return '';
+    return { characterName: '', cardId: char.cardId };
   }
 }
 
@@ -182,7 +218,10 @@ function classifyLogEntry(entry: LogEntry, state: GameState, ctx: BatchContext):
       const char = findCharacter(state, characterInstanceId);
       if (!char || !characterInstanceId) return [];
       ctx.lastActorInstanceId = characterInstanceId;
-      const attack = getCharacterCard(char.cardId).attacks.find((a) => a.id === attackId);
+      // `attacksAvailableTo` et pas `getCharacterCard(...).attacks` : une attaque empruntée
+      // ("Livre de Chrollo") n'est pas sur la carte du porteur, et le badge retombait alors
+      // sur un « Attaque » générique au lieu de la nommer.
+      const attack = attacksAvailableTo(state, characterInstanceId).find((a) => a.id === attackId);
       return [{ anchor: 'character', characterInstanceId, badge: { kind: 'attack', label: attack?.name ?? 'Attaque' } }];
     }
 
@@ -193,17 +232,34 @@ function classifyLogEntry(entry: LogEntry, state: GameState, ctx: BatchContext):
       const targetInstanceId = d['targetInstanceId'] as string | undefined;
       const amount = Number(d['amount'] ?? 0);
       if (!targetInstanceId || amount <= 0) return [];
-      const attackerInstanceId = ctx.lastActorInstanceId;
-      const tier = tierFor(amount, ctx.criticalPending);
+      const rawAttackerId = ctx.lastActorInstanceId;
+      // Un personnage ne bondit pas sur lui-même (coût en PV que son camp se paie), et ne
+      // se tire pas non plus un trait de frappe dessus.
+      const attackerInstanceId = rawAttackerId && rawAttackerId !== targetInstanceId ? rawAttackerId : undefined;
+      const critical = ctx.criticalPending;
+      const tier = tierFor(amount, critical);
       ctx.criticalPending = false;
       return [
         {
           anchor: 'impact',
           targetInstanceId,
-          // Un personnage ne bondit pas sur lui-même (coût en PV que son camp se paie).
-          ...(attackerInstanceId && attackerInstanceId !== targetInstanceId ? { attackerInstanceId } : {}),
+          ...(attackerInstanceId ? { attackerInstanceId } : {}),
           tier,
+          critical,
         },
+        ...(attackerInstanceId
+          ? [
+              {
+                anchor: 'strike' as const,
+                strike: { fromInstanceId: attackerInstanceId, toInstanceId: targetInstanceId, tier, critical },
+              },
+            ]
+          : []),
+        // Le critique a sa propre déflagration sur la cible, quel que soit le montant :
+        // c'est ce qui le distingue d'un gros coup ordinaire au même palier.
+        ...(critical
+          ? [{ anchor: 'flourish' as const, flourish: { characterInstanceId: targetInstanceId, kind: 'crit' as const } }]
+          : []),
       ];
     }
 
@@ -244,6 +300,7 @@ function classifyLogEntry(entry: LogEntry, state: GameState, ctx: BatchContext):
       }
       return [
         { anchor: 'character', characterInstanceId, badge: { kind: 'ability', label: 'Évolution' } },
+        { anchor: 'flourish', flourish: { characterInstanceId, kind: 'evolve' } },
         {
           anchor: 'spotlight',
           spotlight: {
@@ -304,6 +361,22 @@ function classifyLogEntry(entry: LogEntry, state: GameState, ctx: BatchContext):
       return [{ anchor: 'recycle-reveal', reveal: { cardId } }];
     }
 
+    // Retour en jeu : la carte se rallume sur place. Le pendant exact du vol de mort, qui
+    // est la seule autre fois où une carte apparaît ou disparaît du plateau toute seule.
+    case 'revive': {
+      const characterInstanceId = d['characterInstanceId'] as string | undefined;
+      if (!characterInstanceId) return [];
+      return [{ anchor: 'flourish', flourish: { characterInstanceId, kind: 'revive' } }];
+    }
+
+    // Le bouclier qui encaisse : rien ne bouge côté PV, donc sans cet éclat le joueur ne
+    // voyait tout simplement pas que son bouclier venait de faire son travail.
+    case 'shield-absorb': {
+      const targetInstanceId = d['targetInstanceId'] as string | undefined;
+      if (!targetInstanceId) return [];
+      return [{ anchor: 'flourish', flourish: { characterInstanceId: targetInstanceId, kind: 'shield-hit' } }];
+    }
+
     case 'coin-flip': {
       const result = d['result'] as string | undefined;
       return [{ anchor: 'table', event: { kind: 'coin-flip', label: result === 'heads' ? 'Pile' : 'Face' } }];
@@ -318,7 +391,7 @@ function classifyLogEntry(entry: LogEntry, state: GameState, ctx: BatchContext):
       return [
         {
           anchor: 'proc',
-          proc: { kind: roll, hit: false, percent: Math.round(Number(d['percent'] ?? 0)), characterName: characterName(state, characterInstanceId) },
+          proc: { kind: roll, hit: false, percent: Math.round(Number(d['percent'] ?? 0)), ...procSubject(state, characterInstanceId) },
         },
       ];
     }
@@ -336,7 +409,7 @@ function classifyLogEntry(entry: LogEntry, state: GameState, ctx: BatchContext):
             kind: 'chance',
             hit: d['hit'] === true,
             percent,
-            characterName: characterName(state, characterInstanceId),
+            ...procSubject(state, characterInstanceId),
             label: typeof d['label'] === 'string' ? (d['label'] as string) : 'Effet',
           },
         },
@@ -344,13 +417,20 @@ function classifyLogEntry(entry: LogEntry, state: GameState, ctx: BatchContext):
     }
 
     // La Concentration est un objet : son échec est toujours un jet porté par une carte.
+    // Le taux vient du moteur (le statut est consommé avant ce journal, donc l'état reçu ne
+    // le porte plus) : sans lui, la roue dessinait un pile ou face pour un jet à 70 %.
     case 'concentration-missed': {
       const characterInstanceId = d['characterInstanceId'] as string | undefined;
       if (!characterInstanceId) return [];
       return [
         {
           anchor: 'proc',
-          proc: { kind: 'critical', hit: false, percent: 0, characterName: characterName(state, characterInstanceId) },
+          proc: {
+            kind: 'critical',
+            hit: false,
+            percent: Math.round(Number(d['percent'] ?? 0)),
+            ...procSubject(state, characterInstanceId),
+          },
         },
       ];
     }
@@ -365,7 +445,7 @@ function classifyLogEntry(entry: LogEntry, state: GameState, ctx: BatchContext):
         return [
           {
             anchor: 'proc',
-            proc: { kind: 'critical', hit: true, percent: Math.round(Number(d['percent'] ?? 0)), characterName: characterName(state, sourceInstanceId) },
+            proc: { kind: 'critical', hit: true, percent: Math.round(Number(d['percent'] ?? 0)), ...procSubject(state, sourceInstanceId) },
           },
         ];
       }
@@ -388,7 +468,7 @@ function classifyLogEntry(entry: LogEntry, state: GameState, ctx: BatchContext):
         return [
           {
             anchor: 'proc',
-            proc: { kind: 'evasion', hit: true, percent: Math.round(Number(d['percent'] ?? 0)), characterName: characterName(state, targetInstanceId) },
+            proc: { kind: 'evasion', hit: true, percent: Math.round(Number(d['percent'] ?? 0)), ...procSubject(state, targetInstanceId) },
           },
         ];
       }
@@ -428,17 +508,31 @@ function classifyLogEntry(entry: LogEntry, state: GameState, ctx: BatchContext):
 const CHARACTER_BADGE_DURATION_MS = 1300;
 const TABLE_EVENT_DURATION_MS = 2000;
 /**
- * Durée de vie d'une mini-roue à l'écran. Elle doit couvrir la rotation de l'aiguille
- * (`proc-needle-spin`, 1,8 s -- rallongée d'une seconde pour laisser le suspense de la
- * décélération se lire) ET laisser le temps de lire le verdict qu'elle désigne : plus
- * courte, la roue disparaissait avant même d'avoir fini de tourner.
+ * Les deux temps d'une roue : la rotation de l'aiguille, puis la lecture du verdict.
+ *
+ * Ces deux nombres sont la SEULE source de vérité. `ProcWheel` les repasse au CSS en
+ * variables (`--proc-spin`, `--proc-hold`), qui ne recopie plus aucune durée en dur : la
+ * feuille de style écrivait « 2s » à six endroits, plus deux voisins calés à la main, et le
+ * commentaire qui prévenait d'en changer se trompait déjà sur leur nombre.
+ *
+ * 3 s au total, c'était long pour un événement qui revient plusieurs fois par tour et qui
+ * occupe le centre de l'écran. Le suspense tient dans la décélération, pas dans la durée.
  */
-/** 2 s de rotation (`proc-needle-spin`, styles.css) + 1 s pour lire le verdict. */
-const PROC_ROLL_DURATION_MS = 3000;
+export const PROC_SPIN_MS = 1400;
+export const PROC_HOLD_MS = 850;
+const PROC_ROLL_DURATION_MS = PROC_SPIN_MS + PROC_HOLD_MS;
 /** Assez long pour lire la carte en grand, assez court pour ne pas freiner la partie. */
 const SPOTLIGHT_DURATION_MS = 1700;
-/** Couvre le dash de l'attaquant (~260 ms) et la secousse de la cible, marge comprise. */
-const IMPACT_DURATION_MS = 700;
+/**
+ * Couvre le dash de l'attaquant, la secousse de la cible ET la course du chiffre flottant
+ * qu'elle fait naître (1,05 s) : c'est la classe d'impact qui teinte ce chiffre en critique,
+ * et plus courte, elle le laissait virer au rouge ordinaire en plein vol.
+ */
+const IMPACT_DURATION_MS = 1150;
+/** Course du trait de frappe d'un bout à l'autre du plateau, plus sa dissipation. */
+const STRIKE_DURATION_MS = 620;
+/** Anneau de critique, éclosion d'évolution, colonne de résurrection : la plus longue des trois. */
+const FLOURISH_DURATION_MS = 1200;
 /** Fenêtre pendant laquelle le Recycleur peut lire la révélation : le Card-Flip lui-même
  *  dure moins longtemps, mais la carte doit rester disponible le temps que l'animation de
  *  sacrifice (jouée AVANT que ce log n'arrive) ait fini de tourner. */
@@ -460,6 +554,10 @@ export function useGameEvents(state: GameState): {
   spotlights: CardSpotlight[];
   /** Une entrée par personnage en train de porter ou d'encaisser un coup. */
   impactsByCharacter: Map<string, CharacterImpact>;
+  /** Traits de frappe en cours, d'un attaquant vers sa cible. */
+  strikes: StrikeBolt[];
+  /** Éclats posés sur une carte mais dessinés par-dessus le plateau (critique, évolution...). */
+  flourishes: CardFlourish[];
   /** Non nul pendant qu'un gros coup fait trembler la table entière, avec sa violence. */
   boardQuake: BoardQuake | null;
   koFlights: KoFlight[];
@@ -470,6 +568,8 @@ export function useGameEvents(state: GameState): {
   const [procRolls, setProcRolls] = useState<ProcRoll[]>([]);
   const [spotlights, setSpotlights] = useState<CardSpotlight[]>([]);
   const [impacts, setImpacts] = useState<Array<CharacterImpact & { characterInstanceId: string }>>([]);
+  const [strikes, setStrikes] = useState<StrikeBolt[]>([]);
+  const [flourishes, setFlourishes] = useState<CardFlourish[]>([]);
   const [boardQuake, setBoardQuake] = useState<BoardQuake | null>(null);
   const [koFlights, setKoFlights] = useState<KoFlight[]>([]);
   const [recycleReveals, setRecycleReveals] = useState<RecycleReveal[]>([]);
@@ -488,9 +588,12 @@ export function useGameEvents(state: GameState): {
     const newProcRolls: ProcRoll[] = [];
     const newSpotlights: CardSpotlight[] = [];
     const newImpacts: Array<CharacterImpact & { characterInstanceId: string }> = [];
+    const newStrikes: StrikeBolt[] = [];
+    const newFlourishes: CardFlourish[] = [];
     const newKoFlights: KoFlight[] = [];
     const newRecycleReveals: RecycleReveal[] = [];
     let quakeTier: ImpactTier | null = null;
+    let quakeCritical = false;
 
     // La main qui passe d'un camp à l'autre, pas le numéro de manche : un tour de jeu
     // couvre désormais l'action des deux joueurs, donc `turnNumber` ne bouge qu'une fois
@@ -525,6 +628,7 @@ export function useGameEvents(state: GameState): {
               characterInstanceId: classified.targetInstanceId,
               role: 'target',
               tier: classified.tier,
+              critical: classified.critical,
             });
             if (classified.attackerInstanceId) {
               newImpacts.push({
@@ -532,6 +636,7 @@ export function useGameEvents(state: GameState): {
                 characterInstanceId: classified.attackerInstanceId,
                 role: 'attacker',
                 tier: classified.tier,
+                critical: classified.critical,
               });
             }
             // Le plus violent du lot l'emporte : deux coups simultanés ne doivent pas
@@ -542,6 +647,13 @@ export function useGameEvents(state: GameState): {
                 quakeTier = classified.tier;
               }
             }
+            // Un critique fait flasher l'écran même sous le seuil de secousse : c'est le
+            // seul événement du jeu qui double les dégâts, il doit s'entendre de loin.
+            if (classified.critical) quakeCritical = true;
+          } else if (classified.anchor === 'strike') {
+            newStrikes.push({ ...classified.strike, id: ++seqRef.current });
+          } else if (classified.anchor === 'flourish') {
+            newFlourishes.push({ ...classified.flourish, id: ++seqRef.current });
           } else if (classified.anchor === 'ko-flight') {
             newKoFlights.push({ ...classified.flight, id: ++seqRef.current });
           } else if (classified.anchor === 'recycle-reveal') {
@@ -571,12 +683,18 @@ export function useGameEvents(state: GameState): {
       }
     }
     if (newProcRolls.length > 0) {
+      // Les roues se SUIVENT au lieu de s'empiler : deux jets dans le même lot donnaient
+      // deux roues qui tournaient côte à côte au centre de l'écran, sans qu'on puisse dire
+      // laquelle allait avec quoi. Même traitement que les cartes mises en avant plus bas,
+      // qui avaient exactement ce problème. Le décalage part de la file DÉJÀ à l'écran,
+      // sinon un nouveau lot ferait expirer sa première roue en même temps qu'une ancienne.
+      const queued = procRolls.length;
       setProcRolls((list) => [...list, ...newProcRolls]);
-      for (const p of newProcRolls) {
+      newProcRolls.forEach((p, i) => {
         timersRef.current.push(
-          setTimeout(() => setProcRolls((list) => list.filter((x) => x.id !== p.id)), PROC_ROLL_DURATION_MS)
+          setTimeout(() => setProcRolls((list) => list.filter((x) => x.id !== p.id)), PROC_ROLL_DURATION_MS * (queued + i + 1))
         );
-      }
+      });
     }
     if (newImpacts.length > 0) {
       setImpacts((list) => [...list, ...newImpacts]);
@@ -586,8 +704,24 @@ export function useGameEvents(state: GameState): {
         );
       }
     }
-    if (quakeTier) {
-      const quake = { id: ++seqRef.current, tier: quakeTier };
+    if (newStrikes.length > 0) {
+      setStrikes((list) => [...list, ...newStrikes]);
+      for (const s of newStrikes) {
+        timersRef.current.push(setTimeout(() => setStrikes((list) => list.filter((x) => x.id !== s.id)), STRIKE_DURATION_MS));
+      }
+    }
+    if (newFlourishes.length > 0) {
+      setFlourishes((list) => [...list, ...newFlourishes]);
+      for (const f of newFlourishes) {
+        timersRef.current.push(
+          setTimeout(() => setFlourishes((list) => list.filter((x) => x.id !== f.id)), FLOURISH_DURATION_MS)
+        );
+      }
+    }
+    if (quakeTier || quakeCritical) {
+      // Un critique sans palier de secousse fait quand même flasher l'écran, mais à
+      // l'amplitude la plus basse : c'est la lumière qui porte l'information, pas la table.
+      const quake = { id: ++seqRef.current, tier: quakeTier ?? ('light' as ImpactTier), critical: quakeCritical };
       setBoardQuake(quake);
       timersRef.current.push(
         // Comparaison sur l'id : une deuxième secousse arrivée entre-temps ne doit pas être
@@ -642,5 +776,16 @@ export function useGameEvents(state: GameState): {
   const impactsByCharacter = new Map<string, CharacterImpact>();
   for (const i of impacts) impactsByCharacter.set(i.characterInstanceId, i);
 
-  return { badgesByCharacter, tableEvents, procRolls, spotlights, impactsByCharacter, boardQuake, koFlights, recycleReveals };
+  return {
+    badgesByCharacter,
+    tableEvents,
+    procRolls,
+    spotlights,
+    impactsByCharacter,
+    boardQuake,
+    koFlights,
+    recycleReveals,
+    strikes,
+    flourishes,
+  };
 }

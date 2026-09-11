@@ -142,11 +142,17 @@ export function buildEffectContext(
   }
 
   function consumeMissedConcentration(char: ReturnType<typeof findCharacter>): void {
+    // Le taux est relevé AVANT le retrait du statut : c'est tout ce qui reste du jet une
+    // fois la Concentration consommée. Sans lui, le client n'avait aucun moyen de dire sur
+    // quelle chance elle avait échoué -- sa roue de pourcentage affichait un pile ou face à
+    // la place des 70 % réellement joués. Même repli que la branche gagnante plus bas.
+    const percent = Number(getStatus(char, 'concentration')?.data?.['percent'] ?? 70);
     api.removeStatus(char.instanceId, 'concentration');
     api.applyStatus(char.instanceId, { statusId: 'disarmed', label: 'Concentration ratée', remainingTurns: 2 });
     api.log(`${cardName(char.cardId)} rate sa Concentration : aucun dégât, et ne pourra pas attaquer au prochain tour`, {
       kind: 'concentration-missed',
       characterInstanceId: char.instanceId,
+      percent,
     });
   }
 
@@ -497,7 +503,18 @@ export function buildEffectContext(
       await api.dealDamage(resolvedTargetId, finalAmount, withAttribution);
     },
     async applyValeurLock(targetInstanceId, amount) {
-      await api.applyValeurLock(targetInstanceId, amount, { attackerOwnerId: ownerId });
+      // Même attribution que `dealDamage` : un Valeur Lock qui tue doit nommer son tueur,
+      // sinon toutes les passives « sur kill » ratent la mort (c'est exactement le bug
+      // corrigé pour le poison Sang Maudit, côté `statuses.ts`). `undefined` pour un coût
+      // que le personnage se paie à lui-même, comme là-bas : personne n'a « tué » personne.
+      const selfInflicted = targetInstanceId === sourceInstanceId;
+      const attacker = isAttackOrAbility && !selfInflicted
+        ? state.players[ownerId].characters[sourceInstanceId]?.instanceId
+        : undefined;
+      await api.applyValeurLock(targetInstanceId, amount, {
+        attackerInstanceId: attacker,
+        attackerOwnerId: ownerId,
+      });
     },
     heal(targetInstanceId, amount) {
       const restored = api.heal(targetInstanceId, amount);

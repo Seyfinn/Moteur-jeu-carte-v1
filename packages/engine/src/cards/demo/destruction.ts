@@ -6,7 +6,7 @@ export const destruction: TerrainCardDef = {
   type: 'terrain',
   id: 'destruction',
   name: 'Destruction',
-  description: 'Détruit tous les objets actuellement équipés sur le terrain des 2 joueurs. aucun joueur ne peut utiliser ou équiper de cartes Objet. »',
+  description: 'Détruit tous les objets actuellement équipés sur le terrain des 2 joueurs. aucun joueur ne peut utiliser ou équiper de cartes Objet.',
   durationTurns: DURATION_TURNS,
   abilities: [
     {

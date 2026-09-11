@@ -82,7 +82,7 @@ export const rhaast: CharacterCardDef = {
       name: 'Soif de sang',
       kind: 'active',
       description:
-        'Sacrifie la moitié des hp actuels d’une carte allié sur le banc pour infliger 50 dégâts supplémentaires à la prochaine attaque.',
+        'Sacrifie la moitié des hp actuels d’une carte alliée sur le banc pour infliger 50 dégâts supplémentaires à la prochaine attaque.',
       condition(ctx) {
         // Non cumulable : tant que le bonus n'a pas été consommé, sacrifier un second allié
         // ne ferait que gâcher ses PV sans rien ajouter.

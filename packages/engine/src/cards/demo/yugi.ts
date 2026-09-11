@@ -31,6 +31,10 @@ async function boostAtk(ctx: EffectContext): Promise<void> {
     label: `Puzzle Millénaire (+${ATK_BOOST_AMOUNT} ATK)`,
     sourceCardInstanceId: ctx.sourceInstanceId,
     remainingTurns: 1,
+    // Buff cadré sur le tour en cours : sans ça, un Yugi renvoyé au banc juste après gèle la
+    // durée (les durées y sont suspendues) et le bonus revient intact bien plus tard --
+    // même correctif que Potion force / Adrénaline Ultime / Nouvel Alter.
+    ticksOnBench: true,
     data: { amount: ATK_BOOST_AMOUNT },
   });
 }
@@ -137,7 +141,7 @@ export const yugi: CharacterCardDef = {
       name: 'Puzzle Millénaire',
       kind: 'active',
       description:
-        `Obtient aléatoirement l'un des effets suivants à qu'il pourra utiliser quand il le souhaite une fois par tour :
+        `Obtient aléatoirement l'un des effets suivants qu'il pourra utiliser quand il le souhaite une fois par tour :
 40 % : Boost l'ATK de 30 durant un tour.
 20 % : Applique 2 bleed sur l'ennemi.
 15 % : Se soigne de 70 HP ou soigne un allié sur le banc de 50 HP.

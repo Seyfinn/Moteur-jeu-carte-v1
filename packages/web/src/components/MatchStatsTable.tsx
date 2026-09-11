@@ -41,6 +41,11 @@ function sumStats(stats: CharacterStats[]): CharacterStats {
   return total;
 }
 
+/** Un zéro se lit en retrait : l'œil va tout de suite aux colonnes qui ont compté. */
+function StatCell({ value }: { value: number }) {
+  return <td className={value === 0 ? 'match-stats-zero' : undefined}>{value}</td>;
+}
+
 function PlayerStatsTable({ state, playerId, heading }: { state: GameState; playerId: PlayerId; heading: string }) {
   const player = state.players[playerId];
   const characters = Object.values(player.characters);
@@ -57,30 +62,38 @@ function PlayerStatsTable({ state, playerId, heading }: { state: GameState; play
             <tr>
               <th className="match-stats-name-col">Personnage</th>
               {COLUMNS.map((col) => (
-                <th key={col.key} title={col.label}>
+                <th key={col.key} title={col.label} aria-label={col.label}>
                   {col.icon}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ char, stats }) => (
-              <tr
-                key={char.instanceId}
-                className={player.graveyardCharacterInstanceIds.includes(char.instanceId) ? 'match-stats-row-ko' : undefined}
-              >
-                <td className="match-stats-name-col">{cardName(char.cardId)}</td>
-                {COLUMNS.map((col) => (
-                  <td key={col.key}>{stats[col.key]}</td>
-                ))}
-              </tr>
-            ))}
+            {rows.map(({ char, stats }) => {
+              const ko = player.graveyardCharacterInstanceIds.includes(char.instanceId);
+              return (
+                <tr key={char.instanceId} className={ko ? 'match-stats-row-ko' : undefined}>
+                  <td className="match-stats-name-col">
+                    {cardName(char.cardId)}
+                    {ko && (
+                      <span className="match-stats-ko-mark" title="Mis KO">
+                        {' '}
+                        ☠
+                      </span>
+                    )}
+                  </td>
+                  {COLUMNS.map((col) => (
+                    <StatCell key={col.key} value={stats[col.key]} />
+                  ))}
+                </tr>
+              );
+            })}
           </tbody>
           <tfoot>
             <tr>
               <td className="match-stats-name-col">Total</td>
               {COLUMNS.map((col) => (
-                <td key={col.key}>{total[col.key]}</td>
+                <StatCell key={col.key} value={total[col.key]} />
               ))}
             </tr>
           </tfoot>
@@ -98,6 +111,18 @@ export function MatchStatsTable({ state, you }: { state: GameState; you: PlayerI
     <div className="match-stats">
       <PlayerStatsTable state={state} playerId={you} heading="Vous" />
       <PlayerStatsTable state={state} playerId={opponentId} heading={opponentName} />
+      {/* Les en-têtes ne sont que des icônes (huit colonnes + le nom ne tiennent pas
+          autrement) : la légende, elle, se lit sans avoir à survoler chaque colonne. */}
+      <ul className="match-stats-legend" aria-label="Légende des colonnes">
+        {COLUMNS.map((col) => (
+          <li key={col.key}>
+            <span className="match-stats-legend-icon" aria-hidden="true">
+              {col.icon}
+            </span>
+            {col.label}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

@@ -9,7 +9,7 @@ export const adrenalineUltime: ObjectCardDef = {
   type: 'object',
   id: 'adrenaline-ultime',
   name: 'Adrénaline Ultime',
-  description: `Utilisable uniquement si ton personnage actif à au moins 110 HP restants. 
+  description: `Utilisable uniquement si ton personnage actif a au moins 110 HP restants. 
 Réduit ses HP actuels à 10 HP et double ses dégâts pendant ce tour.`,
   condition(ctx) {
     const active = ctx.getActive(ctx.ownerId);

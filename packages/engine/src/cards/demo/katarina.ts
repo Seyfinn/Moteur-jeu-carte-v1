@@ -29,7 +29,7 @@ export const katarina: CharacterCardDef = {
       id: 'shunpo',
       name: 'Shunpo',
       baseATK: BASE_ATK,
-      description: '33% de chance de désarmé la cible',
+      description: '33% de chance de désarmer la cible',
       endsTurn(ctx) {
         return !ctx.scratch[KILLED_THIS_ATTACK];
       },

@@ -67,7 +67,7 @@ export const escanor: CharacterCardDef = {
       id: CYCLE_2_ATTACK_ID,
       name: 'Cycle 2 - Aura Solaire',
       baseATK: CYCLE_2_ATK,
-      description: 'Annule 50 % des dégâts subits pendant un tour.',
+      description: 'Annule 50 % des dégâts subis pendant un tour.',
       condition(ctx) {
         return getCycle(ctx) === 2;
       },
@@ -197,6 +197,10 @@ Orgueil Ultime (10 %) : Passe au cycle 4 directement.`,
           label: 'Orgueil absolu (échec)',
           sourceCardInstanceId: ctx.sourceInstanceId,
           remainingTurns: 1,
+          // « ce tour » et rien de plus : sans ça, se replier au banc dans la foulée gèle la
+          // durée (les durées y sont suspendues) et le désarmement ressort des tours plus
+          // tard -- même correctif que l'Aura Solaire du cycle 2 juste au-dessus.
+          ticksOnBench: true,
         });
       },
     },

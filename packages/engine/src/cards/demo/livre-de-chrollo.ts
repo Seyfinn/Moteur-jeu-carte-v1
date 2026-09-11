@@ -58,10 +58,10 @@ export const livreDeChrollo: TerrainCardDef = {
   type: 'terrain',
   id: 'livre-de-chrollo',
   name: 'Livre de Chrollo',
-  description: `Chrollo prête son livre aux joueurs. Chaque tour, au début du tour : Une attaque au hasard parmi l'entièreté des attaques du jeu, est proposé aux joueurs.
+  description: `Chrollo prête son livre aux joueurs. Chaque tour, au début du tour : Une attaque au hasard parmi l'entièreté des attaques du jeu, est proposée aux joueurs.
 Le joueur peut décider de l'accepter le livre de Chrollo et prendre ce qui est offert. 
-Si il accepte, il ne pourra que utiliser cette attaque pendant ce tour.
-La même attaque est proposé aux deux joueurs pendant le tour.`,
+S'il accepte, il ne pourra qu'utiliser cette attaque pendant ce tour.
+La même attaque est proposée aux deux joueurs pendant le tour.`,
   durationTurns: DURATION_TURNS,
   abilities: [
     {
@@ -120,7 +120,7 @@ La même attaque est proposé aux deux joueurs pendant le tour.`,
 
         // 'borrowed-attack' : statut générique du moteur. Il ajoute l'attaque empruntée à
         // celles du porteur (queries.ts::attacksAvailableTo) ET ferme toutes les siennes
-        // (queries.ts::canAttack) -- « il ne pourra que utiliser cette attaque ».
+        // (queries.ts::canAttack) -- « il ne pourra qu'utiliser cette attaque ».
         ctx.applyStatus(
           active.instanceId,
           {
