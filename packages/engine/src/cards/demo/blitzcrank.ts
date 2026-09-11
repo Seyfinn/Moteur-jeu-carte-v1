@@ -27,7 +27,7 @@ export const blitzcrank: CharacterCardDef = {
       id: 'mana-barrier',
       name: 'Mana Barrier',
       kind: 'passive',
-      description: 'Si blitzcrank tombe sous 50hp, il gagne un shield de 150hp, mais il ne pourra plus utiliser son actif "Hook" pendant 2 tours',
+      description: 'Si Blitzcrank tombe sous 50hp, il gagne un shield de 150hp, mais il ne pourra plus utiliser son actif "Hook" pendant 2 tours',
       trigger: 'afterDamage',
       // Doit pouvoir se déclencher même si Blitzcrank encaisse les dégâts depuis le banc (AoE).
       usableFromBench: true,

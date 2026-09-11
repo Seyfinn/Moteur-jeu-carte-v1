@@ -54,7 +54,7 @@ export const blackPanther: CharacterCardDef = {
       name: 'Energie Cinétique',
       kind: 'active',
       description:
-        "Black Panther stock 40% des dégâts qu'il reçoit. Peut relacher cette énergie stocké à l'ennemi actif. Utilisable une fois.",
+        "Black Panther stock 40% des dégâts qu'il reçoit. Peut relâcher cette énergie stockée à l'ennemi actif. Utilisable une fois.",
       // « Utilisable une fois » porte sur la LIBÉRATION seule : le stockage, lui, tourne en
       // permanence via le passive ci-dessous, dès le début de partie et jusqu'à la fin.
       usesPerGame: 1,

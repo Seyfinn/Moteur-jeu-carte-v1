@@ -1,0 +1,34 @@
+# Ce que Render lance déjà au déploiement (`npm run build`), mais AVANT que la branche ne
+# parte en production -- plus la suite de tests du moteur, que le déploiement, lui, ne joue
+# jamais. Une carte cassée ou une règle de tour changée par erreur se voit ici, pas en jeu.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# Une seule exécution par branche : un push qui en suit un autre annule le précédent.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      # `npm run build` enchaîne engine -> web -> server : le typecheck des trois packages
+      # (le client fait `tsc --noEmit` avant Vite) et la compilation réelle du moteur, dont
+      # les deux autres dépendent.
+      - run: npm run build
+
+      - run: npm test

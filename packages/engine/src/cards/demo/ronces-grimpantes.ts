@@ -66,8 +66,8 @@ export const roncesGrimpantes: TerrainCardDef = {
   id: 'ronces-grimpantes',
   name: 'Ronces grimpantes',
   description: `Tous les personnages actifs subissent de plus en plus de dégâts en fonction du temps qu'ils restent au poste actif.
-Premier tour 0% de dégâts prit en plus, ensuite, augmente de 10% les dégâts subis à chaque tour (Tour 2 = 10%, tour 3 = 20%) tant que le personnage actif reste sur le poste actif. 
-Se réinitialise si il y a un switch où si le personnage actif meurt, seulement pour le joueur concerné.`,
+Premier tour 0% de dégâts pris en plus, ensuite, augmente de 10% les dégâts subis à chaque tour (Tour 2 = 10%, tour 3 = 20%) tant que le personnage actif reste sur le poste actif. 
+Se réinitialise s'il y a un switch ou si le personnage actif meurt, seulement pour le joueur concerné.`,
   durationTurns: DURATION_TURNS,
   abilities: [
     {
@@ -127,7 +127,7 @@ Se réinitialise si il y a un switch où si le personnage actif meurt, seulement
           setStack(ctx, playerId, { turns: 0, armed: true });
           return;
         }
-        // « Premier tour 0% de dégâts prit en plus » : le tour qui l'a vu arriver ne compte
+        // « Premier tour 0% de dégâts pris en plus » : le tour qui l'a vu arriver ne compte
         // pas, c'est celui d'après qui fait monter la première dîme.
         if (!stack.armed) {
           setStack(ctx, playerId, { turns: stack.turns, armed: true });

@@ -83,7 +83,7 @@ export const lightYagami: CharacterCardDef = {
       id: 'ecriture-du-nom',
       name: 'Écriture du Nom',
       baseATK: 0,
-      description: 'Pose une marque "Nom" sur le personnage actif adverse. Octroi au prochain tour esquive à light',
+      description: 'Pose une marque "Nom" sur le personnage actif adverse. Octroie au prochain tour esquive à Light',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
@@ -105,7 +105,7 @@ export const lightYagami: CharacterCardDef = {
   abilities: [
     {
       id: 'serment-de-vengeance',
-      name: 'Sermet de Vengeance',
+      name: 'Serment de Vengeance',
       kind: 'passive',
       description:
         'À la fin de ton tour, pose 1 marque "Nom" sur le personnage actif adverse. À 8 marques, il subit une crise cardiaque et la carte Meurt ',

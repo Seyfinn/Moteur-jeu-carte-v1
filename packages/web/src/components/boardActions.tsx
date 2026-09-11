@@ -11,10 +11,14 @@ import {
   describeDenials,
   describeObjectUnplayable,
   describeRecycleUnavailable,
+  getAbilityUsesPerGame,
+  getAbilityUsesPerTurn,
   getCharacterCard,
   getEffectiveATK,
   getObjectCard,
   getTerrainCard,
+  memberConditionHolds,
+  type AbilityDef,
   type AttackDef,
   type CharacterInstance,
   type GameState,
@@ -121,14 +125,33 @@ export function characterName(cardId: string): string {
   }
 }
 
+/**
+ * Pastille d'information sous une option (« 1×/partie », « termine le tour »...). `state`
+ * ne change que la couleur : `spent` = quota consommé, `warn` = à savoir avant de cliquer.
+ */
+export interface ActionTag {
+  text: string;
+  state?: 'spent' | 'warn';
+}
+
 /** Une entrée du panneau de commandes (une attaque, une capacité, une cible de switch). */
 export interface ActionOption {
   key: string;
   label: string;
   /** Chiffre-clé affiché à droite du libellé (ATK effectif, PV de la cible...). */
   detail?: string;
+  /** Précision sous le chiffre-clé (« base 40 » quand l'ATK effectif s'en écarte). */
+  detailNote?: string;
+  /** Sens de l'écart entre le chiffre-clé et sa valeur imprimée : colore le chiffre. */
+  trend?: 'up' | 'down';
   /** Sous-titre discret sous le libellé (le personnage qui porte la capacité). */
   sub?: string;
+  /**
+   * Texte imprimé de la carte, affiché tel quel sous l'option (`white-space: pre-line`).
+   * C'est ce qui permet de lire une attaque sans survol -- le tactile n'en a pas.
+   */
+  description?: string;
+  tags?: ActionTag[];
   hover?: { title: string; subtitle?: string; body: ReactNode };
   /** Non-null quand le moteur refuserait l'action maintenant -- l'option est grisée avec sa raison. */
   disabledReason?: string | null;
@@ -159,6 +182,22 @@ function canAttackFromBenchSafe(state: GameState, characterInstanceId: string): 
   }
 }
 
+/**
+ * Le `condition()` d'une attaque/capacité, joué à blanc sur la vue du joueur.
+ *
+ * Les requêtes de permission (`canAttack`, `canUseAbility`) ne le voient pas : une carte
+ * dont une attaque est fermée par sa seule condition (les quatre cycles d'Escanor, dont un
+ * seul est ouvert à la fois) apparaissait donc entièrement jouable, et le serveur renvoyait
+ * « Conditions non remplies » à chaque clic.
+ */
+function conditionDenial(state: GameState, characterInstanceId: string, member: { condition?: unknown }): string | null {
+  try {
+    return memberConditionHolds(state, characterInstanceId, member as never) ? null : 'conditions non remplies';
+  } catch {
+    return null; // le serveur reste l'autorité
+  }
+}
+
 export function attackOptions(state: GameState, you: PlayerId, conn: GameConnection): ActionOption[] {
   const player = state.players[you];
   const attackerIds = [
@@ -177,20 +216,70 @@ export function attackOptions(state: GameState, you: PlayerId, conn: GameConnect
       // atterrissent ici, et le joueur n'avait aucun moyen de voir le nombre qu'il allait
       // réellement infliger.
       const effective = effectiveATK(state, attackerId, attack.baseATK);
-      const suffix = effective === attack.baseATK ? '' : ` (base ${attack.baseATK})`;
+      const shifted = effective !== attack.baseATK;
+      const suffix = shifted ? ` (base ${attack.baseATK})` : '';
+      const tags: ActionTag[] = [];
+      // Une attaque ferme le tour par défaut : seule l'exception mérite d'être annoncée.
+      // Un `endsTurn` fonction dépend du déroulé du coup, on ne promet rien à sa place.
+      if (attack.endsTurn === false) tags.push({ text: 'ne termine pas le tour' });
+      if (benched) tags.push({ text: 'depuis le banc', state: 'warn' });
       return {
         key: `${attackerId}:${attack.id}`,
         label: attack.name,
         detail: `${effective} ATK`,
+        detailNote: shifted ? `base ${attack.baseATK}` : undefined,
+        trend: shifted ? (effective > attack.baseATK ? 'up' : 'down') : undefined,
         // Refus évalué attaque par attaque : un sceau ("Sacrifice" de Makima) n'en ferme
         // qu'une, les autres doivent rester jouables.
-        disabledReason: denialOf(() => canAttack(state, attackerId, attack.id)),
+        disabledReason:
+          denialOf(() => canAttack(state, attackerId, attack.id)) ?? conditionDenial(state, attackerId, attack),
         sub: benched ? def.name : undefined,
+        description: attack.description,
+        tags,
         hover: { title: attack.name, subtitle: `${effective} ATK${suffix}`, body: <p>{attack.description}</p> },
         run: () => conn.applyAction({ kind: 'attack', characterInstanceId: attackerId, attackId: attack.id }),
       };
     });
   });
+}
+
+/**
+ * Les quotas d'une capacité, tels que le moteur les compte (`canUseAbility` lit les mêmes
+ * requêtes) : « 1×/tour », « 1×/partie », et ce qu'il en reste. Sans ça, le joueur ne
+ * savait qu'un ultime était à usage unique qu'au moment où il se grisait pour de bon.
+ */
+function abilityUsageTags(state: GameState, char: CharacterInstance, ability: AbilityDef): ActionTag[] {
+  const tags: ActionTag[] = [];
+  const perGame = safeLimit(
+    () => getAbilityUsesPerGame(state, char.instanceId, ability.id, ability.usesPerGame),
+    ability.usesPerGame
+  );
+  if (perGame !== undefined) {
+    const left = Math.max(0, perGame - (char.abilityUsesThisGame[ability.id] ?? 0));
+    tags.push({
+      text: perGame === 1 ? (left === 0 ? '1×/partie · utilisée' : '1×/partie') : `${left}/${perGame} par partie`,
+      state: left === 0 ? 'spent' : undefined,
+    });
+  }
+  const perTurn = safeLimit(
+    () => getAbilityUsesPerTurn(state, char.instanceId, ability.id, ability.usesPerTurn ?? 1),
+    ability.usesPerTurn ?? 1
+  );
+  const leftTurn = Math.max(0, perTurn - (char.abilityUsesThisTurn[ability.id] ?? 0));
+  tags.push({
+    text: perTurn === 1 ? (leftTurn === 0 ? '1×/tour · utilisée' : '1×/tour') : `${leftTurn}/${perTurn} ce tour`,
+    state: leftTurn === 0 ? 'spent' : undefined,
+  });
+  return tags;
+}
+
+/** Une requête de quota jouée sur la vue caviardée : en cas d'échec, la valeur imprimée. */
+function safeLimit<T>(evaluate: () => T, fallback: T): T {
+  try {
+    return evaluate();
+  } catch {
+    return fallback;
+  }
 }
 
 /** Capacités activables manuellement portées par UN personnage (actif ou de réserve). */
@@ -208,14 +297,25 @@ export function abilityOptionsFor(
 
   return def.abilities
     .filter((ability) => ability.kind === 'active' && !ability.trigger && (!benched || ability.usableFromBench))
-    .map((ability) => ({
-      key: `${characterInstanceId}:${ability.id}`,
-      label: ability.name,
-      sub: benched ? def.name : undefined,
-      disabledReason: denialOf(() => canUseAbility(state, characterInstanceId, ability)),
-      hover: { title: ability.name, subtitle: `${def.name} · Active`, body: <p>{ability.description}</p> },
-      run: () => conn.applyAction({ kind: 'use-ability', characterInstanceId, abilityId: ability.id }),
-    }));
+    .map((ability) => {
+      const tags = abilityUsageTags(state, char, ability);
+      // Une capacité est gratuite par défaut : celle qui ferme le tour (« Manipulation » de
+      // Makima) doit le dire AVANT le clic, pas dans le journal après coup.
+      if (ability.endsTurn === true) tags.push({ text: 'termine le tour', state: 'warn' });
+      if (benched) tags.push({ text: 'depuis le banc', state: 'warn' });
+      return {
+        key: `${characterInstanceId}:${ability.id}`,
+        label: ability.name,
+        sub: benched ? def.name : undefined,
+        disabledReason:
+          denialOf(() => canUseAbility(state, characterInstanceId, ability)) ??
+          conditionDenial(state, characterInstanceId, ability),
+        description: ability.description,
+        tags,
+        hover: { title: ability.name, subtitle: `${def.name} · Active`, body: <p>{ability.description}</p> },
+        run: () => conn.applyAction({ kind: 'use-ability', characterInstanceId, abilityId: ability.id }),
+      };
+    });
 }
 
 /**
@@ -247,6 +347,7 @@ export function switchOptions(state: GameState, you: PlayerId, conn: GameConnect
       key: id,
       label: characterName(char.cardId),
       detail: `${hp} PV`,
+      detailNote: `sur ${char.currentMaxHP}`,
       disabledReason: targetDenial,
       run: () => conn.applyAction({ kind: 'switch', newActiveInstanceId: id }),
     };

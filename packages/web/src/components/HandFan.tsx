@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { RECYCLE_OBJECT_COST, type GameState, type PlayerId, type PlayerState } from 'engine';
 import { CardArt } from './CardArt';
-import { CardFrame, FaceDownCard } from './CardFrame';
+import { CardFrame, FaceDownCard, isEquipmentCard } from './CardFrame';
 import { useCardInspect, useHoverCard, type HoverPayload } from './HoverCard';
 import { characterDetailBody, hiddenCardDetailBody, objectDetailBody, terrainDetailBody } from './cardDetails';
 import { characterName, objectCardDenial, objectName, recycleDenial, terrainName } from './boardActions';
@@ -57,6 +57,9 @@ function fanStyle(index: number, count: number): CSSProperties {
     '--fan-rot': `${(offset * step).toFixed(2)}deg`,
     '--fan-lift': `${lift.toFixed(1)}px`,
     '--fan-z': index + 1,
+    // Rang dans l'éventail, relu par la CSS pour échelonner la distribution : les cartes
+    // ne tombent pas toutes en même temps, elles sont données une par une.
+    '--deal-i': index,
   } as CSSProperties;
 }
 
@@ -93,15 +96,26 @@ function PlayerHandCard({
   index: number;
   count: number;
   disabledReason: string | null;
-  recycle: { selected: boolean; onToggle: () => void } | null;
-  onPlay: () => void;
+  /** `order` : rang (1-based) de la carte dans la sélection, affiché sur la pastille pour
+   *  que le joueur retrouve laquelle est dans quel réceptacle du Recycleur. */
+  recycle: { selected: boolean; order: number; onToggle: () => void } | null;
+  /** Le rectangle est celui de la carte au moment du clic : c'est de LÀ que part son envol. */
+  onPlay: (from: DOMRect | null) => void;
   onBlocked: (reason: string) => void;
 }) {
   const hover = useHoverCard();
+  // Mesuré sur la boîte qui porte le mouvement, donc à sa taille survolée : la carte qui
+  // s'envole part exactement d'où le joueur la voyait, pas de sa place au repos.
+  const liftRef = useRef<HTMLDivElement>(null);
+  const play = () => onPlay(liftRef.current?.getBoundingClientRect() ?? null);
   const coarse = usePointerCoarse();
   const isObject = slot.kind === 'object';
   const name = isObject ? objectName(slot.cardId) : terrainName(slot.cardId);
   const verb = recycle ? (recycle.selected ? 'Retirer' : 'Recycler') : isObject ? 'Jouer' : 'Poser';
+  // Un objet à lier se joue autrement (il reste accroché à un personnage) : son badge le
+  // dit en toutes lettres, en plus du 🔗 de coin que porte déjà le cadre.
+  const equipment = isObject && isEquipmentCard(slot.cardId, 'object');
+  const typeBadge = !isObject ? '🗺️ Terrain' : equipment ? '🔗 À lier' : '⚙️ Objet';
 
   const payload: HoverPayload = {
     title: name,
@@ -109,7 +123,7 @@ function PlayerHandCard({
     card: { cardId: slot.cardId, kind: slot.kind, name },
     body: isObject ? objectDetailBody(slot.cardId) : terrainDetailBody(slot.cardId),
     actionLabel: disabledReason ? undefined : verb,
-    onAction: recycle ? recycle.onToggle : onPlay,
+    onAction: recycle ? recycle.onToggle : play,
   };
 
   // Au doigt il n'y a pas de survol pour lire la carte avant de la jouer : le tap ouvre
@@ -131,26 +145,31 @@ function PlayerHandCard({
       onBlocked(disabledReason);
       return;
     }
-    onPlay();
+    // La fiche au survol recouvre le centre du plateau, là même où la carte s'envole et où
+    // la mise en avant va la projeter : elle n'a plus rien à faire à l'écran.
+    hover.hide();
+    play();
   };
 
   return (
     <div
       className={`hand-card hand-card-${slot.kind}${disabledReason ? ' blocked' : ''}${recycle?.selected ? ' recycle-selected' : ''}`}
       style={fanStyle(index, count)}
+      // Relu par la pastille de sélection (`content: attr(data-pick)`) : le rang plutôt
+      // qu'un simple ♻, pour qu'on sache quelle carte occupe quel réceptacle.
+      data-pick={recycle?.selected ? recycle.order : undefined}
     >
       {/* Le mouvement vit sur cette boîte INTÉRIEURE, jamais sur `.hand-card` : c'est
           `.hand-card` qui reçoit le survol, et une boîte qui bondit de 120 px se dérobait
           sous le curseur -- le survol se perdait, la carte retombait, le survol revenait,
           et la carte tremblait en boucle. La zone sensible, elle, ne bouge plus. */}
-      <div className="hand-card-lift">
-        {/* Un terrain se joue autrement qu'un objet (un seul par tour, il remplace celui en
-            place) : il s'annonce donc sur la carte, et pas seulement par la couleur du halo. */}
-        {slot.kind === 'terrain' && (
-          <span className="hand-type-badge" aria-hidden="true">
-            🗺️ Terrain
-          </span>
-        )}
+      <div className="hand-card-lift" ref={liftRef}>
+        {/* Chaque famille s'annonce sur la carte, et pas seulement par la couleur du halo :
+            un terrain se joue autrement qu'un objet (un seul par tour, il remplace celui en
+            place), et un objet à lier reste accroché à son porteur. */}
+        <span className={`hand-type-badge hand-type-badge-${slot.kind}${equipment ? ' hand-type-badge-equipment' : ''}`} aria-hidden="true">
+          {typeBadge}
+        </span>
         <CardFrame
           cardId={slot.cardId}
           kind={slot.kind}
@@ -172,9 +191,55 @@ function PlayerHandCard({
                   onMouseLeave: hover.hide,
                 }
           }
-          footer={<span className={`hand-card-hint${disabledReason ? ' blocked' : ''}`}>{disabledReason ? 'Indisponible' : verb}</span>}
+          // La raison du refus est écrite SUR la carte, pas seulement dans l'infobulle ni
+          // dans la fiche au survol : au doigt il n'y a ni l'une ni l'autre, et « Indisponible »
+          // seul n'expliquait rien. Le texte est rogné à deux lignes dans l'éventail et se lit
+          // en entier dès que la carte se soulève.
+          footer={
+            <span className={`hand-card-hint${disabledReason ? ' blocked' : ''}`} title={disabledReason ?? undefined}>
+              {disabledReason ?? verb}
+            </span>
+          }
         />
       </div>
+    </div>
+  );
+}
+
+/**
+ * Envol d'une carte jouée, du bas de l'écran vers le centre du plateau. Elle prend la relève
+ * de la carte qui disparaît de la main et passe le relais à la mise en avant plein écran
+ * (`CardSpotlight`), qui n'arrive qu'après l'aller-retour serveur : sans elle, la carte
+ * s'évaporait de la main et réapparaissait au centre sans que rien ne relie les deux.
+ */
+type HandFlight = { id: number; cardId: string; kind: 'object' | 'terrain'; from: DOMRect };
+
+/** Course de l'envol, calée sur `hand-flight` (styles.css). */
+const HAND_FLIGHT_MS = 560;
+
+function HandPlayFlights({ flights }: { flights: HandFlight[] }) {
+  if (flights.length === 0) return null;
+  return (
+    <div className="hand-flight-layer" aria-hidden="true">
+      {flights.map((f) => (
+        <div
+          key={f.id}
+          className={`hand-flight hand-flight-${f.kind}`}
+          style={
+            {
+              left: `${Math.round(f.from.left)}px`,
+              top: `${Math.round(f.from.top)}px`,
+              width: `${Math.round(f.from.width)}px`,
+              height: `${Math.round(f.from.height)}px`,
+              // Vers le centre de la fenêtre, exactement là où la mise en avant l'attend.
+              '--flight-dx': `${Math.round(window.innerWidth / 2 - (f.from.left + f.from.width / 2))}px`,
+              '--flight-dy': `${Math.round(window.innerHeight / 2 - (f.from.top + f.from.height / 2))}px`,
+            } as CSSProperties
+          }
+        >
+          <CardArt cardId={f.cardId} kind={f.kind} />
+        </div>
+      ))}
     </div>
   );
 }
@@ -221,8 +286,23 @@ function RecyclerZone({
   const ready = selectedCount === RECYCLE_OBJECT_COST;
   const busy = phase !== 'idle';
 
+  // Échap referme la sélection : c'est le geste attendu pour sortir d'un mode, et sans lui
+  // il fallait retrouver le petit bouton « Annuler » dans le coin de l'écran.
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, onCancel]);
+
   return (
-    <div className={`recycler-zone${open ? ' open' : ''}${denial ? ' blocked' : ''}${busy ? ` recycler-${phase}` : ''}`}>
+    <div
+      className={`recycler-zone${open ? ' open' : ''}${denial ? ' blocked' : ''}${busy ? ` recycler-${phase}` : ''}`}
+      role="group"
+      aria-label="Recycleur d'objets"
+    >
       <span className="recycler-title">
         <span className="recycler-title-icon" aria-hidden="true">
           ♻
@@ -230,7 +310,7 @@ function RecyclerZone({
         Recycleur
         {/* Le compteur vit dans le titre : il est lisible en permanence, panneau ouvert ou
             non, au lieu d'apparaître seulement pendant la sélection. */}
-        <span className={`recycler-tally${ready ? ' ready' : ''}`}>
+        <span className={`recycler-tally${ready ? ' ready' : ''}${open && !ready ? ' pending' : ''}`} aria-label={`${selectedCount} objet(s) sur ${RECYCLE_OBJECT_COST} sélectionné(s)`}>
           {selectedCount}/{RECYCLE_OBJECT_COST}
         </span>
       </span>
@@ -265,14 +345,23 @@ function RecyclerZone({
 
       {open ? (
         <>
-          <span className="recycler-hint">
-            {ready ? '✦ Prêt à recycler' : `Choisissez ${RECYCLE_OBJECT_COST - selectedCount} objet(s) dans votre main`}
+          {/* `role="status"` : le lecteur d'écran entend « encore 2 objet(s) » à chaque coche,
+              sans que le focus ait à quitter la main. */}
+          <span className="recycler-hint" role="status">
+            {ready ? '✦ Prêt à recycler' : `Choisissez encore ${RECYCLE_OBJECT_COST - selectedCount} objet(s) dans votre main`}
           </span>
           <div className="recycler-actions">
-            <button className={`recycler-confirm${ready ? ' ready' : ''}`} disabled={!ready || busy} onClick={onSubmit}>
-              Recycler
+            {/* « Valider », et non « Recycler » comme le bouton d'ouverture : les deux
+                boutons portaient le même mot pour deux gestes différents. */}
+            <button
+              className={`recycler-confirm${ready ? ' ready' : ''}`}
+              disabled={!ready || busy}
+              onClick={onSubmit}
+              aria-label={`Valider le recyclage (${selectedCount}/${RECYCLE_OBJECT_COST})`}
+            >
+              ✓ Valider
             </button>
-            <button className="recycler-cancel" disabled={busy} onClick={onCancel}>
+            <button className="recycler-cancel" disabled={busy} onClick={onCancel} aria-label="Annuler le recyclage (Échap)" title="Échap">
               Annuler
             </button>
           </div>
@@ -282,11 +371,14 @@ function RecyclerZone({
           <span className="recycler-hint">{denial ?? `${RECYCLE_OBJECT_COST} objets → 1 objet au hasard`}</span>
           <button
             className="recycler-open"
-            title={denial ?? 'Sacrifier 3 objets de votre main pour en tirer un au hasard'}
+            title={denial ?? `Sacrifier ${RECYCLE_OBJECT_COST} objets de votre main pour en tirer un au hasard`}
+            // Le bouton reste cliquable même refusé : le clic remonte la raison en toast,
+            // ce qu'un `disabled` empêcherait. `aria-disabled` dit l'état sans couper le geste.
+            aria-disabled={Boolean(denial) || undefined}
             disabled={busy}
             onClick={() => (denial ? onBlocked(denial) : onOpen())}
           >
-            Recycler
+            {busy ? '…' : 'Recycler'}
           </button>
         </>
       )}
@@ -339,6 +431,8 @@ export function PlayerHand({
   const slots = handSlots(player);
   const [recycling, setRecycling] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
+  const [flights, setFlights] = useState<HandFlight[]>([]);
+  const flightSeqRef = useRef(0);
   const recycleUnavailable = recycleGate ?? recycleDenial(state, you);
 
   // Mise en scène de la validation : implosion des 3 slots, puis révélation de la carte
@@ -433,6 +527,30 @@ export function PlayerHand({
   const visible = slots.filter((slot): slot is PlayableSlot => slot.kind !== 'hidden');
   const objects = visible.filter((slot) => slot.kind === 'object');
   const terrains = visible.filter((slot) => slot.kind === 'terrain');
+  const handSummary = [
+    objects.length > 0 ? `${objects.length} objet${objects.length > 1 ? 's' : ''}` : null,
+    terrains.length > 0 ? `${terrains.length} terrain${terrains.length > 1 ? 's' : ''}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  // Stable d'un rendu à l'autre : le Recycleur l'accroche à un écouteur clavier (Échap).
+  const cancelRecycling = useCallback(() => {
+    setRecycling(false);
+    setSelected([]);
+  }, []);
+
+  // Joue la carte ET lance son envol. Le second est purement local : il ne dépend d'aucune
+  // réponse du serveur, et couvre donc exactement le temps mort de l'aller-retour.
+  const playSlot = (slot: PlayableSlot, from: DOMRect | null) => {
+    if (from && from.width > 0) {
+      const id = ++flightSeqRef.current;
+      setFlights((list) => [...list, { id, cardId: slot.cardId, kind: slot.kind, from }]);
+      phaseTimersRef.current.push(setTimeout(() => setFlights((list) => list.filter((f) => f.id !== id)), HAND_FLIGHT_MS));
+    }
+    if (slot.kind === 'object') onPlayObject(slot.id);
+    else onPlayTerrain(slot.id);
+  };
 
   const card = (slot: PlayableSlot, index: number) => (
     <PlayerHandCard
@@ -443,10 +561,10 @@ export function PlayerHand({
       disabledReason={denialFor(slot)}
       recycle={
         recycling && slot.kind === 'object'
-          ? { selected: selected.includes(slot.id), onToggle: () => toggle(slot.id) }
+          ? { selected: selected.includes(slot.id), order: selected.indexOf(slot.id) + 1, onToggle: () => toggle(slot.id) }
           : null
       }
-      onPlay={() => (slot.kind === 'object' ? onPlayObject(slot.id) : onPlayTerrain(slot.id))}
+      onPlay={(from) => playSlot(slot, from)}
       onBlocked={onBlocked}
     />
   );
@@ -466,19 +584,23 @@ export function PlayerHand({
         phase={animPhase}
         revealCardId={revealCardId}
         onOpen={() => setRecycling(true)}
-        onCancel={() => {
-          setRecycling(false);
-          setSelected([]);
-        }}
+        onCancel={cancelRecycling}
         onSubmit={submit}
         onBlocked={onBlocked}
       />
       <div
-        className={`hand-fan${recycling ? ' recycling' : ''}`}
+        className={`hand-fan${recycling ? ' recycling' : ''}${visible.length > 8 ? ' crowded' : ''}`}
         style={fanSpread(visible.length)}
         role="group"
-        aria-label="Votre main"
+        aria-label={`Votre main : ${handSummary}`}
       >
+        {/* Le compte, lisible sans compter les cartes d'un éventail serré. Il détaille par
+            famille parce que les deux paquets n'ont pas le même quota par tour. */}
+        {visible.length > 0 && (
+          <span className="hand-fan-count" aria-hidden="true">
+            {handSummary}
+          </span>
+        )}
         {visible.length === 0 && <span className="hand-strip-empty">Main vide</span>}
         {objects.map((slot, i) => card(slot, i))}
         {/* Les deux paquets ne se jouent pas pareil et n'ont pas le même quota par tour :
@@ -487,6 +609,7 @@ export function PlayerHand({
         {objects.length > 0 && terrains.length > 0 && <span className="hand-fan-split" aria-hidden="true" />}
         {terrains.map((slot, i) => card(slot, objects.length + i))}
       </div>
+      <HandPlayFlights flights={flights} />
     </div>
   );
 }
@@ -510,11 +633,24 @@ function RevealedHandTile({
 }
 
 function HiddenHandTile() {
-  const inspect = useCardInspect({ title: 'Carte cachée', body: hiddenCardDetailBody() });
+  const payload: HoverPayload = { title: 'Carte cachée', body: hiddenCardDetailBody() };
+  const hover = useHoverCard();
+  const coarse = usePointerCoarse();
+  // Un vrai bouton : le dos de carte ouvre une fiche, il doit donc être atteignable au
+  // clavier et annoncé comme tel -- un `div` cliquable ne l'était ni l'un ni l'autre.
+  // Les gestionnaires de survol sont posés à la main plutôt que via `useCardInspect`, dont
+  // les `hoverProps` sont typés pour un `div` ; `hover.show` accepte n'importe quel élément.
   return (
-    <div className="hand-strip-hidden" onClick={inspect.onClick} {...inspect.hoverProps}>
+    <button
+      type="button"
+      className="hand-strip-hidden"
+      aria-label="Carte cachée de l'adversaire"
+      onClick={() => hover.pin(payload)}
+      onMouseEnter={coarse ? undefined : (e) => hover.show(payload, e.currentTarget)}
+      onMouseLeave={coarse ? undefined : hover.hide}
+    >
       <FaceDownCard />
-    </div>
+    </button>
   );
 }
 
@@ -569,9 +705,25 @@ export function CharacterHand({
 
 export function OpponentHand({ player }: { player: PlayerState }) {
   const slots = handSlots(player);
+  const revealed = slots.filter((slot) => slot.kind !== 'hidden').length;
+  const countLabel = `${slots.length} carte${slots.length > 1 ? 's' : ''}${revealed > 0 ? ` · ${revealed} révélée${revealed > 1 ? 's' : ''}` : ''}`;
 
   return (
-    <div className="hand-strip opponent-hand" role="group" aria-label="Main de l'adversaire">
+    <div
+      // `crowded` : au-delà de huit dos de cartes, la rangée se serre (chevauchement) au
+      // lieu de passer à la ligne et de grignoter la hauteur du plateau adverse.
+      className={`hand-strip opponent-hand${slots.length > 8 ? ' crowded' : ''}`}
+      role="group"
+      aria-label={`Main de l'adversaire : ${countLabel}`}
+    >
+      {/* Le nombre est ce qu'on veut savoir de la main adverse : il est écrit, plutôt que
+          laissé à compter sur des dos de cartes identiques. */}
+      {slots.length > 0 && (
+        <span className="hand-strip-count" aria-hidden="true" title={countLabel}>
+          <span className="hand-strip-count-icon">🂠</span>
+          {slots.length}
+        </span>
+      )}
       {slots.length === 0 && <span className="hand-strip-empty">Main vide</span>}
       {slots.map((slot) => (
         <div className="hand-strip-slot" key={slot.id}>

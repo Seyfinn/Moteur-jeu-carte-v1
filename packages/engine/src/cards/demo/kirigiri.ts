@@ -17,7 +17,7 @@ export const kirigiri: CharacterCardDef = {
       name: 'Ultimate Détective',
       kind: 'active',
       description:
-        "Permet de voir toute les cartes objets et terrains de l'adversaire",
+        "Permet de voir toutes les cartes objets et terrains de l'adversaire",
       usesPerGame: 1,
       async execute(ctx) {
         ctx.state.players[ctx.ownerId].revealsOpponentUnplayedCards = true;

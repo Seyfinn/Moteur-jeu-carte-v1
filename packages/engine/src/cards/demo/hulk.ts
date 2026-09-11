@@ -15,7 +15,7 @@ export const hulk: CharacterCardDef = {
   abilities: [
     {
       id: 'enervement',
-      name: 'Enervement',
+      name: 'Énervement',
       kind: 'passive',
       description: "A chaque fois que Hulk subit une instance de dégâts, il s'énerve et gagne 30 dégâts d'attaque.",
       trigger: 'afterDamage',
@@ -35,12 +35,12 @@ export const hulk: CharacterCardDef = {
         if (existing) ctx.removeStatus(ctx.sourceInstanceId, ENERVEMENT_STATUS_ID);
         ctx.applyStatus(ctx.sourceInstanceId, {
           statusId: ENERVEMENT_STATUS_ID,
-          label: 'Enervement',
+          label: 'Énervement',
           sourceCardInstanceId: ctx.sourceInstanceId,
           data: { stacks },
         });
 
-        ctx.log(`Enervement : Hulk gagne ${ATK_BONUS_PER_STACK} ATK (total +${stacks * ATK_BONUS_PER_STACK})`, {
+        ctx.log(`Énervement : Hulk gagne ${ATK_BONUS_PER_STACK} ATK (total +${stacks * ATK_BONUS_PER_STACK})`, {
           characterInstanceId: ctx.sourceInstanceId,
           stacks,
         });
@@ -49,7 +49,10 @@ export const hulk: CharacterCardDef = {
   ],
   modifiers: [
     {
+      // Porte le texte de la passive "Énervement" : silencé, Hulk retombe à son ATK de base
+      // sans perdre ses stacks.
       query: 'getEffectiveATK',
+      silencedByPassive: true,
       transform(ctx, current) {
         if (ctx.query['characterInstanceId'] !== ctx.sourceInstanceId) return current;
         const char = findCharacter(ctx.state, ctx.sourceInstanceId);

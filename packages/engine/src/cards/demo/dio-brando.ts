@@ -77,7 +77,7 @@ export const dioBrando: CharacterCardDef = {
       name: 'Za Warudo !',
       kind: 'active',
       description:
-        "Tu rejoues un second tour complet d'affilée une fois ce tour terminé pendant le tour arrêté, les dégâts de Dio sont réduit de 50% Utilisable 1x",
+        "Tu rejoues un second tour complet d'affilée une fois ce tour terminé pendant le tour arrêté, les dégâts de Dio sont réduits de 50% Utilisable 1x",
       usesPerGame: 1,
       async execute(ctx) {
         // Le tour bonus lui-même est un mécanisme du moteur (`endTurn` rouvre un tour pour
@@ -132,7 +132,7 @@ export const dioBrando: CharacterCardDef = {
       id: 'chair-vampirique-passive',
       name: 'Chair Vampirique',
       kind: 'passive',
-      description: "Dio récupère en PV 30% des défâts qu'il inflige avec ses attaques.",
+      description: "Dio récupère en PV 30% des dégâts qu'il inflige avec ses attaques.",
       trigger: 'afterDamage',
       // Doit compter même si Dio frappe depuis le banc (attaque prêtée, lien Jacob & Essau).
       usableFromBench: true,

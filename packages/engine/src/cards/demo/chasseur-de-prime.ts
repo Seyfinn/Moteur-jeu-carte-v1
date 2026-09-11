@@ -11,7 +11,7 @@ export const chasseurDePrime: ObjectCardDef = {
   name: 'Chasseur De Prime',
   equipment: true,
   description:
-    " Le porteur doit mettre KO deux personnages adverses s'il réussis le porteur gagne définitivement +40 ATK et 50 de Shield. ",
+    " Le porteur doit mettre KO deux personnages adverses s'il réussit le porteur gagne définitivement +40 ATK et 50 de Shield. ",
   unplayableReason(state, ownerId) {
     const player = state.players[ownerId];
     const ids = [player.activeCharacterInstanceId, ...player.benchCharacterInstanceIds].filter(

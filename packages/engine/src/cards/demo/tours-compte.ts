@@ -13,7 +13,7 @@ export const toursCompte: ObjectCardDef = {
   equipment: true,
   description:
     `Le porteur doit survivre pendant 3 tours de combat au poste actif.
-A la fin de chacun de ces 3 tours tours, le porteur subit 10% HP Max 
+À la fin de chacun de ces 3 tours, le porteur subit 10% HP Max 
 Récompense :  inflige une réduction définitive de -150 PV Max au personnage actif adverse et récupère les 50 HP.`,
   unplayableReason(state, ownerId) {
     const player = state.players[ownerId];

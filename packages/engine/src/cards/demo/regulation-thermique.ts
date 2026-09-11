@@ -9,7 +9,7 @@ export const regulationThermique: TerrainCardDef = {
   type: 'terrain',
   id: 'regulation-thermique',
   name: 'Régulation Thermique',
-  description: `Si une carte alliée à l'effet burn sur elle cela la soigne de 50 HP et annule les dégâts du burn
+  description: `Si une carte alliée a l'effet burn sur elle cela la soigne de 50 HP et annule les dégâts du burn
 `,
   durationTurns: DURATION_TURNS,
   modifiers: [

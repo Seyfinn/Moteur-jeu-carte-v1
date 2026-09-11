@@ -45,7 +45,7 @@ export const kaynAssassin: CharacterCardDef = {
       id: 'disciple-de-l-ombre',
       name: "Disciple de l'ombre",
       kind: 'passive',
-      description: 'Les attaques de kayn infligent 25% des hp max en dégâts bonus.',
+      description: 'Les attaques de Kayn infligent 25% des hp max en dégâts bonus.',
       // Purement descriptive : le bonus est appliqué dans l'AttackDef ci-dessus.
       async execute() {},
     },

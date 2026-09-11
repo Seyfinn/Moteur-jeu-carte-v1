@@ -1,9 +1,10 @@
 import type { AbilityDef, AttackDef, CharacterCardDef, EffectContext } from '../types.js';
-import type { CharacterInstance, GameState, PlayerId } from '../../types.js';
+import type { CharacterInstance } from '../../types.js';
 import { otherPlayer } from '../../types.js';
 import { getCurrentHP } from '../../hp.js';
 import { getStatus, hasStatus } from '../../statuses.js';
 import { getCharacterCard } from '../registry.js';
+import { isRelaunchable } from './shared.js';
 
 const DAGUE_ATK = 45;
 /** « Chrollo perd 25 % de ses PV actuels au début de chacun de tes tours ». */
@@ -19,6 +20,13 @@ const SEAL_STATUS_ID = 'chrollo-scellement';
 /** Marque portée par Chrollo tant qu'un livre est ouvert : `data.victimInstanceId`. */
 const BOOK_STATUS_ID = 'chrollo-livre-ouvert';
 
+/**
+ * Clé de `ctx.scratch` par laquelle « Actif volé » transmet à son `endsTurn` ce que la
+ * capacité volée coûtait à sa propriétaire (cf. CLAUDE.md, pattern "Voracity") : `match.ts`
+ * passe le MÊME contexte à `execute` et à `endsTurn`, et évalue le second après le premier.
+ */
+const STOLEN_ENDS_TURN = 'chrollo:stolenEndsTurn';
+
 /** La victime actuellement scellée par ce Chrollo, si elle est toujours sur le plateau. */
 function sealedVictim(ctx: EffectContext): CharacterInstance | undefined {
   const self = ctx.getCharacter(ctx.sourceInstanceId);
@@ -33,9 +41,20 @@ function sealedVictim(ctx: EffectContext): CharacterInstance | undefined {
   return onBoard ? victim : undefined;
 }
 
+/**
+ * Une entrée volée s'exécute AVEC CHROLLO POUR SOURCE : sa propre condition doit donc tenir
+ * pour lui, ici et maintenant (`isRelaunchable`, partagé avec le Spell Thief de Zoé). Un
+ * compteur qui vit chez sa victime ne le suit pas -- sans ce test, voler « Cycle 4 - Soleil »
+ * à Escanor lui offrait 150 ATK à chaque tour en court-circuitant tout le cycle qui la
+ * conditionne.
+ */
+const usableByChrollo = isRelaunchable;
+
 /** L'attaque volée, telle qu'elle est aujourd'hui : lue sur la carte de la victime à chaque coup. */
-function stolenAttack(state: GameState, ownerId: PlayerId, sourceInstanceId: string): AttackDef | undefined {
-  const self = state.players[ownerId].characters[sourceInstanceId];
+function stolenAttack(ctx: EffectContext): AttackDef | undefined {
+  const state = ctx.state;
+  const ownerId = ctx.ownerId;
+  const self = state.players[ownerId].characters[ctx.sourceInstanceId];
   if (!self) return undefined;
   const book = getStatus(self, BOOK_STATUS_ID);
   const victimId = book?.data?.['victimInstanceId'];
@@ -44,7 +63,9 @@ function stolenAttack(state: GameState, ownerId: PlayerId, sourceInstanceId: str
   const enemy = state.players[otherPlayer(ownerId)];
   const victim = enemy.characters[victimId];
   if (!victim || !hasStatus(victim, SEAL_STATUS_ID)) return undefined;
-  return getCharacterCard(victim.cardId).attacks.find((a) => a.id === attackId);
+  const attack = getCharacterCard(victim.cardId).attacks.find((a) => a.id === attackId);
+  // Attaque volée inutilisable en l'état : Chrollo retombe sur sa Dague de Ben.
+  return attack && usableByChrollo(attack, ctx) ? attack : undefined;
 }
 
 /** La capacité active volée, même principe. */
@@ -53,7 +74,8 @@ function stolenAbility(ctx: EffectContext): AbilityDef | undefined {
   const self = ctx.getCharacter(ctx.sourceInstanceId);
   const abilityId = getStatus(self, BOOK_STATUS_ID)?.data?.['stolenAbilityId'];
   if (!victim || typeof abilityId !== 'string') return undefined;
-  return getCharacterCard(victim.cardId).abilities.find((a) => a.id === abilityId);
+  const ability = getCharacterCard(victim.cardId).abilities.find((a) => a.id === abilityId);
+  return ability && usableByChrollo(ability, ctx) ? ability : undefined;
 }
 
 export const chrolloLucilfer: CharacterCardDef = {
@@ -75,7 +97,7 @@ export const chrolloLucilfer: CharacterCardDef = {
         // 45 ATK ». Un modifier getEffectiveATK qui corrigerait l'affichage fausserait le
         // calcul de l'attaque déléguée (elle repartirait de sa propre base, déjà décalée).
         // Le journal, lui, annonce le vrai nom à chaque coup.
-        const stolen = stolenAttack(ctx.state, ctx.ownerId, ctx.sourceInstanceId);
+        const stolen = stolenAttack(ctx);
         if (stolen) {
           ctx.log(`Chrollo Lucilfer utilise ${stolen.name} (volée)`, {
             kind: 'attack',
@@ -117,8 +139,13 @@ Tant que la carte est scellée, Chrollo perd 25 % de ses PV actuels au début de
 
         // Chrollo choisit ce qu'il vole, quand la carte offre plusieurs entrées.
         const victimCard = getCharacterCard(victim.cardId);
-        const stealableAttacks = victimCard.attacks;
-        const stealableAbilities = victimCard.abilities.filter((a) => a.kind === 'active' && !a.trigger);
+        // Ne proposer que ce que Chrollo pourra réellement porter : une entrée dont la
+        // condition s'appuie sur un compteur propre à la victime (le cycle d'Escanor) ne
+        // s'ouvrira jamais pour lui, la lui offrir serait un piège.
+        const stealableAttacks = victimCard.attacks.filter((a) => usableByChrollo(a, ctx));
+        const stealableAbilities = victimCard.abilities.filter(
+          (a) => a.kind === 'active' && !a.trigger && usableByChrollo(a, ctx)
+        );
 
         let stolenAttackId = stealableAttacks[0]?.id;
         if (stealableAttacks.length > 1) {
@@ -184,6 +211,11 @@ Tant que la carte est scellée, Chrollo perd 25 % de ses PV actuels au début de
       condition(ctx) {
         return !!stolenAbility(ctx);
       },
+      // Chrollo rejoue la capacité telle qu'elle est, coût compris : celle qui fermait le
+      // tour de sa propriétaire ("Manipulation" de Makima) ferme aussi le sien.
+      endsTurn(ctx) {
+        return ctx.scratch[STOLEN_ENDS_TURN] === true;
+      },
       async execute(ctx) {
         const stolen = stolenAbility(ctx);
         if (!stolen) return;
@@ -195,6 +227,11 @@ Tant que la carte est scellée, Chrollo perd 25 % de ses PV actuels au début de
           abilityId: stolen.id,
         });
         await stolen.execute(ctx);
+
+        // Évalué après coup, sur le même contexte, exactement comme `match.ts` le ferait
+        // pour la capacité d'origine.
+        const cost = stolen.endsTurn;
+        ctx.scratch[STOLEN_ENDS_TURN] = typeof cost === 'function' ? cost(ctx) : cost === true;
       },
     },
     {

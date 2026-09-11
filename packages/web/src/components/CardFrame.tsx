@@ -32,6 +32,7 @@ export function CardFrame({
   highlight,
   dimmed,
   unique,
+  selected,
   targetable,
   targeted,
   footer,
@@ -39,6 +40,7 @@ export function CardFrame({
   onClick,
   hoverProps,
   title,
+  ariaLabel,
   className,
   rootRef,
   hideName,
@@ -50,6 +52,12 @@ export function CardFrame({
   orientation?: 'portrait' | 'landscape';
   highlight?: boolean;
   dimmed?: boolean;
+  /**
+   * Carte dont le mini-menu est ouvert (un réserviste qu'on commande). Distinct de
+   * `highlight` : « en jeu » est un état de fond, « sélectionnée » est une réponse à un
+   * clic, et les deux se cumulent sur la même carte.
+   */
+  selected?: boolean;
   /** Marks the card as limited to a single copy per deck (a small corner badge). */
   unique?: boolean;
   /** Cible légale du ciblage en cours : halo vert et curseur de visée. */
@@ -62,6 +70,11 @@ export function CardFrame({
   onClick?: () => void;
   hoverProps?: HoverHandlers;
   title?: string;
+  /**
+   * Nom annoncé au clavier / lecteur d'écran à la place du seul `name` : un personnage
+   * y ajoute ses PV, son bouclier et ses statuts, pour que la carte se lise sans la voir.
+   */
+  ariaLabel?: string;
   /**
    * Classes que l'appelant ajoute au cadre : mise en scène d'un impact, ambiance d'un
    * statut... Elles doivent porter sur la CARTE elle-même (son illustration, sa position),
@@ -81,6 +94,7 @@ export function CardFrame({
   if (orientation === 'landscape') classes.push('tcg-card-landscape');
   if (highlight) classes.push('highlight');
   if (dimmed) classes.push('dimmed');
+  if (selected) classes.push('selected');
   if (onClick) classes.push('clickable');
   if (targetable) classes.push('targetable');
   if (targeted) classes.push('targeted');
@@ -105,7 +119,9 @@ export function CardFrame({
       onKeyDown={onKeyDown}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
-      aria-label={onClick ? name : undefined}
+      aria-label={onClick ? (ariaLabel ?? name) : undefined}
+      // Pendant un ciblage, la carte est un bouton à bascule : « retenue » ou non.
+      aria-pressed={onClick && targetable ? Boolean(targeted) : undefined}
       title={title}
       {...hoverProps}
     >
@@ -123,7 +139,9 @@ export function CardFrame({
           )}
         </span>
       )}
-      <CardArt cardId={cardId} kind={kind} />
+      {/* Le cadre-bouton porte déjà le nom : l'illustration se tait alors, sinon la carte
+          était annoncée deux fois. Sans bouton, c'est elle qui nomme la carte. */}
+      <CardArt cardId={cardId} kind={kind} name={name} decorative={Boolean(onClick)} />
       {/* Une seule structure DOM pour les deux orientations : en portrait la CSS rend cette
           colonne transparente (`display: contents`), en paysage elle devient le panneau
           d'infos posé à droite de l'illustration. */}

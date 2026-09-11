@@ -108,7 +108,9 @@ export const levi: CharacterCardDef = {
     {
       // Le pendant déclaratif de "Traque" : c'est la carte de Levi qui s'autorise le banc,
       // pour que toute autre requête de ciblage le sache aussi.
+      // Porte le texte de la passive "Traque" : silencé, Levi ne voit plus le banc.
       query: 'canTargetBench',
+      silencedByPassive: true,
       vote(ctx) {
         if (ctx.query['sourceInstanceId'] !== ctx.sourceInstanceId) return undefined;
         const enemy = ctx.state.players[otherPlayer(ctx.sourceOwnerId)];

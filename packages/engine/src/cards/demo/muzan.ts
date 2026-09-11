@@ -41,7 +41,7 @@ export const muzan: CharacterCardDef = {
       name: 'Sang Maudit',
       kind: 'passive',
       description:
-        "Lorsque muzan est sur le poste actif, poison s'applique sous forme de réduction de HP max",
+        "Lorsque Muzan est sur le poste actif, poison s'applique sous forme de réduction de HP max",
       // Purement descriptif : la logique vit dans le modifier 'poisonTicksAsValeurLock'
       // ci-dessous, consulté directement par tickStatusesAtTurnStart (statuses.ts) à
       // chaque tic de poison -- il n'y a pas d'event dédié à écouter ici.
@@ -50,7 +50,10 @@ export const muzan: CharacterCardDef = {
   ],
   modifiers: [
     {
+      // Porte le texte de la passive "Sang Maudit" : silencé, le poison redevient des
+      // dégâts soignables ordinaires.
       query: 'poisonTicksAsValeurLock',
+      silencedByPassive: true,
       isActive(ctx) {
         return ctx.state.players[ctx.sourceOwnerId].activeCharacterInstanceId === ctx.sourceInstanceId;
       },

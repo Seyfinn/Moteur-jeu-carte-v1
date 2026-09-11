@@ -98,7 +98,7 @@ export const makima: CharacterCardDef = {
       id: 'bang',
       name: 'Bang !',
       baseATK: BANG_BASE_ATK,
-      description: 'Inflige 30 dégâts de plus par compétence alliée scellé (sacrifice)',
+      description: 'Inflige 30 dégâts de plus par compétence alliée scellée (sacrifice)',
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;

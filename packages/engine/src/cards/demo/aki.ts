@@ -157,7 +157,10 @@ S'il effectue une Atk : Gagne 20 HP `,
   modifiers: [
     {
       // "Vision du Futur" : les +40 par objet adverse, appliqués à la prochaine attaque.
+      // Porte le texte de la passive "Vision du Futur" : silencé, le bonus accumulé ne
+      // s'applique plus (il reste en réserve, la lecture du jeu n'est pas effacée).
       query: 'getEffectiveATK',
+      silencedByPassive: true,
       transform(ctx, current) {
         if (ctx.query['characterInstanceId'] !== ctx.sourceInstanceId) return current;
         const self = ctx.state.players[ctx.sourceOwnerId].characters[ctx.sourceInstanceId];

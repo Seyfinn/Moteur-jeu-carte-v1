@@ -102,6 +102,9 @@ const VOTE_LABELS: Record<string, string> = {
   'status:borrowed-attack': "limité à l'attaque empruntée",
   'status:silence-active': 'capacités actives réduites au silence',
   'status:silence-passive': 'capacités passives réduites au silence',
+  // 'linked' (Jacob et Essau) : seul celui des deux qui tient le poste actif peut agir.
+  // Sans libellé, le refus s'affichait au joueur sous la forme brute « status:linked ».
+  'status:linked': 'lié : seul celui au poste actif peut agir',
   'default:active-only': 'réservé au personnage actif',
   'default:per-turn-limit': 'déjà utilisée ce tour',
   'default:per-game-limit': 'quota de la partie épuisé',

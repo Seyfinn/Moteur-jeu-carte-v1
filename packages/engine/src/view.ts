@@ -1,4 +1,12 @@
 import { otherPlayer, type GameState, type PlayerId, type PlayerState } from './types.js';
+import type { RngState } from './rng.js';
+
+/**
+ * Ce qui remplace `state.rng` dans toute vue joueur. Une constante figée plutôt qu'une
+ * valeur au hasard : la vue doit rester la même d'un envoi à l'autre tant que rien ne
+ * bouge, sinon chaque re-rendu du client repartirait de zéro sur une différence factice.
+ */
+const REDACTED_RNG: RngState = { seed: 0 };
 
 /**
  * Mode Pioche : personne ne doit connaître l'ORDRE des piles, pas même le propriétaire de
@@ -37,6 +45,13 @@ export function getPlayerView(state: GameState, forPlayerId: PlayerId): GameStat
   // quand "Ultimate Détective" a ouvert la main adverse.
   const base: GameState = {
     ...state,
+    // Le PRNG est déterministe (mulberry32) et sa graine tient dans un seul nombre : la
+    // livrer au client, c'est lui livrer TOUS les tirages à venir de la partie -- critiques,
+    // esquives, jets de pourcentage, pile ou face, carte rendue par le Recycleur. Un joueur
+    // curieux n'a qu'à lire l'état reçu pour savoir si sa prochaine attaque passe. La vue
+    // en porte donc une graine morte : rien côté client ne lit `state.rng`, seul le serveur
+    // fait tourner le moteur.
+    rng: REDACTED_RNG,
     // Journal privé : une carte qui doit informer UN seul camp (la Cible secrète du
     // "Sermet de Vengance" de Gon) pose `data.privateTo` sur sa ligne, et cette ligne
     // n'existe tout simplement pas dans la vue de l'autre. Le client se contente de

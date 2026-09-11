@@ -31,7 +31,12 @@ projet (packages, comment lancer le jeu...), voir [README.md](README.md).
    description ne dit plus vit là. C'est aussi le fichier à relire avant de toucher à une
    carte existante, plutôt que d'en re-déduire le comportement.
 5. Vérifier avec `npm run build -w engine` (typecheck rapide, pas de vrai `tsc -b` à la
-   racine — le tsconfig racine n'est pas configuré pour ça).
+   racine — le tsconfig racine n'est pas configuré pour ça), puis `npm test -w engine`.
+   `test/card-conventions.spec.ts` relit tout le catalogue et échoue précisément sur les
+   oublis des étapes 3 et 4 : `registerCard` manquant, carte absente de `DEMO_ROSTER`
+   (donc introuvable dans le deck-builder), entrée manquante dans `docs/cartes.md`, HP de
+   la doc qui ne suivent plus ceux du code, ids d'attaque/capacité en double. C'est le
+   filet de sécurité du workflow ci-dessus — inutile de re-vérifier ces points à la main.
 6. **Pas de test unitaire par carte par défaut** — la flexibilité du moteur est déjà
    prouvée par la suite existante. N'ajouter un test que si la carte introduit un
    mécanisme réellement nouveau pour le moteur (pas juste une recombinaison de patterns
@@ -391,6 +396,14 @@ autour de l'appel à `evolveCharacter` -- il n'y a volontairement pas de champ d
   grise la carte avec exactement la même (`describeObjectUnplayable` dans `queries.ts`).
   Réserver `condition(ctx)` aux refus qui ont réellement besoin de l'`EffectContext` (leur
   message d'erreur, lui, reste générique).
+- **`condition(ctx)` sur une attaque ou une capacité est reflété côté client** : le panneau
+  de commandes la grise avec « conditions non remplies » au lieu de la proposer puis de la
+  faire rebondir en erreur (`memberConditionHolds` dans `preview.ts`, rejoué sur la vue du
+  joueur). Deux conséquences pour qui écrit une carte : le `condition` doit rester un
+  **prédicat pur** (il tourne sur un `EffectContext` en lecture seule -- toute tentative de
+  muter quoi que ce soit lève), et il ne doit pas dépendre d'une information cachée au
+  joueur, sinon sa propre carte se grise à tort chez lui. C'est ce qui fait qu'Escanor
+  n'affiche jouable que l'attaque de son cycle en cours.
 - **Jet à pourcentage** (« 33% de chance de désarmer ») : `ctx.rollChance(percent, label,
   { characterInstanceId })` et **jamais** `chancePercent(ctx.state.rng, x)` en direct. La
   première tire *et* annonce le jet (`kind: 'chance-roll'`), ce qui fait tourner une roue
@@ -763,14 +776,35 @@ la couleur et les animations de plateau. Une nouvelle entrée de journal digne d
 en avant doit donc porter un `kind` ; sinon elle s'affiche en ligne neutre, ce qui est très
 bien pour du détail.
 
-Trois `kind` déclenchent une animation plein plateau, visible par **les deux** joueurs
+Ces `kind` déclenchent une animation plein plateau, visible par **les deux** joueurs
 (`web/components/gameEvents.ts`) :
 
-- `play-object` / `play-terrain` / `use-ability` → la carte concernée est projetée en très
-  grand au centre pendant ~1,7 s (`CardSpotlight`). Plusieurs cartes jouées d'affilée
+- `play-object` / `play-terrain` / `use-ability` / `evolve` → la carte concernée est projetée
+  en très grand au centre pendant ~1,7 s (`CardSpotlight`). Plusieurs cartes jouées d'affilée
   s'enchaînent au lieu de se superposer.
 - `chance-roll` (et les jets d'esquive/critique portés par une carte) → une roue de
-  pourcentage tourne et s'arrête sur le résultat réel (`ProcWheel`).
+  pourcentage tourne et s'arrête sur le résultat réel (`ProcWheel`). Le cadran dessine la
+  vraie probabilité, et son moyeu porte l'illustration du personnage nommé par
+  `characterInstanceId` : un jet annoncé sans ce champ est un jet dont le joueur ne saura
+  pas de qui il parle. Les roues se SUIVENT au lieu de s'empiler -- une carte qui lance
+  plusieurs jets d'affilée (Escanor) les verra défiler l'un après l'autre, ~2,2 s chacun.
+  Les deux durées vivent dans `PROC_SPIN_MS` / `PROC_HOLD_MS` (gameEvents.ts) et
+  redescendent au CSS en variables : il n'y a plus de durée de jet à changer ailleurs.
+- `damage` → l'attaquant bondit, la cible encaisse, et un **trait de frappe** relie les deux
+  cartes (`BoardFx`). La source du coup n'est pas dans l'entrée `damage` : elle est déduite
+  de l'entrée d'action (`attack` / `use-ability`) qui la précède **dans le même lot**. Une
+  carte qui inflige des dégâts sans journaliser d'action juste avant n'aura donc ni bond ni
+  trait -- seulement la secousse de la cible, ce qui est le bon rendu pour un tic de poison
+  ou un effet de terrain.
+- `critical` → le coup qui SUIT dans le même lot passe en doré (décharge, chiffre, trait) et
+  fait flasher l'écran, en plus de la déflagration posée sur la cible.
+- `evolve` / `revive` / `shield-absorb` → un éclat dessiné par-dessus la carte concernée
+  (`CardFlourishes`), calé sur son rectangle : éclosion, colonne de lumière, halo de bouclier.
+
+Les effets qui doivent **déborder** d'une carte (anneau, éclat, trait entre deux cartes)
+vivent dans un calque fixe posé sur le plateau, et jamais dans le calque d'effets de la
+carte : `.tcg-card` est en `overflow: hidden` et les rognerait net. Leur position vient des
+rectangles relevés à chaque rendu (`cardRects.ts`), comme pour le vol d'une carte morte.
 
 ## Pull requests : description vide
 

@@ -120,10 +120,11 @@ interface EasterEggRun {
  * Programme les passages du clin d'œil. Il n'est monté que pendant sa traversée : c'est
  * ce démontage qui garantit que l'animation CSS repart bien du début au passage suivant.
  */
-function useEasterEgg(): EasterEggRun | null {
+function useEasterEgg(enabled: boolean): EasterEggRun | null {
   const [run, setRun] = useState<EasterEggRun | null>(null);
 
   useEffect(() => {
+    if (!enabled) return;
     let timer: ReturnType<typeof setTimeout>;
     let seq = 0;
 
@@ -143,21 +144,27 @@ function useEasterEgg(): EasterEggRun | null {
     schedule(FIRST_APPEARANCE_MS);
     // Un seul minuteur est armé à la fois, et `timer` porte toujours le dernier en date.
     return () => clearTimeout(timer);
-  }, []);
+  }, [enabled]);
 
   return run;
 }
 
-export function LobbyBackground() {
+/**
+ * `quiet` : le même décor, en retrait. Le deck-builder pose ses propres cartes par
+ * centaines à l'écran -- le champ qui dérive derrière doit alors s'effacer, sinon deux
+ * grilles de cartes se disputent le regard. Le clin d'œil s'y tait aussi : on y reste
+ * longtemps, il finirait par ne plus être une trouvaille.
+ */
+export function LobbyBackground({ quiet = false }: { quiet?: boolean } = {}) {
   const cards = useMemo(() => {
     const rand = makeRandom(SESSION_SEED);
     // Tirage dans la totalité du pool -- personnages, objets et terrains confondus.
     return buildLayout(shuffle(listDeckPool().map((entry) => entry.id), rand), rand);
   }, []);
-  const easterEgg = useEasterEgg();
+  const easterEgg = useEasterEgg(!quiet);
 
   return (
-    <div className="lobby-bg" aria-hidden="true">
+    <div className={quiet ? 'lobby-bg lobby-bg-quiet' : 'lobby-bg'} aria-hidden="true">
       <div className="lobby-bg-field">
         {cards.map((card) => (
           <div

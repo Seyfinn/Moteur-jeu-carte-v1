@@ -1,5 +1,6 @@
 import type { CharacterCardDef, EffectContext } from '../types.js';
 import { getCharacterCard } from '../registry.js';
+import { isRelaunchable } from './shared.js';
 import { hasStatus } from '../../statuses.js';
 
 const BASE_ATK = 50;
@@ -24,6 +25,13 @@ const SPELL_THIEF_COOLDOWN_REMAINING_TURNS = SPELL_THIEF_COOLDOWN_EFFECTIVE_TURN
 const SPELL_THIEF_COOLDOWN_STATUS_ID = 'zoe-spell-thief-cooldown';
 
 /**
+ * Clé de `ctx.scratch` par laquelle `execute` transmet à `endsTurn` ce que la capacité
+ * volée coûtait à son propriétaire (cf. CLAUDE.md, pattern "Voracity"). `match.ts` passe
+ * le MÊME contexte aux deux, et évalue `endsTurn` après `execute`.
+ */
+const STOLEN_ENDS_TURN = 'zoe:stolenEndsTurn';
+
+/**
  * La capacité active que Zoé peut voler à l'instant T, ou `undefined`. Le moteur retient
  * lui-même la dernière capacité **activée manuellement** par chaque camp
  * (`PlayerState.lastAbilityUsed`, écrite avant l'exécution) : une capacité qui stun ou
@@ -41,7 +49,17 @@ function stealableAbility(ctx: EffectContext) {
   // Le personnage d'origine a pu changer de forme depuis : on ne vole que ce qu'il porte
   // encore réellement.
   const ability = getCharacterCard(caster.cardId).abilities.find((a) => a.id === record.abilityId);
-  return ability ? { ability, casterInstanceId: caster.instanceId } : undefined;
+  if (!ability) return undefined;
+  // La capacité sera relancée AVEC ZOÉ POUR SOURCE : ses propres conditions doivent donc
+  // tenir pour elle, ici et maintenant (`isRelaunchable`, partagé avec l'Actif volé de
+  // Chrollo -- et porteur du garde de ré-entrance qui évite qu'une Zoé face à une autre Zoé
+  // ne se demandent mutuellement si elles seraient jouables). Sans ce test, Spell Thief
+  // brûlait ses 3 tours de recharge sur une capacité qui n'avait rien à faire dans les mains
+  // de Zoé (un « Actif volé » sans livre ouvert, un Hook sans banc adverse, une Manipulation
+  // sans sacrifice), voire se retournait contre elle (le Living Forge d'Ornn l'immobilisant
+  // 3 tours sans avoir récupéré le moindre matériau).
+  if (!isRelaunchable(ability, ctx)) return undefined;
+  return { ability, casterInstanceId: caster.instanceId };
 }
 
 export const zoe: CharacterCardDef = {
@@ -82,6 +100,11 @@ export const zoe: CharacterCardDef = {
       kind: 'active',
       description: 'Zoé peut switch avec un personnage du banc allié, gratuitement. 2 utilisations maximum.',
       usesPerGame: PORTAL_USES_PER_GAME,
+      // Sans banc allié, il n'y a personne avec qui échanger : la capacité était activable
+      // quand même et consommait l'une des deux charges de la partie pour rien.
+      condition(ctx) {
+        return ctx.getBench(ctx.ownerId).length > 0;
+      },
       async execute(ctx) {
         const bench = ctx.getBench(ctx.ownerId);
         if (bench.length === 0) return;
@@ -100,11 +123,17 @@ export const zoe: CharacterCardDef = {
       id: 'spell-thief',
       name: 'Spell Thief',
       kind: 'active',
-      description: "Zoé peut récupérer et utiliser la dernière ability utilisé par l'ennemi. Ne peut pas être utilisé pendant 3 tours après avoir été utilisé.",
+      description: "Zoé peut récupérer et utiliser la dernière ability utilisée par l'ennemi. Ne peut pas être utilisée pendant 3 tours après avoir été utilisé.",
       condition(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);
         if (hasStatus(self, SPELL_THIEF_COOLDOWN_STATUS_ID)) return false;
         return !!stealableAbility(ctx);
+      },
+      // Zoé rejoue la capacité telle qu'elle est, coût compris : celle qui fermait le tour
+      // de son propriétaire ("Manipulation" de Makima) ferme aussi celui de Zoé. La réponse
+      // est écrite par `execute` dans `ctx.scratch`, relue ici sur le même contexte.
+      endsTurn(ctx) {
+        return ctx.scratch[STOLEN_ENDS_TURN] === true;
       },
       async execute(ctx) {
         const stolen = stealableAbility(ctx);
@@ -125,6 +154,11 @@ export const zoe: CharacterCardDef = {
           stolenFrom: stolen.casterInstanceId,
         });
         await stolen.ability.execute(ctx);
+
+        // Évalué après coup, sur le même contexte, exactement comme `match.ts` le ferait
+        // pour la capacité d'origine.
+        const cost = stolen.ability.endsTurn;
+        ctx.scratch[STOLEN_ENDS_TURN] = typeof cost === 'function' ? cost(ctx) : cost === true;
       },
     },
   ],

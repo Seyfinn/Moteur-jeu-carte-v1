@@ -22,7 +22,7 @@ export const autelDemoniaque: TerrainCardDef = {
   type: 'terrain',
   id: 'autel-demoniaque',
   name: 'Autel Démoniaque',
-  description: 'Chaque tour, inflige 30 dégâts au personnage actif adverse et 15 dégâts à chaque personnages sur le banc adverse et allié.',
+  description: 'Chaque tour, inflige 30 dégâts au personnage actif adverse et 15 dégâts à chaque personnage sur le banc adverse et allié.',
   durationTurns: DURATION_TURNS,
   abilities: [
     {

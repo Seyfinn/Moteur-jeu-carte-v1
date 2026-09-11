@@ -33,6 +33,9 @@ export {
   tickStatusesAtTurnStart,
 } from './statuses.js';
 export * from './queries.js';
+// Évaluation « à blanc » d'un `condition()` d'attaque/capacité : c'est ce qui permet au
+// client de griser une action que le serveur refuserait (les cycles d'Escanor...).
+export { memberConditionHolds } from './preview.js';
 export { checkWinCondition, findCharacterOwner } from './zones.js';
 export { getCharacterStats } from './stats.js';
 export { getPlayerView } from './view.js';

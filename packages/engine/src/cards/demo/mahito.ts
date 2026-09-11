@@ -53,7 +53,7 @@ export const mahito: CharacterCardDef = {
       id: 'marque',
       name: 'Marque',
       kind: 'passive',
-      description: 'La cible ne peut plus jamais soigner ces PV.',
+      description: 'La cible ne peut plus jamais soigner ses PV.',
       // Purement descriptif : implémenté directement dans Paume Transfiguratrice, qui pose
       // le statut générique 'unhealable' sur la cible touchée (voir statuses.ts).
       async execute() {},

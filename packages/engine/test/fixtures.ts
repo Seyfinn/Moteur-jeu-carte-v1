@@ -453,6 +453,32 @@ const fxStickyObject: ObjectCardDef = {
 
 let registered = false;
 
+/**
+ * Test-only: retire des HP max à l'actif adverse via `ctx.applyValeurLock`, assez pour le
+ * tuer d'un coup. Sert à vérifier qu'un KO obtenu par valeur lock nomme bien son tueur --
+ * les passives « sur kill » et le compteur de kills en dépendent (voir CLAUDE.md).
+ */
+const fxSoulEater: CharacterCardDef = {
+  type: 'character',
+  id: 'fx-soul-eater',
+  name: 'Fixture Soul Eater',
+  baseMaxHP: 100,
+  attacks: [],
+  abilities: [
+    {
+      id: 'devour',
+      name: 'Devour',
+      kind: 'active',
+      description: "Strips 500 max HP off the enemy active through ctx.applyValeurLock -- lethal on any fixture.",
+      async execute(ctx) {
+        const target = ctx.getActive(ctx.opponentId);
+        if (!target) return;
+        await ctx.applyValeurLock(target.instanceId, 500);
+      },
+    },
+  ],
+};
+
 export function registerTestFixtures(): void {
   if (registered) return;
   registered = true;
@@ -475,6 +501,7 @@ export function registerTestFixtures(): void {
   registerCard(fxUntouchable);
   registerCard(fxStickyObject);
   registerCard(fxDecoy);
+  registerCard(fxSoulEater);
 }
 
 export const FX_ROSTER: RosterConfig = {
@@ -553,6 +580,13 @@ export const UNTOUCHABLE_ROSTER: RosterConfig = {
   terrainCardIds: [],
 };
 
+/** Un dévoreur face à des cartes fragiles : un valeur lock létal, pour vérifier l'attribution du kill. */
+export const SOUL_EATER_ROSTER: RosterConfig = {
+  characterCardIds: [fxSoulEater.id, fxTank.id],
+  objectCardIds: [],
+  terrainCardIds: [],
+};
+
 export {
   fxStriker,
   fxTank,
@@ -569,4 +603,5 @@ export {
   fxUntouchable,
   fxStickyObject,
   fxDecoy,
+  fxSoulEater,
 };

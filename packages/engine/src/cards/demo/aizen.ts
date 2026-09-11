@@ -43,7 +43,7 @@ export const aizen: CharacterCardDef = {
       id: 'inversion-de-la-realite',
       name: 'Inversion de la Réalité',
       kind: 'active',
-      description: 'Inverse tout les effets/statuts du personnage actif adverse avec les siens',
+      description: 'Inverse tous les effets/statuts du personnage actif adverse avec les siens',
       async execute(ctx) {
         const opponentActive = ctx.getActive(ctx.opponentId);
         if (!opponentActive) return;
@@ -71,7 +71,9 @@ export const aizen: CharacterCardDef = {
     {
       // "Hypnose Absolue" : requête générique du moteur -- le pipeline de dégâts tire le
       // pourcentage et demande au camp d'Aizen quel personnage du banc encaisse à sa place.
+      // Porte le texte de la passive "Hypnose Absolue" : silencé, Aizen encaisse lui-même.
       query: 'getDamageRedirectPercent',
+      silencedByPassive: true,
       transform(ctx, current) {
         if (ctx.query['targetInstanceId'] !== ctx.sourceInstanceId) return current;
         return Math.max(current as number, REDIRECT_PERCENT);

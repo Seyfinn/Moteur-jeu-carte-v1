@@ -58,9 +58,16 @@ const HoverCardCtx = createContext<HoverCardApi | null>(null);
  * sur la CSS (`--ins-panel-w`), parce que les deux valeurs avaient déjà divergé une fois
  * (340 en JS, 360 en CSS) et que le panneau se posait alors 20 px trop à droite, à cheval
  * sur le banc. Un seul chiffre, un seul endroit où le changer.
+ *
+ * La hauteur suit la même règle : le plafond « confortable » vit dans la CSS
+ * (`--ins-panel-max-h`, sur `.ins-panel`), et le JS n'y ajoute que la contrainte qu'il est
+ * seul à connaître -- le haut de la main du joueur. Un `PANEL_MAX_HEIGHT = 460` recopié ici
+ * écrasait silencieusement les 860 px de la feuille de style, et la fiche d'un personnage à
+ * trois attaques défilait alors qu'elle avait la place de tenir entière.
  */
 const PANEL_WIDTH_FALLBACK = 360;
-const PANEL_MAX_HEIGHT = 460;
+/** Hauteur minimale sous laquelle on préfère mordre sur la main plutôt que rendre la fiche illisible. */
+const PANEL_MIN_HEIGHT = 200;
 
 function panelWidth(): number {
   const raw = getComputedStyle(document.documentElement).getPropertyValue('--ins-panel-w');
@@ -76,7 +83,14 @@ function panelWidth(): number {
  */
 export const DECK_PREVIEW_DELAY_MS = 300;
 export const COMBAT_PREVIEW_DELAY_MS = 1000;
-const HIDE_DELAY_MS = 60;
+/**
+ * Délai avant la fermeture au départ de la souris. Il sert de pont entre la carte et le
+ * panneau (on peut y entrer pour faire défiler un long texte) ET de durée au fondu de
+ * sortie : le panneau porte la classe `leaving` pendant ce laps, puis est démonté. Un
+ * survol qui reprend entre-temps (carte voisine) annule le fondu sans rien redémonter --
+ * c'est ce qui évite le clignotement quand on glisse d'une carte à l'autre.
+ */
+const HIDE_DELAY_MS = 120;
 
 interface AnchoredState {
   payload: HoverPayload;
@@ -126,11 +140,19 @@ function clampIntoBand(el: HTMLDivElement | null): void {
   // Même recadrage sur la verticale : la hauteur retenue au rendu était calculée sur un
   // plancher (le haut de la main) relevé avant que la main n'ait fini de se déployer.
   const floor = bandFloor();
-  const maxHeight = Math.max(200, Math.min(PANEL_MAX_HEIGHT, floor - 16));
-  el.style.maxHeight = `${maxHeight}px`;
-  const height = Math.min(rect.height, maxHeight);
+  el.style.maxHeight = floorMaxHeight(floor);
+  const height = Math.min(rect.height, Math.max(PANEL_MIN_HEIGHT, floor - 16));
   const top = Math.min(Math.max(8, rect.top), Math.max(8, floor - height - 8));
   if (Math.abs(top - rect.top) > 0.5) el.style.top = `${top}px`;
+}
+
+/**
+ * Plafond de hauteur : le plus petit entre celui de la CSS et la place au-dessus de la
+ * main. Écrit en `min()` CSS plutôt que calculé ici, pour que la feuille de style reste la
+ * seule à connaître son propre chiffre.
+ */
+function floorMaxHeight(floor: number): string {
+  return `min(var(--ins-panel-max-h), ${Math.max(PANEL_MIN_HEIGHT, floor - 16)}px)`;
 }
 
 function anchoredStyle(rect: DOMRect): CSSProperties {
@@ -143,11 +165,12 @@ function anchoredStyle(rect: DOMRect): CSSProperties {
   const cardIsOnTheRight = rect.left + rect.width / 2 > (band.min + band.max) / 2;
   const left = cardIsOnTheRight ? band.min : Math.max(band.min, band.max - panelWidth());
 
-  // La main du joueur occupe le bas de l'écran : le panneau s'arrête au-dessus d'elle.
+  // La main du joueur occupe le bas de l'écran : le panneau s'arrête au-dessus d'elle. Sa
+  // hauteur réelle n'est pas connue avant le montage : on aligne sur le haut de la carte et
+  // `clampIntoBand` remonte le panneau, avant la peinture, s'il mordait sur la main.
   const floor = bandFloor();
-  const maxHeight = Math.max(200, Math.min(PANEL_MAX_HEIGHT, floor - 16));
-  const top = Math.min(Math.max(8, rect.top), Math.max(8, floor - maxHeight - 8));
-  return { left, top, maxHeight };
+  const top = Math.min(Math.max(8, rect.top), Math.max(8, floor - PANEL_MIN_HEIGHT - 8));
+  return { left, top, maxHeight: floorMaxHeight(floor) };
 }
 
 /**
@@ -156,22 +179,57 @@ function anchoredStyle(rect: DOMRect): CSSProperties {
  * est justement ce qu'on vient lire. Le deck-builder, lui, garde la vignette
  * (`CardPreviewPanel`) -- là-bas la carte n'est pas forcément visible.
  */
-function panelBody(payload: HoverPayload): ReactNode {
+function PanelBody({ payload }: { payload: HoverPayload }) {
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [moreBelow, setMoreBelow] = useState(false);
+
+  const measure = useCallback(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    setMoreBelow(el.scrollTop + el.clientHeight < el.scrollHeight - 2);
+  }, []);
+
+  // React réutilise le même noeud d'une carte à l'autre : sans ça, la fiche de la carte
+  // suivante s'ouvrait déjà défilée là où on avait laissé la précédente. Et un texte plus
+  // long que le panneau doit le dire : le dégradé du bas (`more-below`) signale qu'il reste
+  // à lire, et s'éteint dès qu'on arrive au bout.
+  const identity = payload.id ?? payload.title;
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (el) el.scrollTop = 0;
+    measure();
+  }, [identity, measure]);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [measure]);
+
   return (
     <>
       <header className="ins-head">
         <h3 className="ins-name">{payload.title}</h3>
         {payload.subtitle && <p className="ins-subtitle">{payload.subtitle}</p>}
       </header>
-      <div className="ins-body">{payload.body}</div>
+      <div className={`ins-body-wrap${moreBelow ? ' more-below' : ''}`}>
+        <div className="ins-body" ref={bodyRef} onScroll={measure}>
+          {payload.body}
+        </div>
+      </div>
     </>
   );
 }
 
 export function HoverCardProvider({ children }: { children: ReactNode }) {
   const [anchored, setAnchored] = useState<AnchoredState | null>(null);
+  const [leaving, setLeaving] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const [pinned, setPinned] = useState<PinnedState | null>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  // Où rendre le clavier une fois la fiche épinglée refermée.
+  const focusReturnRef = useRef<HTMLElement | null>(null);
   const hideTimer = useRef<number | null>(null);
   const showTimer = useRef<number | null>(null);
   const visibleRef = useRef(false);
@@ -213,6 +271,7 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
   const show = useCallback(
     (payload: HoverPayload, target: HTMLElement) => {
       clearTimers();
+      setLeaving(false);
       const rect = target.getBoundingClientRect();
       // Passer d'une carte à l'autre ne réarme pas le délai : il ne sert qu'à ne pas
       // ouvrir l'aperçu sous une souris qui ne fait que traverser le plateau.
@@ -235,10 +294,12 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
       window.clearTimeout(showTimer.current);
       showTimer.current = null;
     }
+    if (visibleRef.current) setLeaving(true);
     hideTimer.current = window.setTimeout(() => {
       hideTimer.current = null;
       visibleRef.current = false;
       setAnchored(null);
+      setLeaving(false);
     }, HIDE_DELAY_MS);
   }, []);
 
@@ -246,6 +307,7 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
     if (hideTimer.current === null) return;
     window.clearTimeout(hideTimer.current);
     hideTimer.current = null;
+    setLeaving(false);
   }, []);
 
   const pin = useCallback(
@@ -253,10 +315,27 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
       clearTimers();
       visibleRef.current = false;
       setAnchored(null);
+      setLeaving(false);
+      focusReturnRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       setPinned({ payload });
     },
     [clearTimers]
   );
+
+  const unpin = useCallback(() => {
+    setPinned(null);
+    // Le clavier retourne d'où il vient (la carte cliquée, le bouton du menu d'action) :
+    // sans ça, le focus tombait sur `body` et la navigation au clavier repartait de zéro.
+    const back = focusReturnRef.current;
+    focusReturnRef.current = null;
+    if (back && back.isConnected) back.focus();
+  }, []);
+
+  // Fiche épinglée : le clavier entre dedans dès l'ouverture, sur la croix. C'est ce qui
+  // rend Échap et Tab utiles sans avoir à cliquer d'abord dans la boîte.
+  useEffect(() => {
+    if (pinned) closeRef.current?.focus();
+  }, [pinned]);
 
   const setPreviewDelay = useCallback((ms: number) => {
     delayRef.current = ms;
@@ -284,13 +363,14 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
         clearTimers();
         visibleRef.current = false;
         setAnchored(null);
+        setLeaving(false);
         return;
       }
-      setPinned(null);
+      unpin();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [anchored, pinned, clearTimers]);
+  }, [anchored, pinned, clearTimers, unpin]);
 
   return (
     <HoverCardCtx.Provider value={api}>
@@ -298,24 +378,37 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
 
       {anchored && (
         <div
-          className="ins-panel"
+          className={`ins-panel${leaving ? ' leaving' : ''}`}
           ref={panelRef}
           style={anchoredStyle(anchored.rect)}
           onMouseEnter={cancelHide}
           onMouseLeave={hide}
+          role="tooltip"
+          aria-label={anchored.payload.title}
         >
-          {panelBody(anchored.payload)}
+          <PanelBody payload={anchored.payload} />
         </div>
       )}
 
-      {pinned && <div className="hover-card-backdrop" onClick={() => setPinned(null)} />}
+      {pinned && <div className="hover-card-backdrop" onClick={unpin} />}
       {pinned && (
         // Inspection : rien que la carte, en très grand. Le texte imprimé est sur
         // l'illustration -- le doubler d'un pavé de description à côté ne ferait que voler
         // la place qui la rend lisible. Un payload sans carte (cas rare : une fiche
         // purement textuelle) retombe sur l'ancien encart.
-        <div className={pinned.payload.card ? 'card-inspect' : 'ins-panel pinned'}>
-          <button className="hover-card-close" onClick={() => setPinned(null)} aria-label="Fermer">
+        <div
+          className={pinned.payload.card ? 'card-inspect' : 'ins-panel pinned'}
+          role="dialog"
+          aria-modal="true"
+          aria-label={pinned.payload.title}
+        >
+          <button
+            ref={closeRef}
+            className="hover-card-close"
+            onClick={unpin}
+            aria-label="Fermer (Échap)"
+            title="Fermer (Échap)"
+          >
             ×
           </button>
           {pinned.payload.card ? (
@@ -327,14 +420,14 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
               unique={pinned.payload.card.unique}
             />
           ) : (
-            panelBody(pinned.payload)
+            <PanelBody payload={pinned.payload} />
           )}
           {pinned.payload.actionLabel && (
             <button
               className="hover-card-action"
               onClick={() => {
                 pinned.payload.onAction?.();
-                setPinned(null);
+                unpin();
               }}
             >
               {pinned.payload.actionLabel}

@@ -32,6 +32,11 @@ export const todo: CharacterCardDef = {
         "Permet même depuis le banc de switch 2 cartes alliées utilisable qu'une seule fois",
       usableFromBench: true,
       usesPerGame: 1,
+      // Sans banc allié il n'y a rien à échanger : la capacité était activable quand même
+      // et brûlait son unique utilisation de la partie pour rien.
+      condition(ctx) {
+        return ctx.getBench(ctx.ownerId).length > 0;
+      },
       async execute(ctx) {
         const bench = ctx.getBench(ctx.ownerId);
         if (bench.length === 0) return;

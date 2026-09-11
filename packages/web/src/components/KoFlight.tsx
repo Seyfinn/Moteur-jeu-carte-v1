@@ -3,6 +3,9 @@ import { CardArt } from './CardArt';
 import { graveyardRectKey, readCardRect } from './cardRects';
 import type { KoFlight } from './gameEvents';
 
+/** Éclats projetés quand la carte se brise. Purement décoratif. */
+const KO_SHARD_COUNT = 7;
+
 /**
  * Mort d'un personnage, rejouée par-dessus le plateau.
  *
@@ -38,7 +41,15 @@ function KoGhost({ flight }: { flight: KoFlight }) {
       <div className="ko-ghost-card">
         <CardArt cardId={flight.cardId} kind="character" />
         <span className="ko-ghost-ash" />
+        {/* Éclair blanc du coup fatal : il sépare l'agonie de la désintégration, sinon les
+            deux temps se fondaient l'un dans l'autre. */}
+        <span className="ko-ghost-flash" />
       </div>
+      {/* Éclats projetés au moment où la carte se brise. Dessinés HORS du cadre, qui est en
+          `overflow: hidden` -- à l'intérieur, ils seraient rognés avant d'avoir bougé. */}
+      {Array.from({ length: KO_SHARD_COUNT }, (_, i) => (
+        <span key={i} className="ko-ghost-shard" style={{ ['--shard-i']: i } as CSSProperties} />
+      ))}
     </div>
   );
 }

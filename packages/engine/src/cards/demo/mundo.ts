@@ -20,7 +20,7 @@ export const mundo: CharacterCardDef = {
       id: 'surcroissance',
       name: 'Surcroissance',
       kind: 'passive',
-      description: "Son attaque gagne 10 de dégâts supplémentaire tout les 100hp max qu'il a en plus de ses 400hp max de base.",
+      description: "Son attaque gagne 10 de dégâts supplémentaire tous les 100hp max qu'il a en plus de ses 400hp max de base.",
       // Purement descriptive : le bonus est calculé en continu par le modifier getEffectiveATK
       // ci-dessous à partir de currentMaxHP/baseMaxHP, pas de statut/compteur à maintenir.
       async execute() {},
@@ -34,6 +34,11 @@ export const mundo: CharacterCardDef = {
 Ensuite, il régénère instantanément la moitié de ses hp max.
 Utilisable une fois.`,
       usesPerGame: 1,
+      // À pleine vie, « l'équivalent de ses hp manquant » vaut zéro : la capacité ne faisait
+      // strictement rien tout en consommant son unique utilisation de la partie.
+      condition(ctx) {
+        return ctx.getCharacter(ctx.sourceInstanceId).damage > 0;
+      },
       async execute(ctx) {
         const self = ctx.getCharacter(ctx.sourceInstanceId);
         const missing = self.damage;
@@ -47,7 +52,10 @@ Utilisable une fois.`,
   ],
   modifiers: [
     {
+      // Le texte de la passive "Surcroissance", donc coupé par le silence passif / ultime
+      // comme n'importe quelle autre passive imprimée (cf. CLAUDE.md).
       query: 'getEffectiveATK',
+      silencedByPassive: true,
       transform(ctx, current) {
         if (ctx.query['characterInstanceId'] !== ctx.sourceInstanceId) return current;
         const char = findCharacter(ctx.state, ctx.sourceInstanceId);

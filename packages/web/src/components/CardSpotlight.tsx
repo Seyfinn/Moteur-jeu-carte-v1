@@ -18,8 +18,17 @@ export function CardSpotlights({ spotlights }: { spotlights: Spotlight[] }) {
       {/* La clé porte l'id : deux cartes qui se suivent rejouent bien l'animation d'entrée
           au lieu de se remplacer en silence dans le même noeud. */}
       <div className="card-spotlight" key={current.id}>
+        {/* Gerbe de rayons + onde de choc, DERRIÈRE la carte : c'est ce qui fait qu'une carte
+            jouée entre en scène au lieu d'apparaître. Purement décoratif, aucun texte. */}
+        <span className="card-spotlight-rays" />
+        <span className="card-spotlight-burst" />
         <span className="card-spotlight-action">{current.action}</span>
-        <CardFrame cardId={current.cardId} kind={current.cardKind} name={current.name} size="large" />
+        <div className="card-spotlight-card">
+          <CardFrame cardId={current.cardId} kind={current.cardKind} name={current.name} size="large" />
+          {/* Reflet qui balaie l'illustration une fois posée : le brillant d'une carte qu'on
+              retourne face visible. */}
+          <span className="card-spotlight-shine" />
+        </div>
         {current.detail && <span className="card-spotlight-detail">{current.detail}</span>}
       </div>
     </div>

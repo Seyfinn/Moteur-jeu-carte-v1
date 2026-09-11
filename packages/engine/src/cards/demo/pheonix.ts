@@ -15,13 +15,13 @@ export const pheonix: ObjectCardDef = {
   // sur la carte : un objet au cimetière ne peut porter aucun statut/minuteur.
   equipment: true,
   description:
-    "Tue ce personnage, au bout de 15 tours, le réanime avec 80pv max supplémentaire et 30 d'attaque supplémentaire. Si il ne vous reste plus qu'un personnage en vie. Cette carte ne ferra pas effet.",
+    "Tue ce personnage, au bout de 15 tours, le réanime avec 80pv max supplémentaire et 30 d'attaque supplémentaire. S'il ne vous reste plus qu'un personnage en vie. Cette carte ne fera pas effet.",
   unplayableReason(state, ownerId) {
     const player = state.players[ownerId];
     const aliveCount = [player.activeCharacterInstanceId, ...player.benchCharacterInstanceIds].filter(
       (id) => id !== null
     ).length;
-    // « Si il ne vous reste plus qu'un personnage en vie, cette carte ne ferra pas
+    // « S'il ne vous reste plus qu'un personnage en vie, cette carte ne ferra pas
     // effet » : tuer son dernier personnage, c'est perdre la partie sur-le-champ
     // (checkWinCondition compte les personnages sur le plateau).
     if (aliveCount <= 1) {

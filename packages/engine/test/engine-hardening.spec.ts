@@ -4,13 +4,14 @@ import {
   DECOY_ROSTER,
   ECHO_ROSTER,
   FX_ROSTER,
+  SOUL_EATER_ROSTER,
   TICKER_ROSTER,
   TINY_ROSTER,
   UNTOUCHABLE_ROSTER,
   registerTestFixtures,
 } from './fixtures.js';
 import { createReadyMatch, defaultAnswer, drive, findInstance, settle } from './test-utils.js';
-import type { Match } from '../src/index.js';
+import { describeDenials, getCharacterStats, type Match } from '../src/index.js';
 
 registerTestFixtures();
 
@@ -531,5 +532,55 @@ describe('effect context isolation', () => {
 
     ctxA.scratch['flag'] = true;
     expect(ctxB.scratch['flag']).toBeUndefined();
+  });
+});
+
+describe("attribution d'un KO obtenu par valeur lock", () => {
+  it("nomme le personnage source, comme un KO par degats ordinaires", async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: SOUL_EATER_ROSTER, p2Roster: TINY_ROSTER, seed: 11 },
+      { p1ActiveCardId: 'fx-soul-eater' }
+    );
+    if (match.state.activePlayerId !== 'p1') await drive(match, match.state.activePlayerId, { kind: 'pass' });
+
+    const eater = findInstance(match, 'p1', 'fx-soul-eater');
+    const victim = match.state.players.p2.activeCharacterInstanceId!;
+    await drive(match, 'p1', { kind: 'use-ability', characterInstanceId: eater, abilityId: 'devour' });
+
+    expect(match.state.players.p2.graveyardCharacterInstanceIds).toContain(victim);
+    // Le compteur de kills est alimente par le meme `killerInstanceId` que lisent les
+    // passives « sur kill » : s'il est a 1, l'evenement onCharacterKO a bien nomme le tueur.
+    expect(getCharacterStats(match.state, eater).kills).toBe(1);
+  });
+});
+
+describe('phrases de refus rendues au joueur', () => {
+  it("traduit chaque source interne du moteur, sans jamais laisser passer un id brut", () => {
+    // Un refus sans `reason` retombe sur le libelle de sa source. Une source du moteur qui
+    // n'en a pas s'affichait telle quelle, en clair, dans le message d'erreur du serveur
+    // comme dans l'infobulle « pourquoi est-ce grise ? » de la main.
+    const engineSources = [
+      'status:stun',
+      'status:disarmed',
+      'status:chained',
+      'status:linked',
+      'status:borrowed-attack',
+      'status:silence-active',
+      'status:silence-passive',
+      'default:active-only',
+      'default:per-turn-limit',
+      'default:per-game-limit',
+      'default:objects-per-turn-limit',
+      'default:terrains-per-turn-limit',
+    ];
+    for (const source of engineSources) {
+      expect(describeDenials([{ allow: false, source }]), source).not.toContain(source);
+    }
+  });
+
+  it("laisse une carte parler pour elle-meme quand elle fournit sa propre raison", () => {
+    expect(describeDenials([{ allow: false, source: 'makima-sacrifice', reason: 'scelle par Sacrifice' }])).toBe(
+      'scelle par Sacrifice'
+    );
   });
 });

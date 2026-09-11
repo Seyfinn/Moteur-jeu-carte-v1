@@ -56,7 +56,7 @@ export const akali: CharacterCardDef = {
       id: 'perfect-execution',
       name: 'Perfect Execution',
       kind: 'passive',
-      description: "Si après l'attaque de Akali, l'ennemi est à 20hp ou moins, celui ci meurt immédiatement.",
+      description: "Si après l'attaque de Akali, l'ennemi est à 20hp ou moins, celui-ci meurt immédiatement.",
       // Purement descriptive : la logique vit dans l'AttackDef de Kunaï ci-dessus,
       // pas via un trigger d'event -- afterDamage ne dit pas qui a infligé les
       // dégâts, donc impossible de savoir depuis un trigger séparé si c'est bien

@@ -56,7 +56,7 @@ export const sion: CharacterCardDef = {
     },
     {
       id: 'guerrier-mourant',
-      name: 'Guerrier mourrant',
+      name: 'Guerrier mourant',
       kind: 'passive',
       description: "Lorsqu'il meurt, Sion attaque une dernière fois le personnage au poste actif ennemi.",
       trigger: 'onCharacterKO',

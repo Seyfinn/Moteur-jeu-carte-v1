@@ -2,8 +2,9 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { registerCard, type PlayerId, type RosterConfig } from '../src/index.js';
 import { zoe } from '../src/cards/demo/zoe.js';
 import { soma } from '../src/cards/demo/soma.js';
+import { ornn } from '../src/cards/demo/ornn.js';
 import { registerTestFixtures, FX_ROSTER } from './fixtures.js';
-import { createReadyMatch, drive } from './test-utils.js';
+import { createReadyMatch, drive, findInstance } from './test-utils.js';
 
 let zoeRegistered = false;
 beforeAll(() => {
@@ -12,6 +13,7 @@ beforeAll(() => {
     zoeRegistered = true;
     registerCard(zoe);
     registerCard(soma);
+    registerCard(ornn);
   }
 });
 
@@ -21,6 +23,8 @@ function opponentOf(id: PlayerId): PlayerId {
 
 const ZOE_ROSTER: RosterConfig = { characterCardIds: [zoe.id], objectCardIds: [], terrainCardIds: [] };
 const SOMA_ROSTER: RosterConfig = { characterCardIds: [soma.id], objectCardIds: [], terrainCardIds: [] };
+const ORNN_ROSTER: RosterConfig = { characterCardIds: [ornn.id], objectCardIds: [], terrainCardIds: [] };
+const ZOE_AND_TANK_ROSTER: RosterConfig = { characterCardIds: [zoe.id, 'fx-tank'], objectCardIds: [], terrainCardIds: [] };
 
 describe('Zoé "Spell Thief" (tracks + re-executes the enemy\'s last active ability, Zoé as source)', () => {
   it("re-executes the stolen ability with Zoé as the source (the buff lands on her, not the original caster)", async () => {
@@ -114,5 +118,68 @@ describe('Zoé "Spell Thief" (tracks + re-executes the enemy\'s last active abil
     await drive(match, enemySide, { kind: 'pass' });
     await drive(match, zoeSide, { kind: 'use-ability', characterInstanceId: zoeActiveId, abilityId: 'spell-thief' });
     expect(match.state.players[zoeSide].characters[zoeActiveId]!.statuses.some((s) => s.statusId === 'zoe-spell-thief-cooldown')).toBe(true);
+  });
+  it("refuses an ability whose own condition doesn't hold for Zoé (Ornn's Living Forge without materials)", async () => {
+    // Régression : la capacité volée s'exécute AVEC ZOÉ POUR SOURCE, mais sa condition
+    // n'était jamais consultée. Zoé pouvait donc rejouer Living Forge sans avoir le moindre
+    // matériau -- s'immobilisant 3 tours (chained + disarmed) pour rien, recharge comprise.
+    const match = await createReadyMatch({ p1Name: 'A', p2Name: 'B', p1Roster: ZOE_ROSTER, p2Roster: ORNN_ROSTER, seed: 90 });
+    const zoeSide: PlayerId = 'p1';
+    const ornnSide: PlayerId = opponentOf(zoeSide);
+    if (match.state.activePlayerId !== ornnSide) await drive(match, zoeSide, { kind: 'pass' });
+
+    const ornnId = match.state.players[ornnSide].activeCharacterInstanceId!;
+    const zoeActiveId = match.state.players[zoeSide].activeCharacterInstanceId!;
+
+    // Ornn récupère ses matériaux (son attaque ferme son tour), puis lance Living Forge.
+    await drive(match, ornnSide, { kind: 'attack', characterInstanceId: ornnId, attackId: 'recuperation-de-materiaux' });
+    await drive(match, zoeSide, { kind: 'pass' });
+    await drive(match, ornnSide, { kind: 'use-ability', characterInstanceId: ornnId, abilityId: 'living-forge' });
+    await drive(match, ornnSide, { kind: 'pass' });
+
+    expect(match.state.players[ornnSide].lastAbilityUsed?.abilityId).toBe('living-forge');
+    const attempt = match.applyAction(zoeSide, { kind: 'use-ability', characterInstanceId: zoeActiveId, abilityId: 'spell-thief' });
+    expect(attempt.ok).toBe(false);
+
+    const zoeChar = match.state.players[zoeSide].characters[zoeActiveId]!;
+    expect(zoeChar.statuses.some((s) => s.statusId === 'chained')).toBe(false);
+    expect(zoeChar.statuses.some((s) => s.statusId === 'zoe-spell-thief-cooldown')).toBe(false);
+  });
+
+  it('survives a Zoé facing another Zoé (the two Spell Thiefs must not interrogate each other forever)', async () => {
+    // Rien n'interdit aux deux camps d'aligner leur Zoé. Comme Spell Thief consulte
+    // désormais la condition de ce qu'il vole, et que cette condition est elle-même un
+    // Spell Thief, la question rebondissait d'une Zoé à l'autre jusqu'à faire exploser la
+    // pile : le garde de ré-entrance de `shared.ts::isRelaunchable` coupe la boucle.
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: ZOE_AND_TANK_ROSTER, p2Roster: ZOE_AND_TANK_ROSTER, seed: 92 },
+      { p1ActiveCardId: 'fx-tank', p2ActiveCardId: 'fx-tank' }
+    );
+    const zoeSide: PlayerId = 'p1';
+    const mirrorSide: PlayerId = opponentOf(zoeSide);
+    if (match.state.activePlayerId !== zoeSide) await drive(match, mirrorSide, { kind: 'pass' });
+
+    const ownZoeId = findInstance(match, zoeSide, zoe.id);
+    const mirrorZoeId = findInstance(match, mirrorSide, zoe.id);
+
+    // On donne d'abord quelque chose à voler à la Zoé d'en face, puis les deux camps
+    // amènent leur Zoé au poste actif (le switch ferme le tour).
+    await drive(match, zoeSide, {
+      kind: 'use-ability',
+      characterInstanceId: match.state.players[zoeSide].activeCharacterInstanceId!,
+      abilityId: 'self-buff',
+    });
+    await drive(match, zoeSide, { kind: 'switch', newActiveInstanceId: ownZoeId });
+    await drive(match, mirrorSide, { kind: 'switch', newActiveInstanceId: mirrorZoeId });
+    await drive(match, zoeSide, { kind: 'pass' });
+
+    // La Zoé d'en face vole : sa dernière capacité utilisée devient "spell-thief".
+    await drive(match, mirrorSide, { kind: 'use-ability', characterInstanceId: mirrorZoeId, abilityId: 'spell-thief' });
+    await drive(match, mirrorSide, { kind: 'pass' });
+    expect(match.state.players[mirrorSide].lastAbilityUsed?.abilityId).toBe('spell-thief');
+
+    // Notre Zoé regarde un Spell Thief : refus net, pas de récursion infinie.
+    const attempt = match.applyAction(zoeSide, { kind: 'use-ability', characterInstanceId: ownZoeId, abilityId: 'spell-thief' });
+    expect(attempt.ok).toBe(false);
   });
 });

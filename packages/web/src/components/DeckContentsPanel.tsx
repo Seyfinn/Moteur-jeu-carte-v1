@@ -16,6 +16,17 @@ export const SECTIONS: Array<{ key: DeckSectionKey; type: CardKind; max: number;
 ];
 
 /**
+ * Pictogramme par famille de cartes, partagé par tout ce qui titre une section de deck :
+ * en-tête de section dans l'éditeur, pastille de compte sur la vignette d'un deck. Une
+ * famille se reconnaît ainsi à la même image partout dans le gestionnaire.
+ */
+export const SECTION_ICON: Record<CardKind, string> = {
+  character: '⚔️',
+  object: '🎒',
+  terrain: '🗺️',
+};
+
+/**
  * Les objets se lisent en deux familles très différentes : ceux qui se **lient** à un
  * personnage et restent en jeu, et ceux qui produisent leur effet et partent aussitôt.
  * Les équipements passent devant : ce sont eux qui engagent une place sur un personnage,
@@ -194,6 +205,7 @@ export function SelectedCardTile({
             {onRemove && (
               <button
                 type="button"
+                className="deck-selected-remove"
                 onClick={(e) => {
                   e.stopPropagation();
                   onRemove();
@@ -290,20 +302,39 @@ export function DeckContentsPanel({
     return map;
   }, [pool]);
 
+  // Total du deck à côté du titre : les trois compteurs de famille se lisent un par un, le
+  // « 17/17 » dit d'un coup si le deck est plein.
+  const total = SECTIONS.reduce((sum, section) => sum + deck[section.key].length, 0);
+  const totalMax = SECTIONS.reduce((sum, section) => sum + section.max, 0);
+
   return (
     <CardPreviewProvider>
-      <aside className="deck-selected-panel">
-        <h2>{title}</h2>
+      <aside className="deck-selected-panel" aria-label={title}>
+        <h2>
+          {title}
+          <span className={total >= totalMax ? 'deck-selected-total full' : 'deck-selected-total'}>
+            {total}/{totalMax}
+          </span>
+        </h2>
         {SECTIONS.map((section) => {
           const ids = deck[section.key];
           const groups = groupByCount(ids, (id) => poolById.get(id)?.name ?? id);
+          const full = ids.length >= section.max;
           return (
-            <div className="deck-selected-group" key={section.key}>
+            <div className={`deck-selected-group deck-section-${section.type}`} key={section.key}>
               <h3>
-                {section.title} <span className="deck-section-count">({ids.length}/{section.max})</span>
+                <span className="deck-selected-group-icon" aria-hidden="true">
+                  {SECTION_ICON[section.type]}
+                </span>
+                {section.title}
+                <span className={full ? 'deck-section-count full' : 'deck-section-count'}>
+                  {ids.length}/{section.max}
+                </span>
               </h3>
               {groups.length === 0 ? (
-                <p className="subtitle">Aucune carte pour l'instant.</p>
+                <p className="deck-selected-empty">
+                  {onRemove ? `Ajoutez des ${section.title.toLowerCase()} depuis les cartes disponibles.` : 'Aucune carte.'}
+                </p>
               ) : (
                 // Même découpage que le pool du deck-builder : équipements d'abord, objets
                 // basiques ensuite, pour qu'on lise son deck comme on l'a composé.
