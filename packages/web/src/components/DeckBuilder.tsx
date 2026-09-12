@@ -23,7 +23,6 @@ import {
   saveDecks,
   type Deck,
 } from '../decks';
-import { usePointerCoarse } from '../hooks/usePointerCoarse';
 import { getCloudUserName, loadDecksFromCloud, saveDeckToCloud, setCloudUserName } from '../api/cloudDecks';
 
 type SortValue = 'hp-desc' | 'hp-asc' | 'name-asc' | 'name-desc' | 'duration-desc' | 'duration-asc';
@@ -127,7 +126,6 @@ const NOTICE_MS = 3000;
  */
 function EvolutionStrip({ forms }: { forms: EvolutionFormEntry[] }) {
   const preview = useCardPreview();
-  const coarse = usePointerCoarse();
   if (forms.length === 0) return null;
 
   return (
@@ -153,15 +151,7 @@ function EvolutionStrip({ forms }: { forms: EvolutionFormEntry[] }) {
               name={form.name}
               size="small"
               title={`${form.name} — forme évoluée, non sélectionnable`}
-              onClick={coarse ? () => preview.showCentered(asEntry) : undefined}
-              hoverProps={
-                coarse
-                  ? undefined
-                  : {
-                      onMouseEnter: (e) => preview.requestShow(asEntry, e.currentTarget),
-                      onMouseLeave: preview.cancel,
-                    }
-              }
+              {...preview.bind(asEntry)}
             />
           );
         })}
@@ -187,7 +177,6 @@ function PoolCardTile({
   onRemove: () => void;
 }) {
   const preview = useCardPreview();
-  const coarse = usePointerCoarse();
   return (
     <CardFrame
       cardId={entry.id}
@@ -198,15 +187,7 @@ function PoolCardTile({
       unique={entry.maxCopies === 1}
       dimmed={Boolean(blockedReason)}
       title={blockedReason ?? undefined}
-      onClick={coarse ? () => preview.showCentered(entry) : undefined}
-      hoverProps={
-        coarse
-          ? undefined
-          : {
-              onMouseEnter: (e) => preview.requestShow(entry, e.currentTarget),
-              onMouseLeave: preview.cancel,
-            }
-      }
+      {...preview.bind(entry)}
       footer={
         <>
           {blockedReason && <span className="deck-card-blocked">{blockedReason}</span>}

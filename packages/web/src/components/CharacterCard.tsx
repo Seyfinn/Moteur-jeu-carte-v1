@@ -301,6 +301,7 @@ export function CharacterCard({
   impact,
   facing,
   hideName,
+  hunted,
 }: {
   char: CharacterInstance;
   isActive: boolean;
@@ -355,6 +356,12 @@ export function CharacterCard({
   facing?: 'left' | 'right';
   /** Nom repris par un bandeau extérieur (le HUD de combat du personnage actif). */
   hideName?: boolean;
+  /**
+   * Cible d'un Serment de Vengeance (Gon) connue du joueur qui regarde : un viseur se
+   * verrouille sur la carte. Décidé par le plateau (`gonTargetsKnownTo`), qui seul sait
+   * qui regarde -- le camp de Gon la voit dès le tirage, l'adversaire à la révélation.
+   */
+  hunted?: boolean;
 }) {
   const hover = useHoverCard();
   const { currentHP, pct, lockedMaxHP } = characterVitals(char);
@@ -516,7 +523,12 @@ export function CharacterCard({
         ].filter(Boolean)
       : []),
     ...statusAmbienceClasses(visibleStatuses),
-  ].join(' ');
+    // Le viseur déborde du cadre (lueur rouge autour de la carte) : sur le cadre, donc,
+    // et pas seulement dans le calque `fx-hunted` ci-dessous, rogné par l'overflow.
+    hunted ? 'amb-hunted' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   const hasFooter =
     !hideVitals ||
@@ -559,6 +571,17 @@ export function CharacterCard({
               du statut `fx-shield` (icône 🛡 d'un death-ward ou d'un renvoi) -- les deux
               se cumulent sans se confondre. */}
           {shieldTotal > 0 && <div className="fx-layer fx-shield-halo" />}
+          {/* Viseur de Gon : quatre coins qui se referment sur la carte, puis un balayage
+              de traque qui tourne. La lueur extérieure, elle, est sur le cadre (`amb-hunted`). */}
+          {hunted && !dead && (
+            <div className="fx-layer fx-hunted" aria-hidden="true">
+              <span className="fx-hunted-corner tl" />
+              <span className="fx-hunted-corner tr" />
+              <span className="fx-hunted-corner bl" />
+              <span className="fx-hunted-corner br" />
+              <span className="fx-hunted-sweep" />
+            </div>
+          )}
           {/* Sous 25 % : une lueur rouge qui monte du bas de la carte. La jauge le dit
               déjà, mais elle est petite (banc) ou absente (actif) -- ici ça se voit de loin. */}
           {!dead && pct <= 25 && <div className="fx-layer fx-low-hp" />}

@@ -189,6 +189,11 @@ function PlayerHandCard({
               : {
                   onMouseEnter: (e) => hover.show(payload, e.currentTarget),
                   onMouseLeave: hover.hide,
+                  // Le clic gauche joue la carte : c'est le clic droit qui l'épingle pour la lire.
+                  onContextMenu: (e) => {
+                    e.preventDefault();
+                    hover.pin(payload);
+                  },
                 }
           }
           // La raison du refus est écrite SUR la carte, pas seulement dans l'infobulle ni
@@ -638,8 +643,8 @@ function HiddenHandTile() {
   const coarse = usePointerCoarse();
   // Un vrai bouton : le dos de carte ouvre une fiche, il doit donc être atteignable au
   // clavier et annoncé comme tel -- un `div` cliquable ne l'était ni l'un ni l'autre.
-  // Les gestionnaires de survol sont posés à la main plutôt que via `useCardInspect`, dont
-  // les `hoverProps` sont typés pour un `div` ; `hover.show` accepte n'importe quel élément.
+  // Les gestionnaires de survol sont posés à la main plutôt que via `useCardInspect`, qui
+  // est pensé pour une `CardFrame` ; `hover.show` accepte n'importe quel élément.
   return (
     <button
       type="button"
@@ -648,6 +653,10 @@ function HiddenHandTile() {
       onClick={() => hover.pin(payload)}
       onMouseEnter={coarse ? undefined : (e) => hover.show(payload, e.currentTarget)}
       onMouseLeave={coarse ? undefined : hover.hide}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        hover.pin(payload);
+      }}
     >
       <FaceDownCard />
     </button>

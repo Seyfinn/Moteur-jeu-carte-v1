@@ -19,7 +19,6 @@ import {
   type DeckSectionKey,
 } from './DeckContentsPanel';
 import type { GameConnection } from '../net/useGameConnection';
-import { usePointerCoarse } from '../hooks/usePointerCoarse';
 import { LobbyBackground } from './LobbyBackground';
 
 const EMPTY_ROSTER: RosterConfig = { characterCardIds: [], objectCardIds: [], terrainCardIds: [] };
@@ -47,7 +46,6 @@ function DraftCardTile({
   onRemove: () => void;
 }) {
   const preview = useCardPreview();
-  const coarse = usePointerCoarse();
   return (
     <CardFrame
       cardId={entry.id}
@@ -58,15 +56,7 @@ function DraftCardTile({
       unique={entry.maxCopies === 1}
       dimmed={Boolean(blockedReason)}
       title={blockedReason ?? undefined}
-      onClick={coarse ? () => preview.showCentered(entry) : undefined}
-      hoverProps={
-        coarse
-          ? undefined
-          : {
-              onMouseEnter: (e) => preview.requestShow(entry, e.currentTarget),
-              onMouseLeave: preview.cancel,
-            }
-      }
+      {...preview.bind(entry)}
       footer={
         <>
           {blockedReason && <span className="deck-card-blocked">{blockedReason}</span>}

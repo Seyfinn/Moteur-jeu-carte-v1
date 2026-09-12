@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from 'react';
+import { createPortal } from 'react-dom';
 import {
   DRAW_MODE_ELIMINATIONS_TO_WIN,
   DRAW_MODE_MAX_CHARACTER_HAND,
@@ -6,6 +16,7 @@ import {
   DEFAULT_MAX_TERRAINS_PER_TURN,
   getMaxObjectsPerTurn,
   getMaxTerrainsPerTurn,
+  gonTargetsKnownTo,
   otherPlayer,
   type CharacterInstance,
   type GameState,
@@ -332,6 +343,7 @@ function ActiveSlot({
   actions,
   impact,
   hud,
+  hunted,
 }: {
   char: CharacterInstance | undefined;
   badges?: CharacterBadge[];
@@ -342,6 +354,7 @@ function ActiveSlot({
   actions?: ReactNode;
   impact?: CharacterImpact;
   hud: CombatantHud;
+  hunted?: boolean;
 }) {
   return (
     <div className={`active-slot ${side}${actions ? ' commanded' : ''}`}>
@@ -375,6 +388,7 @@ function ActiveSlot({
             facing={side === 'self' ? 'right' : 'left'}
             hideName
             hideVitals
+            hunted={hunted}
           />
         ) : (
           <div className="active-slot-empty" role="img" aria-label="Aucun personnage actif">
@@ -390,18 +404,38 @@ function ActiveSlot({
   );
 }
 
+/** Écart entre la carte de banc et son mini-menu, et marge minimale avec les bords de la fenêtre. */
+const BENCH_MENU_GAP = 8;
+const BENCH_MENU_MARGIN = 8;
+/** Même seuil que la bascule CSS `@media (max-width: 980px)` : les rails deviennent des bandes horizontales. */
+const BENCH_STRIP_QUERY = '(max-width: 980px)';
+
+/** Côté vers lequel le mini-menu se déploie depuis sa carte. */
+type BenchMenuSide = 'right' | 'left' | 'up';
+
 /**
  * Mini-menu d'un personnage de réserve : de quoi le renvoyer au combat ou déclencher à
  * distance une capacité marquée `usableFromBench`, sans passer par une barre d'action.
+ *
+ * Rendu en PORTAIL, en `position: fixed`, comme le panneau de commandes de l'actif
+ * (`CommandPopover`) : le rail du banc est en `overflow: hidden` et rognait net un menu posé
+ * en `absolute` à côté de la carte. Sorti du flux du plateau, le menu ne peut plus ni
+ * élargir une colonne, ni pousser les réservistes, ni faire défiler quoi que ce soit.
+ * Il s'ouvre toujours VERS LE CENTRE de l'écran : à droite pour une carte du rail gauche,
+ * à gauche pour une carte du rail droit, et au-dessus quand les rails sont devenus des
+ * bandes horizontales (écran étroit) -- puis il est recadré dans la fenêtre.
  */
 function BenchMenu({
   name,
   options,
+  anchorRef,
   onClose,
   onDetails,
 }: {
   name: string;
   options: ActionOption[];
+  /** La carte de banc que le menu prolonge : c'est à elle qu'il se cale. */
+  anchorRef: RefObject<HTMLDivElement>;
   onClose: () => void;
   onDetails: () => void;
 }) {
@@ -412,6 +446,75 @@ function BenchMenu({
   // navigation au clavier en cours.
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+
+  // Hors écran au premier passage : la largeur/hauteur naturelle du menu ne se mesure
+  // qu'une fois monté, et le montrer avant d'avoir tranché le ferait sauter de place.
+  const [placement, setPlacement] = useState<{ side: BenchMenuSide; style: CSSProperties }>({
+    side: 'right',
+    style: { top: -9999, left: -9999, visibility: 'hidden' },
+  });
+
+  useLayoutEffect(() => {
+    const place = () => {
+      const menu = menuRef.current;
+      const anchor = anchorRef.current;
+      if (!menu || !anchor) return;
+      const rect = menu.getBoundingClientRect();
+      const a = anchor.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      // Recadrage dans la fenêtre : le menu ne sort jamais par un bord, quel que soit le côté.
+      const clampX = (x: number) =>
+        Math.min(Math.max(BENCH_MENU_MARGIN, x), Math.max(BENCH_MENU_MARGIN, vw - rect.width - BENCH_MENU_MARGIN));
+      const clampY = (y: number) =>
+        Math.min(Math.max(BENCH_MENU_MARGIN, y), Math.max(BENCH_MENU_MARGIN, vh - rect.height - BENCH_MENU_MARGIN));
+
+      let side: BenchMenuSide;
+      let left: number;
+      let top: number;
+      if (window.matchMedia(BENCH_STRIP_QUERY).matches) {
+        // Bandes horizontales : le banc du joueur est en bas, le menu monte au-dessus de la
+        // carte, centré sur elle (et retombe dessous si le haut de l'écran est trop près).
+        side = 'up';
+        left = clampX(a.left + a.width / 2 - rect.width / 2);
+        const above = a.top - BENCH_MENU_GAP - rect.height;
+        top = above >= BENCH_MENU_MARGIN ? above : clampY(a.bottom + BENCH_MENU_GAP);
+      } else if (a.left + a.width / 2 < vw / 2) {
+        // Rail gauche : vers la droite, donc vers le duel.
+        side = 'right';
+        left = clampX(a.right + BENCH_MENU_GAP);
+        top = clampY(a.top);
+      } else {
+        // Rail droit : vers la gauche, donc vers le duel.
+        side = 'left';
+        left = clampX(a.left - BENCH_MENU_GAP - rect.width);
+        top = clampY(a.top);
+      }
+      setPlacement((prev) =>
+        prev.side === side && prev.style.top === top && prev.style.left === left ? prev : { side, style: { top, left } }
+      );
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+    // `options` en dépendance : la liste change de longueur (une capacité qui se grise ou
+    // se libère) et la hauteur du menu avec elle -- il doit se recaler.
+  }, [anchorRef, options]);
+
+  // Un clic n'importe où hors du menu ET hors de sa carte le referme (la carte gère
+  // elle-même son clic : c'est un toggle). En capture, pour passer avant un gestionnaire du
+  // plateau qui arrêterait la propagation. Le menu étant en portail, il n'est plus dans le
+  // DOM de la carte : d'où le double test.
+  useEffect(() => {
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node | null;
+      if (!target) return;
+      if (menuRef.current?.contains(target) || anchorRef.current?.contains(target)) return;
+      closeRef.current();
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+  }, [anchorRef]);
 
   // Le menu s'ouvre au clic sur la carte, mais il doit aussi se parcourir au clavier :
   // focus sur la première entrée à l'ouverture, Échap pour refermer, flèches pour passer
@@ -439,8 +542,14 @@ function BenchMenu({
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
-  return (
-    <div className="bench-menu" ref={menuRef} role="menu" aria-label={`Actions de ${name}`}>
+  return createPortal(
+    <div
+      className={`bench-menu bench-menu-${placement.side}`}
+      style={placement.style}
+      ref={menuRef}
+      role="menu"
+      aria-label={`Actions de ${name}`}
+    >
       <div className="bench-menu-head">{name}</div>
       {options.length === 0 && <p className="bench-menu-empty">Rien à déclencher d'ici.</p>}
       {options.map((option) => (
@@ -481,7 +590,8 @@ function BenchMenu({
       >
         <span className="bench-menu-item-label">🔍 Voir la carte</span>
       </button>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -497,6 +607,7 @@ function SelfBenchCard({
   onClose,
   targeting,
   impact,
+  hunted,
 }: {
   char: CharacterInstance;
   badges?: CharacterBadge[];
@@ -509,6 +620,7 @@ function SelfBenchCard({
   onClose: () => void;
   targeting: BoardTargeting | null;
   impact?: CharacterImpact;
+  hunted?: boolean;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const name = characterName(char.cardId);
@@ -518,15 +630,6 @@ function SelfBenchCard({
     card: { cardId: char.cardId, kind: 'character', name },
     body: characterDetailBody(char.cardId, char, state),
   });
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) onClose();
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [isOpen, onClose]);
 
   // Le tour de l'adversaire est la raison dominante : elle passe devant un stun ou une
   // limite d'usage, qui n'apprendraient rien tant que la main n'est pas à nous.
@@ -560,8 +663,13 @@ function SelfBenchCard({
         attachedObjects={attachedObjectsOf(state, char)}
         state={state}
         impact={impact}
+        hunted={hunted}
       />
-      {isOpen && <BenchMenu name={name} options={options} onClose={onClose} onDetails={inspect.onClick} />}
+      {/* En portail (cf. `BenchMenu`) : rendu ici pour vivre et mourir avec la carte, mais
+          affiché hors du rail, qui l'aurait rogné. */}
+      {isOpen && (
+        <BenchMenu name={name} options={options} anchorRef={wrapRef} onClose={onClose} onDetails={inspect.onClick} />
+      )}
     </div>
   );
 }
@@ -576,6 +684,7 @@ function BenchRow({
   turnGate,
   targeting,
   impactsByCharacter,
+  huntedIds,
 }: {
   player: PlayerState;
   isSelf: boolean;
@@ -586,6 +695,7 @@ function BenchRow({
   turnGate: string | null;
   targeting: BoardTargeting | null;
   impactsByCharacter: Map<string, CharacterImpact>;
+  huntedIds: Set<string>;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   // Un ciblage qui démarre referme le mini-menu : il recouvre les cartes voisines, donc
@@ -622,6 +732,7 @@ function BenchRow({
             onClose={() => setOpenId(null)}
             targeting={targeting}
             impact={impactsByCharacter.get(char.instanceId)}
+            hunted={huntedIds.has(char.instanceId)}
           />
         ) : (
           <div className="bench-card-wrap" key={char.instanceId}>
@@ -638,6 +749,7 @@ function BenchRow({
               attachedObjects={attachedObjectsOf(state, char)}
               state={state}
               impact={impactsByCharacter.get(char.instanceId)}
+              hunted={huntedIds.has(char.instanceId)}
             />
           </div>
         )
@@ -662,6 +774,8 @@ export function Board({ conn }: { conn: GameConnection }) {
     strikes,
     flourishes,
   } = useGameEvents(state);
+  // Cibles d'un Serment de Vengeance (Gon) que CE joueur connaît : viseur sur la carte.
+  const huntedIds = gonTargetsKnownTo(state, you);
   // La roue d'initiative ne se joue qu'une fois, à l'ouverture : `phase` quitte 'setup'
   // dès la mise en place terminée, donc une reconnexion en cours de partie ne la rejoue
   // pas. `useCallback` parce que le plateau se redessine à chaque état reçu du serveur et
@@ -832,6 +946,7 @@ export function Board({ conn }: { conn: GameConnection }) {
             turnGate={turnGate}
             targeting={targeting}
             impactsByCharacter={impactsByCharacter}
+            huntedIds={huntedIds}
           />
         </div>
 
@@ -983,6 +1098,7 @@ export function Board({ conn }: { conn: GameConnection }) {
                     targeting={targeting}
                     state={state}
                     impact={impactsByCharacter.get(me.activeCharacterInstanceId ?? '')}
+                    hunted={huntedIds.has(me.activeCharacterInstanceId ?? '')}
                     hud={{
                       label: me.displayName || 'Vous',
                       lost: drawMode ? me.charactersLost : null,
@@ -1016,6 +1132,7 @@ export function Board({ conn }: { conn: GameConnection }) {
                     targeting={targeting}
                     state={state}
                     impact={impactsByCharacter.get(opponent.activeCharacterInstanceId ?? '')}
+                    hunted={huntedIds.has(opponent.activeCharacterInstanceId ?? '')}
                     hud={{
                       label: opponentName,
                       lost: drawMode ? opponent.charactersLost : null,
@@ -1062,6 +1179,7 @@ export function Board({ conn }: { conn: GameConnection }) {
             turnGate={turnGate}
             targeting={targeting}
             impactsByCharacter={impactsByCharacter}
+            huntedIds={huntedIds}
           />
         </div>
       </div>

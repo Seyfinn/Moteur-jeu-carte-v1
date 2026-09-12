@@ -87,14 +87,20 @@ export const COMBAT_PREVIEW_DELAY_MS = 1000;
  * Délai avant la fermeture au départ de la souris. Il sert de pont entre la carte et le
  * panneau (on peut y entrer pour faire défiler un long texte) ET de durée au fondu de
  * sortie : le panneau porte la classe `leaving` pendant ce laps, puis est démonté. Un
- * survol qui reprend entre-temps (carte voisine) annule le fondu sans rien redémonter --
- * c'est ce qui évite le clignotement quand on glisse d'une carte à l'autre.
+ * survol qui reprend entre-temps (carte voisine, ou le panneau lui-même) annule le fondu
+ * sans rien redémonter -- c'est ce qui évite le clignotement quand on glisse d'une carte
+ * à l'autre. Le panneau se pose du côté OPPOSÉ de la bande centrale : 300 ms, c'est le
+ * temps de traverser le plateau pour l'atteindre. La CSS (`ins-panel-out`) retarde le
+ * fondu pour qu'il ne commence qu'à mi-parcours de ce délai, et le panneau reste
+ * survolable pendant tout ce temps (pas de `pointer-events: none` sur `.leaving`).
  */
-const HIDE_DELAY_MS = 120;
+export const HIDE_DELAY_MS = 300;
 
 interface AnchoredState {
   payload: HoverPayload;
   rect: DOMRect;
+  /** La carte survolée : la molette posée dessus fait défiler le panneau à sa place. */
+  anchor: HTMLElement;
 }
 
 interface PinnedState {
@@ -222,6 +228,21 @@ function PanelBody({ payload }: { payload: HoverPayload }) {
   );
 }
 
+/** Bouton d'action de la fiche épinglée (jouer l'objet, poser le terrain...). */
+function PinnedAction({ payload, onDone }: { payload: HoverPayload; onDone: () => void }) {
+  return (
+    <button
+      className="hover-card-action"
+      onClick={() => {
+        payload.onAction?.();
+        onDone();
+      }}
+    >
+      {payload.actionLabel}
+    </button>
+  );
+}
+
 export function HoverCardProvider({ children }: { children: ReactNode }) {
   const [anchored, setAnchored] = useState<AnchoredState | null>(null);
   const [leaving, setLeaving] = useState(false);
@@ -268,6 +289,22 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
     };
   }, [anchored]);
 
+  // La molette posée sur la carte survolée fait défiler le panneau, sans avoir à traverser
+  // le plateau pour aller le chercher. Écouteur non passif : il faut pouvoir retenir le
+  // défilement de la page. Quand la fiche tient entière, la molette garde son sens habituel.
+  useEffect(() => {
+    if (!anchored) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!(e.target instanceof Node) || !anchored.anchor.contains(e.target)) return;
+      const body = panelRef.current?.querySelector<HTMLElement>('.ins-body');
+      if (!body || body.scrollHeight <= body.clientHeight + 1) return;
+      e.preventDefault();
+      body.scrollTop += e.deltaY;
+    };
+    window.addEventListener('wheel', onWheel, { passive: false });
+    return () => window.removeEventListener('wheel', onWheel);
+  }, [anchored]);
+
   const show = useCallback(
     (payload: HoverPayload, target: HTMLElement) => {
       clearTimers();
@@ -277,13 +314,13 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
       // ouvrir l'aperçu sous une souris qui ne fait que traverser le plateau.
       if (!payload.card || visibleRef.current) {
         visibleRef.current = true;
-        setAnchored({ payload, rect });
+        setAnchored({ payload, rect, anchor: target });
         return;
       }
       showTimer.current = window.setTimeout(() => {
         showTimer.current = null;
         visibleRef.current = true;
-        setAnchored({ payload, rect });
+        setAnchored({ payload, rect, anchor: target });
       }, delayRef.current);
     },
     [clearTimers]
@@ -392,10 +429,10 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
 
       {pinned && <div className="hover-card-backdrop" onClick={unpin} />}
       {pinned && (
-        // Inspection : rien que la carte, en très grand. Le texte imprimé est sur
-        // l'illustration -- le doubler d'un pavé de description à côté ne ferait que voler
-        // la place qui la rend lisible. Un payload sans carte (cas rare : une fiche
-        // purement textuelle) retombe sur l'ancien encart.
+        // Inspection : la carte en grand ET sa fiche (attaques, talents, statuts du moment)
+        // à côté, figées jusqu'à fermeture explicite -- c'est la vue pour lire un personnage
+        // à cinq talents sans courir après un survol. Un payload sans carte (cas rare : une
+        // fiche purement textuelle) retombe sur l'encart seul.
         <div
           className={pinned.payload.card ? 'card-inspect' : 'ins-panel pinned'}
           role="dialog"
@@ -412,26 +449,26 @@ export function HoverCardProvider({ children }: { children: ReactNode }) {
             ×
           </button>
           {pinned.payload.card ? (
-            <CardFrame
-              cardId={pinned.payload.card.cardId}
-              kind={pinned.payload.card.kind}
-              name={pinned.payload.card.name}
-              size="large"
-              unique={pinned.payload.card.unique}
-            />
+            <>
+              <CardFrame
+                cardId={pinned.payload.card.cardId}
+                kind={pinned.payload.card.kind}
+                name={pinned.payload.card.name}
+                size="large"
+                unique={pinned.payload.card.unique}
+              />
+              <div className="card-inspect-side">
+                <div className="ins-panel card-inspect-panel">
+                  <PanelBody payload={pinned.payload} />
+                </div>
+                {pinned.payload.actionLabel && <PinnedAction payload={pinned.payload} onDone={unpin} />}
+              </div>
+            </>
           ) : (
-            <PanelBody payload={pinned.payload} />
-          )}
-          {pinned.payload.actionLabel && (
-            <button
-              className="hover-card-action"
-              onClick={() => {
-                pinned.payload.onAction?.();
-                unpin();
-              }}
-            >
-              {pinned.payload.actionLabel}
-            </button>
+            <>
+              <PanelBody payload={pinned.payload} />
+              {pinned.payload.actionLabel && <PinnedAction payload={pinned.payload} onDone={unpin} />}
+            </>
           )}
         </div>
       )}
@@ -447,8 +484,10 @@ export function useHoverCard(): HoverCardApi {
 
 /**
  * Branchement standard d'une carte du plateau : survol = aperçu carte + texte à côté de la
- * carte survolée, clic = la carte seule en très grand au centre, jusqu'à fermeture. Sur
- * écran tactile, où il n'y a pas de survol, le tap ouvre directement cette dernière.
+ * carte survolée, clic ou clic droit = la carte en grand avec sa fiche au centre, jusqu'à
+ * fermeture. Le clic droit est là pour les cartes dont le clic gauche sert à autre chose
+ * (jouer une carte de la main, viser, ouvrir le menu du banc) : il épingle toujours. Sur
+ * écran tactile, où il n'y a pas de survol, le tap ouvre directement la fiche épinglée.
  */
 export function useCardInspect(payload: HoverPayload): { onClick: () => void; hoverProps?: HoverHandlers } {
   const hover = useHoverCard();
@@ -460,6 +499,10 @@ export function useCardInspect(payload: HoverPayload): { onClick: () => void; ho
       : {
           onMouseEnter: (e) => hover.show(payload, e.currentTarget),
           onMouseLeave: hover.hide,
+          onContextMenu: (e) => {
+            e.preventDefault();
+            hover.pin(payload);
+          },
         },
   };
 }

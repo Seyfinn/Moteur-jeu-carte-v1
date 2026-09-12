@@ -1,5 +1,6 @@
 import type { CharacterCardDef, EffectContext } from '../types.js';
-import { getStatus } from '../../statuses.js';
+import type { GameState, PlayerId } from '../../types.js';
+import { getStatus, hasStatus } from '../../statuses.js';
 import { canTargetBench } from '../../queries.js';
 import { cardName } from '../../names.js';
 import { pickRandom } from '../../rng.js';
@@ -30,6 +31,28 @@ function targetRecord(ctx: EffectContext): TargetRecord | undefined {
   const targetInstanceId = data?.['targetInstanceId'];
   if (typeof targetInstanceId !== 'string') return undefined;
   return { targetInstanceId, revealed: data?.['revealed'] === true };
+}
+
+/**
+ * Personnages que `viewerId` SAIT être la Cible d'un Serment de Vengeance -- ce que le
+ * plateau entoure d'un viseur. Le camp de Gon la connaît dès le tirage (la mémoire cachée
+ * est portée par son propre Gon) ; l'adversaire ne l'apprend qu'à la révélation, quand le
+ * badge visible est posé sur la victime. Lu sur le seul `GameState`, donc côté client.
+ * ⚠️ Ne jamais lire la mémoire d'un Gon ADVERSE ici : la vue du joueur la contient
+ * (`hidden` n'est qu'une consigne d'affichage), et le secret tomberait avant le tour 10.
+ */
+export function gonTargetsKnownTo(state: GameState, viewerId: PlayerId): Set<string> {
+  const known = new Set<string>();
+  for (const own of Object.values(state.players[viewerId].characters)) {
+    const targetInstanceId = getStatus(own, TARGET_RECORD_STATUS_ID)?.data?.['targetInstanceId'];
+    if (typeof targetInstanceId === 'string') known.add(targetInstanceId);
+  }
+  for (const player of Object.values(state.players)) {
+    for (const char of Object.values(player.characters)) {
+      if (hasStatus(char, TARGET_REVEALED_STATUS_ID)) known.add(char.instanceId);
+    }
+  }
+  return known;
 }
 
 function writeTargetRecord(ctx: EffectContext, record: TargetRecord): void {

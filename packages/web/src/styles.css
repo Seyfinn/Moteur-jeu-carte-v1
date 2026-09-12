@@ -4233,11 +4233,18 @@ input::placeholder {
 /* Mini-menu d'un personnage de réserve. Le banc du joueur est la rangée du BAS : le menu
    monte donc au-dessus de la carte, là où il y a de la place, plutôt qu'à côté d'elle où
    il recouvrirait les réservistes voisins. */
+/* Mini-menu d'un réserviste : en PORTAIL et en `fixed` (cf. `BenchMenu` dans Board.tsx),
+   jamais dans le rail -- qui est en `overflow: hidden` et le rognait. Sa position (`top` /
+   `left`) est calculée en JS depuis le rectangle de la carte, toujours vers le centre de
+   l'écran : `.bench-menu-right` depuis le rail gauche, `.bench-menu-left` depuis le rail
+   droit, `.bench-menu-up` au-dessus de la carte quand les rails sont des bandes (écran
+   étroit). Hors du flux du plateau, il ne peut donc ni élargir une colonne ni faire
+   défiler quoi que ce soit. Même `z-index` que le popover de commandes (`.cmd-popover`,
+   45) : au-dessus de tout le plateau, SOUS le panneau d'inspection (`.ins-panel`, 50) qui
+   porte la description de l'entrée survolée. */
 .bench-menu {
-  position: absolute;
-  top: 0;
-  left: calc(100% + 8px);
-  z-index: 25;
+  position: fixed;
+  z-index: 45;
   min-width: 208px;
   max-width: min(280px, 80vw);
   background: var(--panel-raised);
@@ -4250,14 +4257,26 @@ input::placeholder {
   box-shadow: var(--shadow-lg);
   animation: bench-menu-pop-in 0.14s var(--ease);
 }
+/* Le menu glisse depuis sa carte : un `translate` de départ opposé au côté d'ouverture. */
+.bench-menu-right {
+  --bench-menu-from: -6px 0;
+}
+.bench-menu-left {
+  --bench-menu-from: 6px 0;
+}
+.bench-menu-up {
+  --bench-menu-from: 0 6px;
+}
 @keyframes bench-menu-pop-in {
   from {
     opacity: 0;
-    transform: translateX(-6px) scale(0.98);
+    translate: var(--bench-menu-from, -6px 0);
+    scale: 0.98;
   }
   to {
     opacity: 1;
-    transform: translateX(0) scale(1);
+    translate: 0 0;
+    scale: 1;
   }
 }
 .bench-menu-head {
@@ -5146,6 +5165,148 @@ input::placeholder {
   }
   50% {
     opacity: 1;
+  }
+}
+/* Viseur du Serment de Vengeance (Gon) sur sa Cible. Deux morceaux : la lueur rouge qui
+   bat AUTOUR de la carte est sur le cadre (`amb-hunted`, elle déborde), et le calque
+   `fx-hunted` dessine dedans les quatre coins qui se referment sur la carte (le
+   verrouillage), un cercle de visée en pointillé qui tourne lentement, et un balayage
+   radar qui passe et repasse. Dimensions en `cqi` : le même viseur se lit sur la vignette
+   de banc comme sur le portrait géant de l'actif. */
+.tcg-card.amb-hunted {
+  animation: amb-hunted-lock 2.6s ease-in-out infinite;
+}
+@keyframes amb-hunted-lock {
+  0%,
+  100% {
+    box-shadow:
+      var(--shadow-sm),
+      0 0 0 1px rgba(224, 85, 95, 0.55),
+      0 0 14px 0 rgba(224, 85, 95, 0.35);
+  }
+  50% {
+    box-shadow:
+      var(--shadow-sm),
+      0 0 0 2px rgba(255, 120, 130, 0.9),
+      0 0 30px 6px rgba(224, 85, 95, 0.6);
+  }
+}
+.fx-hunted {
+  z-index: 2;
+  container-type: inline-size;
+}
+/* Cercle de visée : centré sur l'illustration, en pointillé, qui tourne au ralenti. */
+.fx-hunted::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 46cqi;
+  height: 46cqi;
+  translate: -50% -50%;
+  border: 1px dashed rgba(255, 140, 150, 0.7);
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(224, 85, 95, 0.55), inset 0 0 8px rgba(224, 85, 95, 0.35);
+  animation: fx-hunted-ring 9s linear infinite;
+}
+@keyframes fx-hunted-ring {
+  to {
+    rotate: 360deg;
+  }
+}
+.fx-hunted-corner {
+  position: absolute;
+  width: 20cqi;
+  height: 20cqi;
+  max-width: 34px;
+  max-height: 34px;
+  border: 2px solid rgba(255, 130, 140, 0.95);
+  filter: drop-shadow(0 0 4px rgba(224, 85, 95, 0.9));
+  /* Arrivée de l'extérieur (le viseur se referme), puis respiration sur place. `--dx`/
+     `--dy` : le sens de fuite propre à chaque coin. */
+  animation:
+    fx-hunted-corner-in 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.2) both,
+    fx-hunted-corner-breathe 2.6s ease-in-out 0.55s infinite;
+}
+.fx-hunted-corner.tl {
+  top: 6%;
+  left: 6%;
+  border-right: 0;
+  border-bottom: 0;
+  --dx: -1;
+  --dy: -1;
+}
+.fx-hunted-corner.tr {
+  top: 6%;
+  right: 6%;
+  border-left: 0;
+  border-bottom: 0;
+  --dx: 1;
+  --dy: -1;
+}
+.fx-hunted-corner.bl {
+  bottom: 6%;
+  left: 6%;
+  border-right: 0;
+  border-top: 0;
+  --dx: -1;
+  --dy: 1;
+}
+.fx-hunted-corner.br {
+  bottom: 6%;
+  right: 6%;
+  border-left: 0;
+  border-top: 0;
+  --dx: 1;
+  --dy: 1;
+}
+@keyframes fx-hunted-corner-in {
+  from {
+    translate: calc(var(--dx) * 60%) calc(var(--dy) * 60%);
+    opacity: 0;
+  }
+  to {
+    translate: 0 0;
+    opacity: 1;
+  }
+}
+@keyframes fx-hunted-corner-breathe {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: calc(var(--dx) * -8%) calc(var(--dy) * -8%);
+  }
+}
+/* Balayage radar : un carré bien plus grand que la carte (pour que sa rotation la couvre
+   toujours), le calque le rogne aux bords. Estompé vers l'extérieur pour ne pas passer
+   comme un projecteur sur le nom et les jauges. */
+.fx-hunted-sweep {
+  position: absolute;
+  inset: -45%;
+  background: conic-gradient(from 0deg, transparent 0 80%, rgba(224, 85, 95, 0.3) 96%, rgba(255, 170, 175, 0.55) 100%);
+  mask: radial-gradient(circle at 50% 50%, #000 26%, transparent 50%);
+  -webkit-mask: radial-gradient(circle at 50% 50%, #000 26%, transparent 50%);
+  mix-blend-mode: screen;
+  animation: fx-hunted-sweep 3.4s linear infinite;
+}
+@keyframes fx-hunted-sweep {
+  to {
+    rotate: 360deg;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tcg-card.amb-hunted {
+    animation: none;
+    box-shadow: var(--shadow-sm), 0 0 0 2px rgba(255, 120, 130, 0.9), 0 0 18px 2px rgba(224, 85, 95, 0.5);
+  }
+  .fx-hunted::before,
+  .fx-hunted-corner {
+    animation: none;
+  }
+  .fx-hunted-sweep {
+    display: none;
   }
 }
 /* Sous 25 % de PV : une lueur rouge qui monte du bas de la carte et bat lentement. La
@@ -6099,7 +6260,7 @@ input::placeholder {
      d'oeil : la barre de défilement du panneau n'apparaît plus que sur les cartes
      vraiment bavardes. `HoverCard.tsx` relit cette variable pour la combiner, en `min()`,
      avec la seule contrainte qu'il connaît seul : le haut de la main du joueur. */
-  --ins-panel-max-h: min(92vh, 860px);
+  --ins-panel-max-h: min(94vh, 920px);
   max-height: var(--ins-panel-max-h);
   display: flex;
   flex-direction: column;
@@ -6122,12 +6283,15 @@ input::placeholder {
     scale: 1;
   }
 }
-/* Fondu de sortie : la classe est posée par `HoverCard.tsx` pendant le délai de fermeture,
-   et retirée si le survol reprend entre-temps -- glisser d'une carte à sa voisine ne fait
-   donc ni disparaître ni remonter le panneau, il change juste de contenu. */
+/* Fondu de sortie : la classe est posée par `HoverCard.tsx` pendant le délai de fermeture
+   (`HIDE_DELAY_MS`, 300 ms), et retirée si le survol reprend entre-temps -- glisser d'une
+   carte à sa voisine ne fait donc ni disparaître ni remonter le panneau, il change juste de
+   contenu. Le panneau reste SURVOLABLE pendant tout ce laps : c'est le pont qui permet
+   d'entrer dedans pour faire défiler un long texte (un `pointer-events: none` ici le
+   fermait avant même qu'on puisse l'atteindre). Le fondu ne commence qu'à mi-chemin, pour
+   que la traversée du plateau se fasse vers un panneau encore net. */
 .ins-panel.leaving {
-  animation: ins-panel-out 0.12s ease-in forwards;
-  pointer-events: none;
+  animation: ins-panel-out 0.16s ease-in 0.14s forwards;
 }
 @keyframes ins-panel-out {
   to {
@@ -6144,7 +6308,7 @@ input::placeholder {
 
 .ins-head {
   flex: 0 0 auto;
-  padding: 10px 14px 8px;
+  padding: 8px 12px 6px;
   border-bottom: 1px solid rgba(150, 175, 220, 0.16);
 }
 .ins-name {
@@ -6194,10 +6358,10 @@ input::placeholder {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 9px 14px 11px;
+  padding: 7px 12px 9px;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 7px;
   scrollbar-width: thin;
   scrollbar-color: rgba(150, 175, 220, 0.35) transparent;
 }
@@ -6348,7 +6512,7 @@ input::placeholder {
 /* Attaques et talents dans deux blocs franchement séparés, chacun avec sa couleur de
    famille : on repère ce qu'on cherche avant même d'avoir lu le titre. */
 .ins-block {
-  padding: 8px 10px 3px;
+  padding: 6px 9px 2px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--block-line, var(--border-soft));
   border-left-width: 3px;
@@ -6363,7 +6527,7 @@ input::placeholder {
   --block-title: #8fd0ff;
 }
 .ins-block h4 {
-  margin: 0 0 8px;
+  margin: 0 0 5px;
   font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.11em;
@@ -6386,10 +6550,10 @@ input::placeholder {
   vertical-align: 1px;
 }
 .ins-entry {
-  padding-bottom: 7px;
+  padding-bottom: 5px;
 }
 .ins-entry + .ins-entry {
-  padding-top: 7px;
+  padding-top: 5px;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 .ins-entry-head {
@@ -6411,9 +6575,9 @@ input::placeholder {
   font-variant-numeric: tabular-nums;
 }
 .ins-entry-text {
-  margin: 3px 0 0;
+  margin: 2px 0 0;
   font-size: 0.76rem;
-  line-height: 1.4;
+  line-height: 1.35;
   color: #cdd4e0;
   /* Les textes de carte viennent des JSON de l'éditeur, sauts de ligne compris (Escanor
      énumère ses trois issues ligne par ligne, Aki ses trois cas). En HTML ils étaient
@@ -9435,9 +9599,11 @@ textarea {
 }
 .card-preview-text {
   width: 250px;
-  /* Bornée par la fenêtre, pas seulement par un chiffre : sur un petit écran la bulle
-     débordait sous le bord bas et la fin du texte était inatteignable. */
-  max-height: min(330px, calc(100vh - 48px));
+  /* Assez haute pour qu'un personnage à trois attaques et trois talents tienne sans
+     défiler. Bornée par la fenêtre, pas seulement par un chiffre : sur un petit écran la
+     bulle débordait sous le bord bas et la fin du texte était inatteignable.
+     `PREVIEW_PANEL_MAX_HEIGHT` (DeckContentsPanel.tsx) suit ce plafond. */
+  max-height: min(560px, calc(100vh - 48px));
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 4px;
@@ -9456,8 +9622,8 @@ textarea {
 .card-preview .hover-card-content {
   display: flex;
   flex-direction: column;
-  gap: 9px;
-  margin-top: 8px;
+  gap: 7px;
+  margin-top: 6px;
 }
 /* Le texte suit le format bulle : même contenu, resserré. */
 .card-preview .hover-card-title {
@@ -9467,9 +9633,11 @@ textarea {
   font-size: 0.7rem;
 }
 
-/* « Voir la carte » : l'illustration seule, aussi grande que l'écran le permet. Pas de
-   texte à côté -- le texte imprimé est sur la carte, et c'est pour le lire qu'on ouvre
-   cette vue ; un pavé de description ne ferait que voler la place qui la rend lisible. */
+/* « Voir la carte » (clic, clic droit, tap) : l'illustration en grand ET, à sa droite, la
+   fiche complète -- attaques, talents, statuts du moment -- figée jusqu'à fermeture
+   explicite (croix, voile, Échap). C'est la vue pour lire tranquillement un personnage à
+   cinq talents, sans dépendre d'un survol. La fiche prend la hauteur de la carte et défile
+   à l'intérieur si elle est plus longue. */
 .card-inspect {
   position: fixed;
   left: 50%;
@@ -9477,16 +9645,35 @@ textarea {
   transform: translate(-50%, -50%);
   z-index: 60;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 14px;
+  max-width: 96vw;
   animation: card-preview-in 0.16s var(--ease);
 }
 .card-inspect .tcg-card {
-  width: min(94vw, 64vh);
+  width: min(calc(94vw - var(--ins-panel-w) - 40px), 64vh);
+  flex-shrink: 0;
+  align-self: flex-start;
   border-width: 2px;
   border-color: var(--accent);
   box-shadow: var(--shadow-lg), 0 0 32px var(--accent-glow);
+}
+.card-inspect-side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 90vh;
+}
+.card-inspect .ins-panel {
+  position: relative;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 90vh;
+  animation: none;
+}
+.card-inspect .hover-card-action {
+  flex: 0 0 auto;
 }
 .card-inspect .tcg-card-name-banner {
   font-size: 1.3rem;
@@ -9502,16 +9689,21 @@ textarea {
   z-index: 1;
 }
 
-/* Tap-opened preview: card + text stacked and scaled to fit a narrow viewport, unlike
-   the desktop hover layout which sits them side by side. */
+/* Fiche épinglée (clic, clic droit, tap) : centrée sous un voile, ouverte jusqu'à
+   fermeture explicite. Carte plus grande et texte plus haut qu'en bulle de survol -- on
+   est là pour lire. Sur écran étroit, carte et texte s'empilent. */
 .card-preview.pinned {
   position: fixed;
-  flex-direction: column;
-  align-items: center;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 60;
+  max-width: 96vw;
+  max-height: 94vh;
   overflow-y: auto;
 }
 .card-preview.pinned .tcg-card-large {
-  width: min(48vw, 200px);
+  width: min(34vw, 300px);
 }
 .card-preview.pinned .tcg-card-large .tcg-card-name-banner {
   font-size: 0.95rem;
@@ -9521,9 +9713,22 @@ textarea {
   font-size: 2.6rem;
 }
 .card-preview.pinned .card-preview-text {
-  width: 100%;
-  max-height: none;
-  overflow-y: visible;
+  width: 320px;
+  max-height: min(80vh, 640px);
+}
+@media (max-width: 700px) {
+  .card-preview.pinned {
+    flex-direction: column;
+    align-items: center;
+  }
+  .card-preview.pinned .tcg-card-large {
+    width: min(48vw, 200px);
+  }
+  .card-preview.pinned .card-preview-text {
+    width: 100%;
+    max-height: none;
+    overflow-y: visible;
+  }
 }
 
 /* Barre de validation du ciblage : posée en bas, par-dessus la main (injouable tant qu'un
@@ -9783,24 +9988,8 @@ textarea {
     padding: 4px 10px;
   }
   /* Le banc du joueur est désormais en BAS : le mini-menu s'ouvre vers le haut, au-dessus
-     de la carte, et non à sa droite où il sortirait de l'écran sur les derniers réservistes. */
-  .bench-menu {
-    top: auto;
-    bottom: calc(100% + 8px);
-    left: 50%;
-    transform: translateX(-50%);
-    animation: bench-menu-pop-up 0.14s var(--ease);
-  }
-  @keyframes bench-menu-pop-up {
-    from {
-      opacity: 0;
-      transform: translateX(-50%) translateY(6px) scale(0.98);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0) scale(1);
-    }
-  }
+     de la carte (`.bench-menu-up`, choisi en JS sur le même seuil de largeur que ce bloc,
+     cf. `BENCH_STRIP_QUERY` dans Board.tsx). Rien à recaler ici. */
   .active-slot.self,
   .active-slot.opponent {
     align-items: center;
@@ -9881,14 +10070,30 @@ textarea {
     font-size: 0.7rem;
     gap: 4px;
   }
-  /* Téléphone : la carte inspectée prend toute la largeur disponible, la croix revient
-     à l'intérieur du cadre (elle dépasserait de l'écran). */
+  /* Téléphone : carte et fiche s'empilent, la carte plus petite pour laisser la fiche
+     respirer ; la croix revient à l'intérieur du cadre (elle dépasserait de l'écran). */
+  .card-inspect {
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    max-height: 94vh;
+  }
   .card-inspect .tcg-card {
-    width: min(96vw, 70vh);
+    width: min(60vw, 36vh);
+    align-self: center;
+  }
+  .card-inspect-side {
+    width: min(92vw, var(--ins-panel-w));
+    max-height: 48vh;
+  }
+  .card-inspect .ins-panel {
+    width: 100%;
+    max-height: 48vh;
   }
   .card-inspect .hover-card-close {
     top: 4px;
     right: 4px;
+    z-index: 3;
   }
   .card-spotlight .tcg-card {
     width: min(80vw, 44vh);
@@ -11807,6 +12012,474 @@ textarea {
   animation: flourish-beam 1s ease-out both;
 }
 
+/* -- Scènes d'évolution ---------------------------------------------------
+   Chaque forme évoluée rejoue la scène qui l'a rendue célèbre, par-dessus l'éclosion
+   générique. Les durées de chaque scène sont recopiées dans `FLOURISH_DURATION_MS`
+   (gameEvents.ts), qui décide quand le bloc est retiré du DOM : une animation plus longue
+   que sa durée déclarée serait coupée net. Toutes les valeurs sont relatives au rectangle
+   de la carte, pour que la scène tienne aussi bien sur une vignette de banc que sur l'actif. */
+
+/* Gon Adulte -- l'éveil face à Pitou (2,8 s). Le monde s'assombrit, le sol se fend, une
+   colonne d'aura noire monte jusqu'au ciel, striée d'éclairs, et tout finit dans un flash
+   blanc. La table tremble en même temps (secousse demandée par gameEvents.ts). */
+.card-flourish-evolve:has(.evo-gon-pillar) {
+  --flourish-color: #f4f0ff;
+}
+.evo-gon-dark {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 60%, rgba(10, 6, 20, 0.35), rgba(4, 2, 10, 0.82) 70%);
+  animation: evo-gon-dark 2.8s ease-in-out both;
+}
+@keyframes evo-gon-dark {
+  0% {
+    opacity: 0;
+  }
+  18%,
+  72% {
+    opacity: 1;
+  }
+  80%,
+  100% {
+    opacity: 0;
+  }
+}
+.evo-gon-cracks {
+  position: absolute;
+  left: -30%;
+  right: -30%;
+  bottom: -32%;
+  height: 40%;
+  overflow: visible;
+  fill: none;
+  stroke: #ffffff;
+  /* Épaisseur en unités du viewBox, donc étirée avec lui (~×3,5 sur l'actif). Surtout
+     pas `vector-effect: non-scaling-stroke` sur un tracé en `pathLength` + dasharray :
+     Chrome recalcule alors le motif de tirets dans l'autre repère, et la fissure qui
+     devait se dessiner d'un trait sortait en pointillés éparpillés. */
+  stroke-width: 0.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.95)) drop-shadow(0 0 10px rgba(180, 150, 255, 0.7));
+}
+.evo-gon-cracks path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation:
+    evo-draw 0.42s cubic-bezier(0.2, 0.8, 0.3, 1) calc(0.12s + var(--i, 0) * 0.06s) both,
+    evo-gon-crack-fade 2.8s linear both;
+}
+@keyframes evo-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes evo-gon-crack-fade {
+  0%,
+  74% {
+    opacity: 1;
+  }
+  82%,
+  100% {
+    opacity: 0;
+  }
+}
+/* La colonne : deux parois d'aura noire de part et d'autre de la carte, plus hautes que
+   l'écran, avec un cœur de lumière blafarde entre elles -- la carte reste lisible au milieu,
+   c'est Gon qu'on regarde. Elle part du pied de la carte (`transform-origin` en bas) et
+   s'étire vers le haut ; le masque vertical l'efface vers le sommet. */
+.evo-gon-pillar {
+  position: absolute;
+  bottom: -8%;
+  width: 170%;
+  height: 420%;
+  border-radius: 50% 50% 14% 14% / 8% 8% 6% 6%;
+  background:
+    radial-gradient(ellipse 30% 12% at 50% 100%, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 100%),
+    linear-gradient(90deg, rgba(8, 4, 18, 0) 0%, rgba(8, 4, 18, 0.92) 16%, rgba(40, 20, 70, 0.55) 30%, rgba(200, 180, 255, 0.12) 50%, rgba(40, 20, 70, 0.55) 70%, rgba(8, 4, 18, 0.92) 84%, rgba(8, 4, 18, 0) 100%);
+  mask-image: linear-gradient(0deg, #000 0%, #000 45%, transparent 100%);
+  box-shadow: 0 0 60px 20px rgba(120, 80, 200, 0.3);
+  transform-origin: 50% 100%;
+  animation: evo-gon-pillar 2.8s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+@keyframes evo-gon-pillar {
+  0%,
+  10% {
+    opacity: 0;
+    scale: 0.3 0;
+  }
+  22% {
+    opacity: 1;
+    scale: 0.7 0.35;
+  }
+  45% {
+    scale: 1 1;
+  }
+  70% {
+    opacity: 1;
+    scale: 1.06 1.02;
+  }
+  84%,
+  100% {
+    opacity: 0;
+    scale: 1.3 1.1;
+  }
+}
+/* Volutes noires qui montent le long des parois, chacune à sa hauteur de départ et à son
+   rythme : les retards sont volontairement désordonnés (nth-child), sinon six volutes
+   alignées et décalées d'un pas égal dessinaient une diagonale de points. */
+.evo-gon-smoke {
+  position: absolute;
+  bottom: -10%;
+  left: calc(50% + (var(--i, 0) - 2.5) * 26%);
+  width: 60%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(14, 6, 28, 0.9), rgba(14, 6, 28, 0.55) 40%, transparent 70%);
+  filter: blur(6px);
+  opacity: 0;
+  animation: evo-gon-smoke 1.6s ease-out var(--smoke-delay, 0.4s) both;
+}
+.evo-gon-smoke:nth-child(6n + 1) {
+  --smoke-delay: 0.4s;
+}
+.evo-gon-smoke:nth-child(6n + 2) {
+  --smoke-delay: 1s;
+}
+.evo-gon-smoke:nth-child(6n + 3) {
+  --smoke-delay: 0.6s;
+}
+.evo-gon-smoke:nth-child(6n + 4) {
+  --smoke-delay: 1.15s;
+}
+.evo-gon-smoke:nth-child(6n + 5) {
+  --smoke-delay: 0.8s;
+}
+.evo-gon-smoke:nth-child(6n) {
+  --smoke-delay: 0.3s;
+}
+@keyframes evo-gon-smoke {
+  0% {
+    opacity: 0;
+    translate: -50% 20%;
+    scale: 0.4;
+  }
+  25% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+    translate: -50% -300%;
+    scale: 1.7;
+  }
+}
+.evo-gon-bolts {
+  position: absolute;
+  inset: -30% -10%;
+  overflow: visible;
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 3px #fff) drop-shadow(0 0 10px rgba(190, 160, 255, 0.9));
+}
+.evo-gon-bolts polyline {
+  vector-effect: non-scaling-stroke;
+  opacity: 0;
+  /* `steps(3, jump-none)` : trois paliers exacts (éteint / allumé / éteint), un vrai
+     clignotement d'éclair -- pas un fondu. Quatre passages par éclair. */
+  animation: evo-gon-bolt 0.34s steps(3, jump-none) calc(0.7s + var(--i, 0) * 0.23s) 4 both;
+}
+@keyframes evo-gon-bolt {
+  0% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+/* Le flash final : l'écran entier passe au blanc une fraction de seconde. */
+.evo-gon-flash {
+  position: fixed;
+  inset: 0;
+  background: #ffffff;
+  opacity: 0;
+  animation: evo-gon-flash 2.8s linear both;
+}
+@keyframes evo-gon-flash {
+  0%,
+  73% {
+    opacity: 0;
+  }
+  76% {
+    opacity: 0.95;
+  }
+  88%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Kayn Assassin -- l'ombre l'emporte sur la faux (2 s). Brume bleue, deux images
+   rémanentes qui partent de chaque côté (le pas de l'ombre), trois lames qui balaient la
+   carte, puis une onde cyan sèche. Rapide et silencieux. */
+.card-flourish-evolve:has(.evo-kayn-mist) {
+  --flourish-color: #62d9ff;
+}
+.evo-kayn-mist {
+  position: absolute;
+  inset: -22%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 40%, rgba(40, 120, 255, 0.55), transparent 45%),
+    radial-gradient(circle at 70% 65%, rgba(90, 220, 255, 0.5), transparent 45%),
+    radial-gradient(circle at 50% 50%, rgba(10, 20, 60, 0.85), transparent 68%);
+  filter: blur(6px);
+  animation:
+    evo-kayn-mist 2s ease-in-out both,
+    evo-spin 2s linear both;
+}
+@keyframes evo-kayn-mist {
+  0% {
+    opacity: 0;
+    scale: 0.5;
+  }
+  20%,
+  65% {
+    opacity: 1;
+    scale: 1;
+  }
+  100% {
+    opacity: 0;
+    scale: 1.4;
+  }
+}
+@keyframes evo-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+/* Images rémanentes : la silhouette de la carte, en contour bleu, qui file d'un côté et
+   s'efface -- Kayn traverse le mur. */
+.evo-kayn-ghost {
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgba(120, 220, 255, 0.9);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(60, 140, 255, 0.35), rgba(20, 40, 110, 0.5));
+  box-shadow: 0 0 18px rgba(80, 200, 255, 0.7);
+  filter: blur(1.5px);
+  opacity: 0;
+  /* `forwards` et non `both` : l'image 0 % est visible, et `both` l'aurait affichée
+     pendant tout le délai d'attente. Même chose pour l'onde et l'éruption plus bas. */
+  animation: evo-kayn-ghost 0.38s cubic-bezier(0.2, 0.8, 0.2, 1) 0.5s forwards;
+}
+.evo-kayn-ghost-l {
+  --ghost-dir: -1;
+}
+/* Les deux images ne se recouvrent pas dans le temps : ensemble, elles formaient un gros
+   rectangle bleu au lieu de deux passages. */
+.evo-kayn-ghost-r {
+  --ghost-dir: 1;
+  animation-delay: 0.92s;
+}
+/* L'image file d'un côté en s'étirant dans le sens de la course (le flou de vitesse),
+   puis s'écrase et s'éteint. */
+@keyframes evo-kayn-ghost {
+  0% {
+    opacity: 0.85;
+    translate: 0 0;
+    scale: 1 1;
+  }
+  40% {
+    opacity: 0.6;
+    scale: 1.12 0.96;
+  }
+  100% {
+    opacity: 0;
+    translate: calc(var(--ghost-dir, 1) * 115%) 0;
+    scale: 0.6 0.9;
+  }
+}
+/* Lames d'ombre : un trait fin et brillant, incliné, qui traverse la carte d'un coup sec.
+   Trois passages, chacun sous un angle différent. */
+.evo-kayn-slash {
+  position: absolute;
+  width: 190%;
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(190, 240, 255, 0.95) 35%, #ffffff 50%, rgba(190, 240, 255, 0.95) 65%, transparent);
+  box-shadow: 0 0 10px 3px rgba(90, 210, 255, 0.85), 0 0 26px 8px rgba(40, 120, 255, 0.55);
+  rotate: calc(-38deg + var(--i, 0) * 34deg);
+  opacity: 0;
+  animation: evo-kayn-slash 0.42s cubic-bezier(0.1, 0.9, 0.2, 1) calc(0.55s + var(--i, 0) * 0.26s) both;
+}
+@keyframes evo-kayn-slash {
+  0% {
+    opacity: 0;
+    translate: -45% 0;
+    scale: 0.3 1;
+  }
+  30%,
+  60% {
+    opacity: 1;
+    scale: 1 1;
+  }
+  100% {
+    opacity: 0;
+    translate: 45% 0;
+    scale: 0.8 0.6;
+  }
+}
+.evo-kayn-burst {
+  position: absolute;
+  width: 70%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 3px solid rgba(140, 230, 255, 0.95);
+  box-shadow: 0 0 22px rgba(90, 210, 255, 0.9), inset 0 0 22px rgba(90, 210, 255, 0.6);
+  opacity: 0;
+  animation: flourish-ring 0.6s cubic-bezier(0.1, 0.7, 0.2, 1) 1.3s forwards;
+}
+
+/* Rhaast -- le Darkin prend le corps (2,9 s). Des veines rouges remontent depuis le bas de
+   la carte au rythme d'un battement de cœur, une fumée sombre s'en dégage, puis tout
+   éclate en écarlate. Lent et lourd : c'est une possession, pas une frappe. */
+.card-flourish-evolve:has(.evo-rhaast-veins) {
+  --flourish-color: #ff3d4a;
+}
+.evo-rhaast-heart {
+  position: absolute;
+  inset: -12%;
+  border-radius: var(--radius-md);
+  background: radial-gradient(ellipse at 50% 80%, rgba(255, 40, 60, 0.7), rgba(120, 0, 20, 0.35) 45%, transparent 72%);
+  opacity: 0;
+  animation: evo-rhaast-heart 2.9s ease-in-out both;
+}
+@keyframes evo-rhaast-heart {
+  0% {
+    opacity: 0;
+    scale: 0.9;
+  }
+  /* Deux battements, de plus en plus forts... */
+  12% {
+    opacity: 0.55;
+    scale: 1;
+  }
+  20% {
+    opacity: 0.25;
+    scale: 0.96;
+  }
+  34% {
+    opacity: 0.8;
+    scale: 1.02;
+  }
+  42% {
+    opacity: 0.35;
+    scale: 0.97;
+  }
+  /* ... puis le troisième ne redescend plus. */
+  60%,
+  72% {
+    opacity: 1;
+    scale: 1.06;
+  }
+  100% {
+    opacity: 0;
+    scale: 1.2;
+  }
+}
+.evo-rhaast-veins {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  fill: none;
+  stroke: #ff3346;
+  /* En unités du viewBox, sans `non-scaling-stroke` : même piège de tirets que les
+     fissures de Gon ci-dessus. */
+  stroke-width: 0.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 3px rgba(255, 60, 70, 1)) drop-shadow(0 0 9px rgba(200, 0, 30, 0.8));
+  animation: evo-rhaast-veins-fade 2.9s linear both;
+}
+.evo-rhaast-veins path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  /* Le tronc d'abord, puis chaque branche quand le tronc l'atteint. */
+  animation: evo-draw 0.9s cubic-bezier(0.3, 0.6, 0.3, 1) calc(0.2s + var(--i, 0) * 0.18s) both;
+}
+@keyframes evo-rhaast-veins-fade {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  84%,
+  100% {
+    opacity: 0;
+  }
+}
+.evo-rhaast-smoke {
+  position: absolute;
+  bottom: 10%;
+  left: calc(50% + (var(--i, 0) - 2.5) * 18%);
+  width: 50%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(60, 0, 12, 0.95), rgba(120, 10, 30, 0.55) 40%, transparent 70%);
+  filter: blur(5px);
+  opacity: 0;
+  animation: evo-rhaast-smoke 1.4s ease-out calc(1.1s + var(--i, 0) * 0.14s) both;
+}
+@keyframes evo-rhaast-smoke {
+  0% {
+    opacity: 0;
+    translate: -50% 10%;
+    scale: 0.5;
+  }
+  30% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    translate: -50% -180%;
+    scale: 1.5;
+  }
+}
+/* L'éruption : anneau écarlate qui claque, avec un voile rouge sur tout l'écran. */
+.evo-rhaast-eruption {
+  position: absolute;
+  width: 60%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 4px solid rgba(255, 70, 80, 0.95);
+  box-shadow: 0 0 30px rgba(255, 40, 60, 0.9), inset 0 0 30px rgba(255, 40, 60, 0.7);
+  opacity: 0;
+  animation: flourish-ring 0.8s cubic-bezier(0.1, 0.7, 0.2, 1) 2s forwards;
+}
+.evo-rhaast-eruption::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: rgba(160, 0, 20, 0.5);
+  opacity: 0;
+  animation: evo-rhaast-veil 0.8s ease-out 2s forwards;
+}
+@keyframes evo-rhaast-veil {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 /* Résurrection : le pendant exact du vol de mort. Lumière chaude qui remonte du sol. */
 .card-flourish-revive {
   --flourish-color: #7ef0b6;
@@ -12369,6 +13042,22 @@ textarea {
   .card-flourish-beam,
   .card-flourish-star,
   .card-flourish-spark,
+  .evo-gon-dark,
+  .evo-gon-cracks path,
+  .evo-gon-pillar,
+  .evo-gon-smoke,
+  .evo-gon-bolts polyline,
+  .evo-gon-flash,
+  .evo-kayn-mist,
+  .evo-kayn-ghost,
+  .evo-kayn-slash,
+  .evo-kayn-burst,
+  .evo-rhaast-heart,
+  .evo-rhaast-veins,
+  .evo-rhaast-veins path,
+  .evo-rhaast-smoke,
+  .evo-rhaast-eruption,
+  .evo-rhaast-eruption::before,
   .fx-heal-mote,
   .fx-shield-gain,
   .fx-shield-break,

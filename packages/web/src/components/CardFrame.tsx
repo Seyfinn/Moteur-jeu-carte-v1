@@ -18,8 +18,10 @@ export function isEquipmentCard(cardId: string, kind: 'character' | 'object' | '
 }
 
 export interface HoverHandlers {
-  onMouseEnter: (e: MouseEvent<HTMLDivElement>) => void;
+  onMouseEnter: (e: MouseEvent<HTMLElement>) => void;
   onMouseLeave: () => void;
+  /** Clic droit : épingle la fiche, même sur une carte dont le clic gauche fait autre chose. */
+  onContextMenu?: (e: MouseEvent<HTMLElement>) => void;
 }
 
 export function CardFrame({

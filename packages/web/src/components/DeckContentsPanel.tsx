@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { DECK_LIMITS, type DeckPoolEntry } from 'engine';
-import { CardFrame } from './CardFrame';
+import { CardFrame, type HoverHandlers } from './CardFrame';
 import { CardPreviewPanel } from './CardPreviewPanel';
 import { characterDetailBody, objectDetailBody, terrainDetailBody } from './cardDetails';
 import type { Deck } from '../decks';
@@ -82,15 +83,27 @@ function groupByCount(ids: string[], nameOf: (id: string) => string): Array<{ id
     mouse to stay still on a pool card for a bit before popping up an enlarged card
     next to its description -- browsing the pool shouldn't flash a tooltip per swipe. */
 const PREVIEW_DELAY_MS = 300;
+/**
+ * Délai avant la fermeture au départ de la souris : le temps d'entrer dans la bulle pour y
+ * faire défiler un long texte. La bulle elle-même annule la fermeture tant qu'on la survole.
+ */
+const PREVIEW_HIDE_DELAY_MS = 300;
 const PREVIEW_PANEL_WIDTH = 700;
-const PREVIEW_PANEL_MAX_HEIGHT = 480;
+/** Doit suivre `max-height` de `.card-preview-text` (+ le cadre) : sert à ne pas poser la bulle sous le bord bas. */
+const PREVIEW_PANEL_MAX_HEIGHT = 600;
 
 interface CardPreviewApi {
   requestShow: (entry: DeckPoolEntry, target: HTMLElement) => void;
   /** Opens the preview centered on screen, pinned open until explicitly dismissed --
-      used on touch devices, which have no hover to show/hide it on. */
+      used on touch devices (no hover), and on click / right-click at the mouse. */
   showCentered: (entry: DeckPoolEntry) => void;
   cancel: () => void;
+  /**
+   * Branchement standard d'une vignette : survol prolongé = bulle à côté (souris
+   * seulement), clic ou clic droit = fiche épinglée au centre jusqu'à fermeture. Le clic
+   * gauche est libre sur toutes ces vignettes (les « + » / « − » sont des boutons à part).
+   */
+  bind: (entry: DeckPoolEntry) => { onClick: () => void; hoverProps?: HoverHandlers };
 }
 
 const CardPreviewCtx = createContext<CardPreviewApi | null>(null);
@@ -101,40 +114,107 @@ export function useCardPreview(): CardPreviewApi {
   return ctx;
 }
 
-export function CardPreviewProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<{ entry: DeckPoolEntry; rect: DOMRect | null } | null>(null);
-  const showTimer = useRef<number | null>(null);
+interface PreviewState {
+  entry: DeckPoolEntry;
+  /** `null` = épinglée au centre. */
+  rect: DOMRect | null;
+  /** La vignette survolée : la molette posée dessus fait défiler la bulle à sa place. */
+  anchor: HTMLElement | null;
+}
 
-  function clearTimer() {
-    if (showTimer.current !== null) {
-      window.clearTimeout(showTimer.current);
-      showTimer.current = null;
-    }
+export function CardPreviewProvider({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<PreviewState | null>(null);
+  const showTimer = useRef<number | null>(null);
+  const hideTimer = useRef<number | null>(null);
+  const textRef = useRef<HTMLDivElement>(null);
+  const coarse = usePointerCoarse();
+
+  function clearTimers() {
+    if (showTimer.current !== null) window.clearTimeout(showTimer.current);
+    if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
+    showTimer.current = null;
+    hideTimer.current = null;
   }
   // Quitter l'écran (Retour, Échap) pendant qu'un survol arme l'aperçu : le minuteur
   // survivait au démontage et tentait d'ouvrir l'aperçu sur un composant disparu.
-  useEffect(() => clearTimer, []);
+  useEffect(() => clearTimers, []);
+
+  const pinned = state !== null && state.rect === null;
+
+  // Fiche épinglée : Échap la ferme, comme la croix ou le voile. En phase de capture et
+  // sans laisser passer l'événement : l'éditeur de deck écoute aussi Échap pour quitter
+  // l'écran, et une fiche ouverte doit être la seule chose qu'une pression referme.
+  useEffect(() => {
+    if (!pinned) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setState(null);
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [pinned]);
+
+  // La molette posée sur la vignette survolée fait défiler la bulle, sans avoir à aller la
+  // chercher. Non passif pour retenir le défilement de la grille ; quand le texte tient
+  // entier, la molette garde son sens habituel.
+  useEffect(() => {
+    const anchor = state?.anchor;
+    if (!anchor) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!(e.target instanceof Node) || !anchor.contains(e.target)) return;
+      const text = textRef.current;
+      if (!text || text.scrollHeight <= text.clientHeight + 1) return;
+      e.preventDefault();
+      text.scrollTop += e.deltaY;
+    };
+    window.addEventListener('wheel', onWheel, { passive: false });
+    return () => window.removeEventListener('wheel', onWheel);
+  }, [state]);
 
   const api: CardPreviewApi = {
     requestShow(entry, target) {
-      clearTimer();
+      clearTimers();
       const rect = target.getBoundingClientRect();
       showTimer.current = window.setTimeout(() => {
         showTimer.current = null;
-        setState({ entry, rect });
+        // Une fiche épinglée reste maîtresse : le survol d'une autre vignette ne la remplace pas.
+        setState((prev) => (prev && prev.rect === null ? prev : { entry, rect, anchor: target }));
       }, PREVIEW_DELAY_MS);
     },
     showCentered(entry) {
-      clearTimer();
-      setState({ entry, rect: null });
+      clearTimers();
+      setState({ entry, rect: null, anchor: null });
     },
     cancel() {
-      clearTimer();
-      setState(null);
+      clearTimers();
+      hideTimer.current = window.setTimeout(() => {
+        hideTimer.current = null;
+        setState((prev) => (prev && prev.rect === null ? prev : null));
+      }, PREVIEW_HIDE_DELAY_MS);
+    },
+    bind(entry) {
+      return {
+        onClick: () => api.showCentered(entry),
+        hoverProps: coarse
+          ? undefined
+          : {
+              onMouseEnter: (e) => api.requestShow(entry, e.currentTarget),
+              onMouseLeave: api.cancel,
+              onContextMenu: (e) => {
+                e.preventDefault();
+                api.showCentered(entry);
+              },
+            },
+      };
     },
   };
 
-  const pinned = state !== null && state.rect === null;
+  // Entrer dans la bulle annule la fermeture en cours ; la quitter la relance.
+  const keepOpen = () => {
+    if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
+    hideTimer.current = null;
+  };
 
   let style: CSSProperties = {};
   if (state?.rect) {
@@ -145,28 +225,50 @@ export function CardPreviewProvider({ children }: { children: ReactNode }) {
     style = { left, top };
   }
 
+  // Rendu dans `body` : `.deck-manager` porte un `backdrop-filter`, qui fait de lui le
+  // repère des descendants en `position: fixed`. Posée dedans, la bulle suivait le
+  // défilement de l'écran de deck et la fiche « centrée » se centrait sur le panneau.
+  const overlay = state && (
+    <>
+      {pinned && <div className="hover-card-backdrop" onClick={() => setState(null)} />}
+      <div
+        className={`card-preview${pinned ? ' pinned' : ''}`}
+        style={style}
+        onMouseEnter={pinned ? undefined : keepOpen}
+        onMouseLeave={pinned ? undefined : api.cancel}
+        role={pinned ? 'dialog' : undefined}
+        aria-modal={pinned ? true : undefined}
+        aria-label={pinned ? state.entry.name : undefined}
+      >
+        {pinned && (
+          <button
+            className="hover-card-close"
+            onClick={() => setState(null)}
+            aria-label="Fermer (Échap)"
+            title="Fermer (Échap)"
+            autoFocus
+          >
+            ×
+          </button>
+        )}
+        <CardPreviewPanel
+          card={{
+            cardId: state.entry.id,
+            kind: state.entry.type,
+            name: state.entry.name,
+            unique: state.entry.maxCopies === 1,
+          }}
+          body={detailBodyFor(state.entry)}
+          textRef={textRef}
+        />
+      </div>
+    </>
+  );
+
   return (
     <CardPreviewCtx.Provider value={api}>
       {children}
-      {pinned && <div className="hover-card-backdrop" onClick={() => setState(null)} />}
-      {state && (
-        <div className={`card-preview${pinned ? ' pinned' : ''}`} style={style}>
-          {pinned && (
-            <button className="hover-card-close" onClick={() => setState(null)} aria-label="Fermer">
-              ×
-            </button>
-          )}
-          <CardPreviewPanel
-            card={{
-              cardId: state.entry.id,
-              kind: state.entry.type,
-              name: state.entry.name,
-              unique: state.entry.maxCopies === 1,
-            }}
-            body={detailBodyFor(state.entry)}
-          />
-        </div>
-      )}
+      {overlay && createPortal(overlay, document.body)}
     </CardPreviewCtx.Provider>
   );
 }
@@ -184,7 +286,6 @@ export function SelectedCardTile({
   onRemove?: () => void;
 }) {
   const preview = useCardPreview();
-  const coarse = usePointerCoarse();
   return (
     <CardFrame
       cardId={entry.id}
@@ -192,15 +293,7 @@ export function SelectedCardTile({
       name={entry.name}
       size="small"
       unique={entry.maxCopies === 1}
-      onClick={coarse ? () => preview.showCentered(entry) : undefined}
-      hoverProps={
-        coarse
-          ? undefined
-          : {
-              onMouseEnter: (e) => preview.requestShow(entry, e.currentTarget),
-              onMouseLeave: preview.cancel,
-            }
-      }
+      {...preview.bind(entry)}
       footer={
         count > 1 || onRemove ? (
           <div className="deck-selected-stepper">
@@ -240,14 +333,15 @@ export function DeckCardRow({
   onRemove?: () => void;
 }) {
   const preview = useCardPreview();
-  const coarse = usePointerCoarse();
+  const { onClick, hoverProps } = preview.bind(entry);
   return (
     <li
       className="deck-row"
       style={{ '--row-art': `url(/cards/${entry.id}.png)` } as CSSProperties}
-      onClick={coarse ? () => preview.showCentered(entry) : undefined}
-      onMouseEnter={coarse ? undefined : (e) => preview.requestShow(entry, e.currentTarget)}
-      onMouseLeave={coarse ? undefined : preview.cancel}
+      onClick={onClick}
+      onMouseEnter={hoverProps?.onMouseEnter}
+      onMouseLeave={hoverProps?.onMouseLeave}
+      onContextMenu={hoverProps?.onContextMenu}
     >
       <span className="deck-row-art" />
       <span className="deck-row-scrim" />

@@ -93,6 +93,10 @@ const STATUS_VISUALS: Record<string, StatusVisual> = {
   // « Sacrifice » de Makima (statut générique `sealed`) : une compétence ou une attaque
   // fermée, comme un silence -- mais ciblée sur un id précis.
   sealed: { className: 'fx-silence', particles: 'mute', tone: 'debuff' },
+  // « Serment de Vengeance » de Gon, une fois la Cible révélée : le badge « repéré ». Le
+  // viseur proprement dit n'est pas ici -- il est décidé par le plateau (`gonTargetsKnownTo`),
+  // parce que le camp de Gon doit le voir bien avant que ce statut n'existe.
+  'gon-cible': { className: 'fx-mark', particles: 'mark', tone: 'debuff' },
   // « Serment de Vengeance » / « Écriture du Nom » de Light Yagami : les marques "Nom"
   // avant la crise cardiaque. Le symbole de la marque, celui qui dit « repéré » sans
   // annoncer de dégâts immédiats.
