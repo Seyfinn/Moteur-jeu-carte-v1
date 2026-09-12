@@ -56,17 +56,27 @@ export const dioBrando: CharacterCardDef = {
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
+        // Un seul jet d'esquive pour le coup ET le silence (même pattern que Muzan /
+        // Rengoku / Sukuna) : un coup esquivé ne tente plus le jet de 50 % -- décision de
+        // l'auteur à l'audit. Avant, la roue de Silence Passif tournait même sur une esquive,
+        // et le statut passait alors à coup sûr (une esquive réussie pose `evasion-locked`).
+        if (ctx.rollEvasion(target.instanceId)) return;
+
         const atk = ctx.getEffectiveATK(ctx.sourceInstanceId, CHAIR_VAMPIRIQUE_ATK);
-        await ctx.dealDamage(target.instanceId, atk);
+        await ctx.dealDamage(target.instanceId, atk, { skipEvasionRoll: true });
 
         if (ctx.rollChance(SILENCE_CHANCE_PERCENT, 'Silence Passif', { characterInstanceId: target.instanceId })) {
-          ctx.applyStatus(target.instanceId, {
-            statusId: 'silence-passive',
-            label: 'Silence Passif (Chair Vampirique)',
-            sourcePlayerId: ctx.ownerId,
-            sourceCardInstanceId: ctx.sourceInstanceId,
-            remainingTurns: SILENCE_REMAINING_TURNS,
-          });
+          ctx.applyStatus(
+            target.instanceId,
+            {
+              statusId: 'silence-passive',
+              label: 'Silence Passif (Chair Vampirique)',
+              sourcePlayerId: ctx.ownerId,
+              sourceCardInstanceId: ctx.sourceInstanceId,
+              remainingTurns: SILENCE_REMAINING_TURNS,
+            },
+            { skipEvasionRoll: true }
+          );
         }
       },
     },

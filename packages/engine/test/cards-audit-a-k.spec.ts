@@ -1,5 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { registerCard, type Match, type PendingChoice, type PlayerId, type RosterConfig } from '../src/index.js';
+import { registerCard, type EngineApi, type Match, type PendingChoice, type PlayerId, type RosterConfig } from '../src/index.js';
+import { getEffectiveATK } from '../src/queries.js';
+import { guts } from '../src/cards/demo/guts.js';
 import { blitzcrank } from '../src/cards/demo/blitzcrank.js';
 import { chrolloLucilfer } from '../src/cards/demo/chrollo-lucilfer.js';
 import { kakashi } from '../src/cards/demo/kakashi.js';
@@ -15,7 +17,7 @@ beforeAll(() => {
   registerTestFixtures();
   if (!registered) {
     registered = true;
-    for (const card of [blitzcrank, chrolloLucilfer, kakashi, kayn, kaynAssassin, rhaast, aki]) registerCard(card);
+    for (const card of [blitzcrank, chrolloLucilfer, kakashi, kayn, kaynAssassin, rhaast, aki, guts]) registerCard(card);
   }
 });
 
@@ -197,5 +199,28 @@ describe('Aki -- « Aki va stun au prochain tour »', () => {
     await drive(match, 'p2', { kind: 'pass' });
     await drive(match, 'p1', { kind: 'pass' });
     expect(hasStatusId(match, 'p2', foeId, 'stun')).toBe(false);
+  });
+});
+
+describe('Guts -- Berserk compte le CUMUL des PV perdus, pas le record de dégâts', () => {
+  const ROSTER: RosterConfig = { characterCardIds: [guts.id, 'fx-tank'], objectCardIds: [], terrainCardIds: [] };
+
+  it('90 subis, 90 soignés, 90 subis = 180 perdus = 1 palier (+50 ATK)', async () => {
+    const match = await createReadyMatch(
+      { p1Name: 'A', p2Name: 'B', p1Roster: ROSTER, p2Roster: FOE, seed: 5 },
+      { p1ActiveCardId: guts.id, p2ActiveCardId: 'fx-stunner' }
+    );
+    const gutsId = findInstance(match, 'p1', guts.id);
+    const atk = () => getEffectiveATK(match.state, gutsId, 50);
+    expect(atk()).toBe(50);
+
+    const api = match['api'] as EngineApi;
+    const ctx = api.buildEffectContext(match.state.players.p2.activeCharacterInstanceId!, 'p2', undefined, 'ability');
+    await ctx.dealDamage(gutsId, 90, { skipEvasionRoll: true });
+    expect(atk()).toBe(50);
+    ctx.heal(gutsId, 90);
+    await ctx.dealDamage(gutsId, 90, { skipEvasionRoll: true });
+    // Record de dégâts : 90 → 0 palier. Cumul : 180 → 1 palier.
+    expect(atk()).toBe(100);
   });
 });

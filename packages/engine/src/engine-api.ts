@@ -18,6 +18,11 @@ import type {
  * which breaks what would otherwise be an import cycle between
  * zones/statuses/events/effect-context.
  */
+export interface ChooseForOptions {
+  /** `false` = ni ce prompt ni la suite de l'action ne peuvent plus être annulés. Défaut : hérite de l'action. */
+  cancellable?: boolean;
+}
+
 export interface EngineApi {
   rng: RngState;
 
@@ -53,7 +58,15 @@ export interface EngineApi {
   createTerrain(ownerId: PlayerId, cardId: string): string;
 
   emitEvent(event: EngineEvent): Promise<void>;
-  chooseFor(playerId: PlayerId, spec: ChoiceSpec): Promise<ChoiceAnswer>;
+  /**
+   * Pose une question à `playerId` et suspend l'effet en cours jusqu'à la réponse.
+   * `options.cancellable: false` marque un **point de non-retour** : ce prompt-là ne peut
+   * pas être annulé par `Match.cancelPendingChoice`, et l'action en cours ne pourra plus
+   * l'être ensuite non plus. À utiliser dès que rembobiner l'action rejouerait quelque
+   * chose qui ne devrait pas l'être -- le remplacement d'un actif KO, typiquement : annuler
+   * là aurait ressuscité l'attaquant tué par un renvoi de dégâts pendant sa propre attaque.
+   */
+  chooseFor(playerId: PlayerId, spec: ChoiceSpec, options?: ChooseForOptions): Promise<ChoiceAnswer>;
   /**
    * Joue immédiatement et gratuitement une carte objet pour `playerId` : elle est créée,
    * mise en jeu, son effet résolu, puis elle part au cimetière (ou reste accrochée si elle

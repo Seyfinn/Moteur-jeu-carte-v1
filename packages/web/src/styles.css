@@ -1587,13 +1587,23 @@ input::placeholder {
   flex-direction: column;
   gap: 6px;
   min-height: 0;
-  /* Arène : vignettage profond avec un spot de lumière au centre, là où les deux actifs
-     se font face. Les deux calques posés par-dessus (grille holographique, ambiance de
-     terrain) sont des pseudo-éléments en `z-index: -1` ; `isolation: isolate` crée le
-     contexte d'empilement qui les garde derrière le contenu tout en les laissant devant
-     ce fond -- sans lui, ils passeraient derrière la page entière. */
+  /* Durée du fondu enchaîné de l'image de fond. Doit suivre `FADE_MS` dans
+     `BoardBackdrop.tsx`, qui retire le calque sortant du DOM à cette échéance. */
+  --board-backdrop-fade: 0.9s;
+  /* Arène : spot de lumière au centre, là où les deux actifs se font face, et vignettage
+     franc vers les bords -- la table est une scène éclairée d'en haut, pas un aplat. Les
+     calques posés par-dessus (image de fond `.board-backdrop` en -2, puis grille
+     holographique `::before` et ambiance de terrain `::after` en -1) sont en `z-index`
+     négatif ; `isolation: isolate` crée le contexte d'empilement qui les garde derrière le
+     contenu tout en les laissant devant ce fond, que le navigateur peint toujours en
+     premier -- sans lui, ils passeraient derrière la page entière. */
   isolation: isolate;
-  background: radial-gradient(circle at 50% 46%, rgba(30, 41, 59, 1) 0%, rgba(15, 23, 42, 1) 72%);
+  background:
+    radial-gradient(ellipse 78% 72% at 50% 46%, rgba(2, 6, 23, 0) 0%, rgba(2, 6, 23, 0.35) 58%, rgba(2, 6, 23, 0.94) 100%),
+    /* Lueur froide qui glisse en diagonale : casse l'uniformité du dégradé, comme un reflet
+       sur une surface brossée. */
+    linear-gradient(135deg, rgba(148, 163, 184, 0.07) 0%, rgba(148, 163, 184, 0) 38%, rgba(148, 163, 184, 0) 62%, rgba(56, 78, 120, 0.1) 100%),
+    radial-gradient(circle at 50% 46%, #1f2b40 0%, #111a2e 58%, #0b1121 100%);
 }
 /* Grille holographique : volontairement à la limite du perceptible -- elle donne une
    texture à la table sans entrer en concurrence avec les cartes. */
@@ -1609,8 +1619,57 @@ input::placeholder {
     linear-gradient(to bottom, #dbeafe 1px, transparent 1px);
   background-size: 46px 46px;
 }
+/* Image de fond (illustration du terrain en jeu, ou image importée par le joueur), rendue
+   par `BoardBackdrop.tsx` en premier enfant du plateau. En -2 : sous la grille et la teinte
+   de terrain, qui restent des finitions posées PAR-DESSUS l'image. Deux calques peuvent
+   coexister le temps d'un fondu enchaîné (l'ancien s'efface, le nouveau apparaît). */
+.board-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  overflow: hidden;
+}
+.board-backdrop-layer {
+  position: absolute;
+  inset: 0;
+  animation: board-backdrop-in var(--board-backdrop-fade) var(--ease) both;
+  transition: opacity var(--board-backdrop-fade) var(--ease);
+}
+.board-backdrop-layer.leaving {
+  opacity: 0;
+}
+@keyframes board-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* L'image elle-même : très assombrie et floutée, parce que les cartes doivent rester
+   lisibles par-dessus quelle que soit l'illustration. Le `scale` élargit l'image de
+   quelques pourcents pour que le flou n'aille pas chercher du vide sur le pourtour -- sans
+   lui, un liseré clair courait le long des quatre bords. */
+.board-backdrop-image {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: brightness(0.3) blur(6px);
+  transform: scale(1.04);
+}
+/* Vignettage par-dessus l'image, hors du `filter` (le flou le délaverait) : les bords
+   restent aussi sombres qu'avec le fond par défaut, l'image ne vit qu'au centre. */
+.board-backdrop-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 78% 72% at 50% 46%, rgba(2, 6, 23, 0) 0%, rgba(2, 6, 23, 0.4) 60%, rgba(2, 6, 23, 0.92) 100%);
+}
 /* Calque d'ambiance, allumé par la classe `board-terrain-<cardId>` que pose Board.tsx.
-   Éteint par défaut : un terrain sans règle dédiée ne teinte rien. */
+   Éteint par défaut : un terrain sans règle dédiée ne teinte rien. Il passe au-dessus de
+   l'image de fond (même `z-index` que `::before`, mais peint après lui). */
 .board::after {
   content: '';
   position: absolute;
@@ -1623,19 +1682,25 @@ input::placeholder {
 .board-terrain::after {
   animation: terrain-ambience 6s ease-in-out infinite;
 }
+/* Amplitude volontairement contenue : depuis que l'illustration du terrain s'affiche en
+   fond, la teinte n'est plus qu'une touche de couleur par-dessus, pas l'ambiance entière. */
 @keyframes terrain-ambience {
   0%,
   100% {
-    opacity: 0.55;
+    opacity: 0.4;
   }
   50% {
-    opacity: 1;
+    opacity: 0.75;
   }
 }
 @media (prefers-reduced-motion: reduce) {
   .board-terrain::after {
     animation: none;
-    opacity: 0.8;
+    opacity: 0.6;
+  }
+  .board-backdrop-layer {
+    animation: none;
+    transition: none;
   }
 }
 /* Autel Démoniaque : rouge écarlate, menaçant, monté du bas comme un brasier. */
@@ -12324,5 +12389,285 @@ textarea {
   .turn-sweep-band {
     animation-name: fx-hp-flash-anim;
     animation-duration: 1.6s;
+  }
+}
+
+/* === Fond du plateau : panneau de personnalisation === */
+/* (BoardThemeSettings.tsx) Ouvert depuis la barre du haut en partie ou depuis le lobby.
+   Réutilise le panneau du glossaire (`.glossary-panel`, `.glossary-header`,
+   `.glossary-scroll`) : même verre, même en-tête, même croix -- seul le contenu change. */
+.board-theme-button {
+  white-space: nowrap;
+}
+/* Le libellé « Fond » ne s'efface sous 760px QUE dans la barre du plateau, où le bouton
+   partage la place avec le glossaire ; au lobby il a toute la largeur et le garde. */
+@media (max-width: 760px) {
+  .glossary-button .board-theme-button-label {
+    display: none;
+  }
+}
+.board-theme-panel {
+  width: min(94vw, 560px);
+}
+.board-theme-help {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+.board-theme-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.board-theme-label {
+  display: block;
+  margin: 0 0 8px;
+  padding: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* Sélecteur de thème : deux grandes cases radio côte à côte, la case cochée prend le
+   liseré d'accent. L'input reste dans le flux (pas de `display: none`) pour garder la
+   navigation clavier et le focus visible, mais il est réduit au point d'être invisible. */
+.board-theme-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.board-theme-modes .board-theme-label {
+  grid-column: 1 / -1;
+}
+.board-theme-mode {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-soft);
+  background: var(--panel-alt);
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease), background-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+.board-theme-mode:hover:not(.disabled) {
+  border-color: var(--border);
+  background: var(--panel-raised);
+}
+.board-theme-mode.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.board-theme-mode.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.board-theme-mode input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.board-theme-mode:has(input:focus-visible) {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent-glow);
+}
+.board-theme-mode-icon {
+  flex-shrink: 0;
+  font-size: 1.3rem;
+  line-height: 1;
+}
+.board-theme-mode-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.board-theme-mode-text strong {
+  font-size: 0.88rem;
+  color: var(--text);
+}
+.board-theme-mode-text small {
+  font-size: 0.76rem;
+  line-height: 1.35;
+  color: var(--text-dim);
+}
+
+/* Import : le vrai `<input type="file">` est masqué (son rendu natif ne s'habille pas), et
+   c'est son `<label>` qui joue le bouton ; l'anneau de focus lui est reporté via `:has`. */
+.board-theme-import-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.board-theme-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.board-theme-file-button {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(120, 160, 255, 0.45);
+  background: rgba(120, 160, 255, 0.14);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease), background-color 0.15s var(--ease);
+}
+.board-theme-file-button:hover {
+  background: rgba(120, 160, 255, 0.24);
+  border-color: rgba(120, 160, 255, 0.7);
+}
+.board-theme-file-button.busy {
+  opacity: 0.6;
+  cursor: progress;
+}
+.board-theme-import-row:has(.board-theme-file:focus-visible) .board-theme-file-button {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent-glow);
+}
+.board-theme-or {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+.board-theme-url {
+  display: flex;
+  flex: 1;
+  min-width: 200px;
+  gap: 6px;
+}
+.board-theme-url input {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.84rem;
+}
+.board-theme-url button {
+  flex-shrink: 0;
+  font-size: 0.82rem;
+}
+.board-theme-hint {
+  margin: 8px 0 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+.board-theme-error {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(224, 85, 95, 0.45);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+/* Aperçu : l'image nette, et à côté le rendu réel du plateau (assombri, flouté, avec deux
+   silhouettes de cartes par-dessus pour donner l'échelle). Le filtre est celui du fond de
+   plateau : si l'un change, l'autre doit suivre, sinon l'aperçu ment. */
+.board-theme-previews {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.board-theme-preview {
+  margin: 0;
+  min-width: 0;
+}
+.board-theme-preview figcaption {
+  margin-top: 6px;
+  text-align: center;
+  font-size: 0.74rem;
+  color: var(--text-dim);
+}
+.board-theme-preview-frame {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-soft);
+  background: var(--bg-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.board-theme-preview-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.board-theme-preview-frame.on-board img {
+  /* Légèrement agrandie pour que le flou n'éclaircisse pas les bords du cadre. */
+  transform: scale(1.06);
+  filter: brightness(0.3) blur(6px);
+}
+.board-theme-preview-card {
+  position: absolute;
+  top: 50%;
+  width: 18%;
+  aspect-ratio: 5 / 7;
+  translate: 0 -50%;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.06));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+.board-theme-preview-card:nth-of-type(1) {
+  left: 24%;
+}
+.board-theme-preview-card:nth-of-type(2) {
+  right: 24%;
+}
+.board-theme-preview-broken {
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  color: var(--danger);
+}
+.board-theme-empty {
+  margin: 0;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border);
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+.board-theme-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+.board-theme-remove {
+  font-size: 0.82rem;
+}
+.board-theme-remove:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+@media (max-width: 520px) {
+  .board-theme-modes,
+  .board-theme-previews {
+    grid-template-columns: 1fr;
+  }
+  .board-theme-or {
+    display: none;
   }
 }

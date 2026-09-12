@@ -44,7 +44,7 @@ ancien brouillon de Potion de soin ; `chopper (1).json` est un doublon de `chopp
 
 Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc à répéter :
 
-- Base 1 % d'esquive et 1 % de critique (x2) sur toute attaque/ability hostile ; le statut
+- Base 1 % d'esquive et 5 % de critique (x2) sur toute attaque/ability hostile ; le statut
   `evasive` monte l'esquive à **20 %**, le statut `critical` monte le critique à **33 %**
   (constantes `EVASIVE_STATUS_CHANCE_PERCENT` / `CRITICAL_STATUS_CHANCE_PERCENT`). Une
   esquive **innée** promise par une carte (L'Infini, Sharingan) vaut le taux de l'effet
@@ -340,8 +340,12 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
 ### Dio Brando — 200 HP
 
 - **Chair Vampirique** (attaque) — 50 ATK, *« 50% d'appliquer Silence Passif 1 tour »* →
-  jet annoncé à 50 %, puis `silence-passive` avec `remainingTurns: 2` (le +1 des statuts
-  bloquants posés sur l'ennemi).
+  **un seul jet d'esquive** pour le coup et le silence (`ctx.rollEvasion` puis `dealDamage`
+  / `applyStatus` avec `skipEvasionRoll`, comme Muzan / Rengoku / Sukuna) : **un coup esquivé
+  ne tente plus le jet de 50 %** (décision de l'auteur à l'audit — avant, la roue tournait
+  même sur une esquive et le silence passait alors à coup sûr, `evasion-locked` oblige).
+  Coup passé : jet annoncé à 50 %, puis `silence-passive` avec `remainingTurns: 2` (le +1
+  des statuts bloquants posés sur l'ennemi).
 - **Chair Vampirique** (passive, `afterDamage`) — *« Dio récupère en PV 30% des défâts qu'il
   inflige avec ses attaques. »*
   → 30 % de `amount + shieldAbsorbed` : **le bouclier encaissé compte comme des dégâts
@@ -444,19 +448,18 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     inconditionnellement (le soin n'est pas subordonné à ce que le coup touche).
 - **Berserk** (passive, `afterDamage`, banc) — *« Tous les 100 HP que Guts perd au cours de
   la partie, "Coup d'épée" inflige 50 dégâts supplémentaires de façon permanente. »*
-  - Moteur : statut caché `guts-berserk-record` (`data.highestDamage`) = le **record de
-    dégâts encaissés** (`damage` le plus haut jamais atteint), qui ne redescend jamais, même
-    après un soin ; paliers = `floor(record / 100)`, bonus via un modifier `getEffectiveATK`.
-    ⚠️ Ce n'est **pas** un cumul des HP perdus : 90 subis, 90 soignés, 90 subis = 0 palier
-    (record 90) là où « tous les 100 HP que Guts perd » lu en cumulé donnerait 1 palier
-    (180 perdus). Avec son auto-soin de 25 par coup, la lecture cumulée le ferait monter
-    bien plus vite — point à trancher par l'auteur, laissé en l'état à l'audit. Le compteur
-    est privé à la carte : il ne peut pas être volé par Aizen ou la Poupée Voodoo.
+  - Moteur : statut caché `guts-berserk-total` (`data.totalLost`) = le **cumul des PV
+    réellement perdus** depuis le début de la partie (somme des `amount` d'`afterDamage` qui
+    le visent, bouclier déjà déduit ; un valeur lock ne compte pas, il retire du plafond et
+    non des PV). Un soin ne fait pas redescendre le cumul : 90 subis, 90 soignés, 90 subis =
+    180 perdus = 1 palier (règle confirmée par l'auteur). Paliers = `floor(cumul / 100)`,
+    bonus via un modifier `getEffectiveATK`. Le compteur est privé à la carte : il ne peut
+    pas être volé par Aizen ou la Poupée Voodoo.
 
 ### Gojo Satoru — 190 HP
 
 - **Blackflash** (55 ATK) — *« Inflige 55 dégâts à l'actif adverse. 33% de chance de
-  critique. »* → modifier `getCriticalPercent` (au lieu des 2 % de base).
+  critique. »* → modifier `getCriticalPercent` (au lieu des 5 % de base).
 - **L'Infini** (passive) — *« Gojo bénéficie en permanence de l'effet Esquive, qu'il soit
   actif ou au banc. »*
   - Moteur : modifier `getEvasionPercent` au taux de l'effet Esquive
@@ -726,8 +729,11 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
 - **Godspeed** (passive, `onBecomeActive`) — *« Lorsque Killua devient le personnage actif
   via un switch, la première attaque qu'il effectue lors de ce tour inflige obligatoirement
   un coup critique. »*
-  - Moteur : statut `critical` avec `data.percent = 100`, consommé au premier coup. Exclut
-    explicitement `reason: 'setup'` — l'actif de départ ne l'arme pas.
+  - Moteur : statut `critical` avec `data.percent = 100`, consommé au premier coup. N'accepte
+    que `reason: 'switch'` sur `onBecomeActive` : ni l'actif de départ (`setup`) ni le
+    remplacement d'un allié KO (`ko-replacement`) ne l'arment — « via un switch » veut dire
+    un vrai switch, action du joueur ou `forceSwitch` de carte (décision de l'auteur à
+    l'audit).
 
 ### Kirigiri — 300 HP
 
@@ -812,7 +818,7 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
 
 - **Taillade éclair** — 90 ATK, pas de texte. Peut viser le banc affaibli via Traque.
 - **Frappe à la nuque** — 60 ATK, *« Cette attaque peut crit »* → **convention maison : la
-  mention « peut crit » vaut 33 % de chance de critique** (contre 2 % de base pour toute
+  mention « peut crit » vaut 33 % de chance de critique** (contre 5 % de base pour toute
   autre attaque). Implémentée avec le statut générique `critical` et son `data.percent`,
   posé puis retiré autour du coup (même primitive que Godspeed de Killua) — sauf si Levi
   portait déjà un `critical` venu d'ailleurs, qu'il ne faut ni écraser ni supprimer.
@@ -907,10 +913,18 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   alimente Bang ! et ce qui rend « 2 sacrifices requis » atteignable. Il vise **une seule
   compétence nommée**, pas une catégorie : ni `silence-active` ni `silence-passive` ni
   `disarmed` ne conviennent, ils ferment *tout* l'actif / *tout* le passif / *toute*
-  attaque du personnage. Statut `makima-sceau` porté par le sacrifié, `data.sealedIds`
-  accumulant les ids scellés ; deux modifiers de Makima refusent exactement ces ids
-  (`canUseAbility` pour les compétences, `canAttack` pour les attaques). Grisée quand plus
-  aucun allié du banc n'a quelque chose à sacrifier.
+  attaque du personnage. Statut **générique `sealed`** porté par le sacrifié
+  (`data.abilityIds` / `data.attackIds` accumulant les ids scellés) ; c'est le **moteur**
+  qui refuse exactement ces ids (`queries.ts::canUseAbility` pour les compétences,
+  `canAttack` pour les attaques). Grisée quand plus aucun allié du banc n'a quelque chose à
+  sacrifier.
+  → « De manière permanente » : **le sceau survit à la mort de Makima** (décision de l'auteur
+  à l'audit). C'est pour ça qu'il n'est plus porté par des modifiers de Makima — un modifier
+  cesse d'être scanné dès que sa carte quitte le jeu — mais par un statut reconnu par le
+  moteur. Contrepartie assumée : `sealed` fait partie de `BUILTIN_STATUS_IDS`, donc un effet
+  « échange tous les statuts » (Aizen, Poupée Voodoo) peut le déplacer ; ses ids ne
+  correspondant à rien sur le nouveau porteur, il n'y ferme rien, mais il ne compte plus pour
+  Bang ! (qui ne lit que le camp de Makima) ni pour « 2 sacrifices requis ».
   → **Ajout moteur** : `canAttack` reçoit désormais un `attackId` optionnel dans son
   payload, sans quoi il était impossible de fermer une attaque précise sur un personnage
   qui en a plusieurs (Roi des esprits en a 3). Sans `attackId` — une requête qui jauge le
@@ -2092,6 +2106,12 @@ soigne de 50 HP à la place. »*
 - Moteur : modifier `getIncomingDamageAmount` filtré sur `source === 'burn'` et sur vos
   propres personnages. Le soin passe par `getIncomingHealAmount`, donc Hôpital le double.
   La durée de la brûlure, elle, continue de s'écouler normalement.
+- Le soin est appliqué par `hp.heal()` en direct (un transform est synchrone), donc il
+  respecte lui-même les statuts qui bloquent tout soin : sous `unhealable` (Marque de
+  Mahito) ou `buveur-de-sang` (Berserk), **les dégâts du burn restent annulés mais le
+  porteur n'est pas soigné** — même liste que `match.ts::heal`, via
+  `statuses.ts::isHealBlocked` (décision de l'auteur à l'audit ; avant, ce soin
+  contournait la Marque).
 
 ### Ronces grimpantes — 5 tours
 

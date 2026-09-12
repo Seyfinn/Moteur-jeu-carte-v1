@@ -14,6 +14,7 @@ import { deckIssue, deckToRoster, loadDecks, type Deck } from '../decks';
 import { DeckContentsPanel, type CardKind } from './DeckContentsPanel';
 import { LobbyBackground } from './LobbyBackground';
 import { HowToPlayButton } from './HowToPlay';
+import { BoardThemeButton } from './BoardThemeSettings';
 
 const MODE_LABELS: Record<GameMode, string> = {
   normal: 'Mode Normal',
@@ -169,7 +170,11 @@ export function Lobby({
           ? `${deckSize} cartes prêtes`
           : 'Deck injouable';
 
-  const canSubmitCode = !busy && joinCode.length >= 2 && canPlay;
+  // Rejoindre par code n'exige PAS de deck valide (décision de l'auteur) : le mode du salon
+  // rejoint est inconnu d'ici, et `canPlay` ne juge que le mode sélectionné dans « Créer ».
+  // Le `roster` ci-dessus n'est envoyé que s'il est jouable ; sinon le serveur fournit le
+  // deck par défaut (`DEMO_STARTER_DECK`, cf. server/room.ts).
+  const canSubmitCode = !busy && joinCode.length >= 2;
   const submitJoinCode = (event: FormEvent) => {
     // Entrée dans le champ de code = clic sur « Rejoindre » : le formulaire porte les deux.
     event.preventDefault();
@@ -197,6 +202,9 @@ export function Lobby({
               se voir, avant tout salon. Séparé des onglets de decks, qui sont de la gestion. */}
           <div className="lobby-topbar-actions">
             <HowToPlayButton className="lobby-howto" />
+            {/* Le fond du plateau se règle aussi hors partie : on n'a pas envie d'importer
+                une image pendant que l'adversaire attend. Même pastille que le guide. */}
+            <BoardThemeButton className="lobby-howto" />
 
             {/* Gestion des decks : utile, mais ce n'est pas l'action qu'on vient chercher ici.
                 Reléguée en onglets discrets pour laisser la zone de jeu au lancement de partie. */}

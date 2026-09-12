@@ -1,6 +1,7 @@
 import type { TerrainCardDef } from '../types.js';
 import { findCharacter, evaluateTransform } from '../../queries.js';
 import { heal } from '../../hp.js';
+import { isHealBlocked } from '../../statuses.js';
 
 const DURATION_TURNS = 5;
 const HEAL_AMOUNT = 50;
@@ -22,6 +23,12 @@ export const regulationThermique: TerrainCardDef = {
         const targetInstanceId = ctx.query['targetInstanceId'] as string;
         const target = findCharacter(ctx.state, targetInstanceId);
         if (target.ownerId !== ctx.sourceOwnerId) return current;
+        // Les dégâts du burn sont annulés dans tous les cas, mais le soin passe ici par
+        // `hp.heal()` en direct (un transform est synchrone et ne peut pas appeler
+        // `api.heal()`) : il doit donc respecter lui-même les statuts qui bloquent tout
+        // soin (`unhealable` de la Marque de Mahito, `buveur-de-sang`), exactement comme
+        // match.ts::heal -- même source de vérité, statuses.ts::isHealBlocked.
+        if (isHealBlocked(target)) return 0;
         // Passe par getIncomingHealAmount pour rester cohérent avec d'autres effets
         // de soin (ex: Hôpital) qui pourraient être en jeu en même temps.
         const boosted = evaluateTransform(ctx.state, 'getIncomingHealAmount', { targetInstanceId }, HEAL_AMOUNT);

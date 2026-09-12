@@ -131,6 +131,17 @@ export type BuiltinStatusId =
    */
   | 'borrowed-attack'
   /**
+   * "Sacrifice" de Makima : les compétences `data.abilityIds` et les attaques
+   * `data.attackIds` du porteur sont scellées -- `canUseAbility` / `canAttack` (queries.ts)
+   * refusent exactement ces ids, et rien d'autre (sans `attackId`, une requête qui jauge le
+   * personnage en général ne refuse rien). Générique et porté par la VICTIME plutôt que
+   * codé en modifier sur la carte qui scelle : « de manière permanente » veut dire que le
+   * sceau survit à la mort de Makima, or un modifier cesse d'être scanné dès que sa carte
+   * quitte le jeu (cf. getInPlaySources). Jamais consommé -- seule une résurrection, qui
+   * vide tous les statuts, y met fin.
+   */
+  | 'sealed'
+  /**
    * "Tours compté" : le porteur doit tenir `data.ticksRemaining` tours de plus AU POSTE
    * ACTIF. Résolu par le moteur à la fin du tour du porteur (turn.ts::resolveSurvivalVow),
    * pas via un trigger de carte -- un objet ne peut réagir à aucun event de lui-même. En
@@ -479,7 +490,9 @@ export interface PendingChoice {
    * Whether `Match.cancelPendingChoice` can currently abort this prompt and roll back
    * whatever player action triggered it (an accidental ability/attack click). False for a
    * choice that isn't the direct result of an `applyAction` call the player just made --
-   * e.g. picking a starting active character during setup, or an opponent's own prompt.
+   * e.g. picking a starting active character during setup, or an opponent's own prompt --
+   * and for a prompt raised past a point of no return (`chooseFor(..., { cancellable:
+   * false })`: the replacement of a KO'd active, where unwinding would undo the KO itself).
    */
   cancellable: boolean;
 }

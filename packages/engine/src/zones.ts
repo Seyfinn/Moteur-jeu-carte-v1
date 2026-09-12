@@ -260,13 +260,20 @@ export async function koCharacter(
   }
 
   if (wasActive && player.activeCharacterInstanceId === null && player.benchCharacterInstanceIds.length > 0) {
-    const answer = await api.chooseFor(ownerId, {
-      kind: 'select-characters',
-      prompt: 'Choisissez le personnage qui devient actif',
-      options: [...player.benchCharacterInstanceIds],
-      min: 1,
-      max: 1,
-    });
+    // Jamais annulable : ce prompt peut être levé pour l'auteur de l'action en cours
+    // (attaquant tué par un renvoi de dégâts pendant sa propre attaque), et l'annuler
+    // rembobinerait toute l'action -- sa propre mort comprise.
+    const answer = await api.chooseFor(
+      ownerId,
+      {
+        kind: 'select-characters',
+        prompt: 'Choisissez le personnage qui devient actif',
+        options: [...player.benchCharacterInstanceIds],
+        min: 1,
+        max: 1,
+      },
+      { cancellable: false }
+    );
     // Re-read the bench: the choice suspends this function, and anything can have
     // happened in between (another KO, a forced switch, a revive filling the slot).
     if (player.activeCharacterInstanceId !== null || player.benchCharacterInstanceIds.length === 0) return;
