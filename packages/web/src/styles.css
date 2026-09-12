@@ -12671,3 +12671,31 @@ textarea {
     display: none;
   }
 }
+
+/* ==========================================================================
+   Coin de version (bas droite, toutes les vues) : le numéro de la PR déployée.
+   Discret par construction -- il ne doit jamais gêner une carte ni une modale, d'où le
+   `pointer-events` limité au badge lui-même et un z-index sous les modales (64+).
+   ========================================================================== */
+
+.version-badge {
+  position: fixed;
+  right: 8px;
+  bottom: 6px;
+  z-index: 50;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(14, 16, 21, 0.72);
+  border: 1px solid var(--border-soft);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  opacity: 0.7;
+  transition: opacity 0.15s var(--ease), color 0.15s var(--ease);
+}
+.version-badge:hover {
+  opacity: 1;
+  color: var(--text);
+}
