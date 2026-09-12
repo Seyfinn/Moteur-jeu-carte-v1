@@ -497,6 +497,13 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     Le camp de Gon, lui, apprend sa Cible **tout de suite** : une ligne de journal
     `data.privateTo = ctx.ownerId`, que `getPlayerView` retire de la vue de l'adversaire
     (c'est la seule carte du jeu à se servir de ce canal privé, avec Caméléon).
+  - **Viseur sur la Cible** (client) : le plateau entoure la Cible d'un viseur rouge
+    (`hunted` sur `CharacterCard` → `amb-hunted` sur le cadre + calque `fx-hunted`). Qui le
+    voit est décidé par `gonTargetsKnownTo(state, viewerId)` (exporté par `gon.ts`) : le
+    camp de Gon dès le tirage (il relit la mémoire de son PROPRE Gon), l'adversaire
+    seulement quand `gon-cible` est posé. Un client ne relit jamais la mémoire d'un Gon
+    adverse — elle est bien dans sa vue (`hidden` n'est qu'une consigne d'affichage), et
+    c'est exactement le secret à ne pas lui montrer.
   - **Révélation** (`onTurnStart`, `state.turnNumber >= 10`) : pose alors un statut bien
     visible `gon-cible` (« Cible de Gon ») sur la victime, avec `skipEvasionRoll` — une
     désignation ne s'esquive pas — plus une ligne de journal. `>=` et pas `===`, pour qu'un

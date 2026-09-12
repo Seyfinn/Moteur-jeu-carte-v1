@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { CardFrame } from './CardFrame';
 
 export interface PreviewCard {
@@ -20,18 +20,21 @@ export function CardPreviewPanel({
   title,
   subtitle,
   body,
+  textRef,
 }: {
   card: PreviewCard;
   title?: string;
   subtitle?: ReactNode;
   body: ReactNode;
+  /** La colonne de texte, celle qui défile : le fournisseur y relaie la molette. */
+  textRef?: Ref<HTMLDivElement>;
 }) {
   return (
     <>
       <CardFrame cardId={card.cardId} kind={card.kind} name={card.name} size="large" unique={card.unique} />
       {/* Le texte est ce qu'un lecteur d'écran doit annoncer : la vignette à côté n'est
           qu'une image de la même carte. */}
-      <div className="card-preview-text" role="tooltip" aria-label={title ?? card.name}>
+      <div className="card-preview-text" role="tooltip" aria-label={title ?? card.name} ref={textRef}>
         <h3 className="hover-card-title">{title ?? card.name}</h3>
         {subtitle && <div className="hover-card-subtitle">{subtitle}</div>}
         <div className="hover-card-content">{body}</div>

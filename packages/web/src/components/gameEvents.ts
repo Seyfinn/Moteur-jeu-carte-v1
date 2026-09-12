@@ -99,7 +99,41 @@ export type StrikeBolt = {
  * déborder du cadre, que l'`overflow: hidden` de `.tcg-card` rognerait net.
  */
 export type CardFlourishKind = 'crit' | 'evolve' | 'revive' | 'shield-hit';
-export type CardFlourish = { id: number; characterInstanceId: string; kind: CardFlourishKind };
+/**
+ * Mise en scène propre à UNE forme évoluée : chaque évolution rejoue la scène qui l'a
+ * rendue célèbre, au lieu de la même éclosion blanche pour tout le monde. Une forme qui
+ * n'est pas listée ici (une future carte) garde l'éclosion générique.
+ */
+export type EvolutionFlourishVariant = 'gon-adulte' | 'kayn-assassin' | 'rhaast';
+export type CardFlourish = {
+  id: number;
+  characterInstanceId: string;
+  kind: CardFlourishKind;
+  /** Uniquement pour `kind: 'evolve'` : la scène de la forme d'arrivée. */
+  variant?: EvolutionFlourishVariant;
+};
+
+/** Forme évoluée (id de carte) → sa mise en scène. */
+const EVOLUTION_FLOURISH_VARIANTS: Record<string, EvolutionFlourishVariant> = {
+  'gon-adulte': 'gon-adulte',
+  'kayn-assassin': 'kayn-assassin',
+  rhaast: 'rhaast',
+};
+
+/**
+ * Durée de chaque éclat, le temps que sa CSS a besoin pour aller au bout : la variante
+ * d'évolution la plus longue (la colonne de Gon, la corruption de Rhaast) dépasse de loin
+ * l'éclosion générique. À garder au-dessus de la plus longue animation de chaque bloc CSS.
+ */
+export const FLOURISH_DURATION_MS: Record<CardFlourishKind | EvolutionFlourishVariant, number> = {
+  crit: 1200,
+  evolve: 1200,
+  revive: 1200,
+  'shield-hit': 1200,
+  'gon-adulte': 2800,
+  'kayn-assassin': 2000,
+  rhaast: 2900,
+};
 
 /** Secousse de la table entière : son palier décide de l'amplitude et de la durée. */
 export type BoardQuake = { id: number; tier: ImpactTier; critical: boolean };
@@ -147,6 +181,8 @@ type Classified =
   | { anchor: 'impact'; targetInstanceId: string; attackerInstanceId?: string; tier: ImpactTier; critical: boolean }
   | { anchor: 'strike'; strike: Omit<StrikeBolt, 'id'> }
   | { anchor: 'flourish'; flourish: Omit<CardFlourish, 'id'> }
+  /** Secousse de table demandée par un événement qui n'est pas un coup (l'éveil de Gon). */
+  | { anchor: 'quake'; tier: ImpactTier }
   | { anchor: 'ko-flight'; flight: Omit<KoFlight, 'id'> }
   | { anchor: 'recycle-reveal'; reveal: Omit<RecycleReveal, 'id'> };
 
@@ -298,9 +334,14 @@ function classifyLogEntry(entry: LogEntry, state: GameState, ctx: BatchContext):
       } catch {
         /* unknown card id -- keep fallback label */
       }
+      const variant = EVOLUTION_FLOURISH_VARIANTS[cardId];
       return [
         { anchor: 'character', characterInstanceId, badge: { kind: 'ability', label: 'Évolution' } },
-        { anchor: 'flourish', flourish: { characterInstanceId, kind: 'evolve' } },
+        { anchor: 'flourish', flourish: { characterInstanceId, kind: 'evolve', variant } },
+        // L'éveil de Gon fait trembler le sol sous Pitou : la table entière avec lui. Les
+        // deux Kayn, eux, se jouent sur la carte seule -- un assassin ne fait pas de bruit,
+        // et la corruption de Rhaast est une affaire intérieure.
+        ...(variant === 'gon-adulte' ? [{ anchor: 'quake', tier: 'brutal' } as const] : []),
         {
           anchor: 'spotlight',
           spotlight: {
@@ -531,8 +572,6 @@ const SPOTLIGHT_DURATION_MS = 1700;
 const IMPACT_DURATION_MS = 1150;
 /** Course du trait de frappe d'un bout à l'autre du plateau, plus sa dissipation. */
 const STRIKE_DURATION_MS = 620;
-/** Anneau de critique, éclosion d'évolution, colonne de résurrection : la plus longue des trois. */
-const FLOURISH_DURATION_MS = 1200;
 /** Fenêtre pendant laquelle le Recycleur peut lire la révélation : le Card-Flip lui-même
  *  dure moins longtemps, mais la carte doit rester disponible le temps que l'animation de
  *  sacrifice (jouée AVANT que ce log n'arrive) ait fini de tourner. */
@@ -593,6 +632,7 @@ export function useGameEvents(state: GameState): {
     const newKoFlights: KoFlight[] = [];
     const newRecycleReveals: RecycleReveal[] = [];
     let quakeTier: ImpactTier | null = null;
+    const order: ImpactTier[] = ['light', 'heavy', 'brutal', 'devastating', 'cataclysm'];
     let quakeCritical = false;
 
     // La main qui passe d'un camp à l'autre, pas le numéro de manche : un tour de jeu
@@ -642,7 +682,6 @@ export function useGameEvents(state: GameState): {
             // Le plus violent du lot l'emporte : deux coups simultanés ne doivent pas
             // faire jouer la petite secousse par-dessus la grande.
             if (QUAKE_TIERS.has(classified.tier)) {
-              const order: ImpactTier[] = ['light', 'heavy', 'brutal', 'devastating', 'cataclysm'];
               if (!quakeTier || order.indexOf(classified.tier) > order.indexOf(quakeTier)) {
                 quakeTier = classified.tier;
               }
@@ -654,6 +693,8 @@ export function useGameEvents(state: GameState): {
             newStrikes.push({ ...classified.strike, id: ++seqRef.current });
           } else if (classified.anchor === 'flourish') {
             newFlourishes.push({ ...classified.flourish, id: ++seqRef.current });
+          } else if (classified.anchor === 'quake') {
+            if (!quakeTier || order.indexOf(classified.tier) > order.indexOf(quakeTier)) quakeTier = classified.tier;
           } else if (classified.anchor === 'ko-flight') {
             newKoFlights.push({ ...classified.flight, id: ++seqRef.current });
           } else if (classified.anchor === 'recycle-reveal') {
@@ -714,7 +755,7 @@ export function useGameEvents(state: GameState): {
       setFlourishes((list) => [...list, ...newFlourishes]);
       for (const f of newFlourishes) {
         timersRef.current.push(
-          setTimeout(() => setFlourishes((list) => list.filter((x) => x.id !== f.id)), FLOURISH_DURATION_MS)
+          setTimeout(() => setFlourishes((list) => list.filter((x) => x.id !== f.id)), FLOURISH_DURATION_MS[f.variant ?? f.kind])
         );
       }
     }

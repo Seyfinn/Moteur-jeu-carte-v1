@@ -75,7 +75,7 @@ import { arene } from './arene.js';
 import { kayn } from './kayn.js';
 import { kaynAssassin } from './kayn-assassin.js';
 import { rhaast } from './rhaast.js';
-import { gon } from './gon.js';
+import { gon, gonTargetsKnownTo } from './gon.js';
 import { gonAdulte } from './gon-adulte.js';
 import { escanor } from './escanor.js';
 import { failleDimensionnelle } from './faille-dimensionnelle.js';
@@ -170,6 +170,7 @@ export {
   kaynAssassin,
   rhaast,
   gon,
+  gonTargetsKnownTo,
   gonAdulte,
   escanor,
   failleDimensionnelle,
