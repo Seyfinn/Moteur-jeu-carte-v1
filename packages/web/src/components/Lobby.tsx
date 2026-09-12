@@ -13,6 +13,7 @@ import { listOpenRooms } from '../api/rooms';
 import { deckIssue, deckToRoster, loadDecks, type Deck } from '../decks';
 import { DeckContentsPanel, type CardKind } from './DeckContentsPanel';
 import { LobbyBackground } from './LobbyBackground';
+import { HowToPlayButton } from './HowToPlay';
 
 const MODE_LABELS: Record<GameMode, string> = {
   normal: 'Mode Normal',
@@ -192,19 +193,25 @@ export function Lobby({
             </div>
           </div>
 
-          {/* Gestion des decks : utile, mais ce n'est pas l'action qu'on vient chercher ici.
-              Reléguée en onglets discrets pour laisser la zone de jeu au lancement de partie. */}
-          <nav className="lobby-tabs" aria-label="Gestion des decks">
-            <button type="button" className="lobby-tab" onClick={onManageDecks}>
-              Gérer mes decks
-            </button>
-            <button type="button" className="lobby-tab" onClick={onCreateDeck}>
-              Créer un deck
-            </button>
-            <button type="button" className="lobby-tab" onClick={onImportDeck}>
-              Importer
-            </button>
-          </nav>
+          {/* Le guide du nouveau joueur : c'est LE premier écran, donc c'est ici qu'il doit
+              se voir, avant tout salon. Séparé des onglets de decks, qui sont de la gestion. */}
+          <div className="lobby-topbar-actions">
+            <HowToPlayButton className="lobby-howto" />
+
+            {/* Gestion des decks : utile, mais ce n'est pas l'action qu'on vient chercher ici.
+                Reléguée en onglets discrets pour laisser la zone de jeu au lancement de partie. */}
+            <nav className="lobby-tabs" aria-label="Gestion des decks">
+              <button type="button" className="lobby-tab" onClick={onManageDecks}>
+                Gérer mes decks
+              </button>
+              <button type="button" className="lobby-tab" onClick={onCreateDeck}>
+                Créer un deck
+              </button>
+              <button type="button" className="lobby-tab" onClick={onImportDeck}>
+                Importer
+              </button>
+            </nav>
+          </div>
         </header>
 
         <div className="lobby-layout">

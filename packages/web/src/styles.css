@@ -401,6 +401,44 @@ input::placeholder {
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
 }
 
+/* Guide + onglets de decks, groupés à droite du titre pour qu'ils se replient ensemble
+   sous le titre quand la largeur manque. */
+.lobby-topbar-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
+/* Le guide du nouveau joueur : premier écran, premier bouton qu'un débutant doit voir.
+   Même verre que les onglets, mais à la couleur d'accent pour se distinguer de la gestion
+   de decks. */
+.lobby-howto {
+  flex-shrink: 0;
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(120, 160, 255, 0.45);
+  background: rgba(120, 160, 255, 0.14);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 0 18px rgba(120, 160, 255, 0.18);
+}
+.lobby-howto:hover:not(:disabled) {
+  background: rgba(120, 160, 255, 0.24);
+  border-color: rgba(120, 160, 255, 0.7);
+}
+.lobby-howto:focus-visible {
+  box-shadow: 0 0 0 2px rgba(120, 160, 255, 0.85);
+}
+.lobby-howto:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
 /* Gestion des decks : nécessaire, mais ce n'est pas ce qu'on vient chercher au salon.
    Rangée en onglets discrets pour ne pas encombrer la zone de lancement de partie. */
 .lobby-tabs {
@@ -1363,9 +1401,14 @@ input::placeholder {
   .lobby-tagline {
     display: none;
   }
+  .lobby-topbar-actions,
   .lobby-tabs {
     width: 100%;
     justify-content: stretch;
+  }
+  .lobby-howto {
+    width: 100%;
+    text-align: center;
   }
   .lobby-tab {
     flex: 1;
@@ -10261,6 +10304,59 @@ textarea {
   margin: 0 0 4px;
   font-size: 0.8rem;
   line-height: 1.45;
+  color: var(--text-dim);
+}
+
+/* Guide « Comment jouer » (HowToPlay.tsx) : même panneau que le glossaire, un peu plus
+   large parce qu'on y lit des paragraphes entiers, pas des entrées d'une ligne. */
+.howto-panel {
+  width: min(94vw, 600px);
+  max-height: 86vh;
+}
+.howto-section {
+  scroll-margin-top: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+  background: var(--panel-alt);
+}
+.howto-section + .howto-section {
+  margin-top: 10px;
+}
+.howto-section h4 {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+  color: var(--accent);
+}
+.howto-section p,
+.howto-section li {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: var(--text);
+}
+.howto-section p + p,
+.howto-section ul + p,
+.howto-section ol + p,
+.howto-section p + ul,
+.howto-section p + ol {
+  margin-top: 8px;
+}
+.howto-section ul,
+.howto-section ol {
+  margin: 0;
+  padding-left: 20px;
+}
+.howto-section li + li {
+  margin-top: 4px;
+}
+.howto-section strong {
+  color: var(--accent);
+}
+.howto-outro {
+  margin: 14px 0 0;
+  text-align: center;
+  font-weight: 700;
   color: var(--text-dim);
 }
 .glossary-rules p:last-child {
