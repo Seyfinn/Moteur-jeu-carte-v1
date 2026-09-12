@@ -9,6 +9,15 @@ export const echangeEquivalent: ObjectCardDef = {
   id: 'echange-equivalent',
   name: 'Echange équivalent',
   description: 'Sacrifier 2 cartes, objets ou terrain. En échange, vous permet de récupérer une carte objet ou terrain parmi toutes les cartes du jeu.',
+  // Refusée avant d'être consommée s'il n'y a pas de quoi payer (cf. CLAUDE.md). Au moment
+  // où la question est posée, Echange équivalent est encore dans la réserve non jouée : il
+  // faut donc 2 AUTRES cartes que lui (il en sort avant que son `execute` ne tourne).
+  unplayableReason(state, ownerId) {
+    const player = state.players[ownerId];
+    const others = player.unplayedObjectInstanceIds.length + player.unplayedTerrainInstanceIds.length - 1;
+    if (others < SACRIFICE_COUNT) return `il faut ${SACRIFICE_COUNT} autres cartes objet ou terrain à sacrifier`;
+    return null;
+  },
   async execute(ctx) {
     const player = ctx.state.players[ctx.ownerId];
 

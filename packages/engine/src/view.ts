@@ -1,4 +1,4 @@
-import { otherPlayer, type GameState, type PlayerId, type PlayerState } from './types.js';
+import { otherPlayer, type GameState, type PendingChoice, type PlayerId, type PlayerState } from './types.js';
 import type { RngState } from './rng.js';
 
 /**
@@ -25,6 +25,28 @@ function redactPiles(player: PlayerState): PlayerState {
       objectCardIds: player.drawPiles.objectCardIds.map((_, i) => `hidden-pile-object-${i}`),
     },
   };
+}
+
+/**
+ * Le choix en attente vu par le joueur qui n'y répond PAS. Il n'a besoin que de savoir
+ * qu'un choix est en cours et à qui il s'adresse (le client affiche « X réfléchit à son
+ * choix… ») -- jamais des options elles-mêmes, qui peuvent nommer des cartes secrètes :
+ * la Main Personnage qui regarnit un banc en Mode Pioche, la réserve d'objets que Caméléon
+ * ou le D6 d'Isaac font choisir. Une liste vide du même `kind`, pour ne pas changer la
+ * forme que le client attend.
+ */
+function redactPendingChoiceFor(choice: PendingChoice): PendingChoice {
+  const spec = choice.spec;
+  switch (spec.kind) {
+    case 'select-option':
+      return { ...choice, spec: { ...spec, options: [] } };
+    case 'order':
+      return { ...choice, spec: { ...spec, items: [] } };
+    case 'select-characters':
+      return { ...choice, spec: { ...spec, options: [] } };
+    case 'yes-no':
+      return choice;
+  }
 }
 
 /**
@@ -62,6 +84,10 @@ export function getPlayerView(state: GameState, forPlayerId: PlayerId): GameStat
       return privateTo === undefined || privateTo === forPlayerId;
     }),
     sharedTerrainPile: state.sharedTerrainPile.map((_, i) => `hidden-pile-terrain-${i}`),
+    pendingChoice:
+      state.pendingChoice && state.pendingChoice.playerId !== forPlayerId
+        ? redactPendingChoiceFor(state.pendingChoice)
+        : state.pendingChoice,
     players: {
       ...state.players,
       [forPlayerId]: redactPiles(state.players[forPlayerId]),

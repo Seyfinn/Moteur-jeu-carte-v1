@@ -211,10 +211,21 @@ export class Room {
     const opponentId: PlayerId = playerId === 'p1' ? 'p2' : 'p1';
     const opponent = this.sockets[opponentId];
     if (opponent) send(opponent, { type: 'opponent-reconnected' });
+    // Celui qui revient ne sait rien de ce qui s'est passé pendant son absence : si l'autre
+    // camp est parti entre-temps, il ne recevra jamais de `opponent-disconnected` -- ce
+    // message a été émis vers un socket qui n'existait plus. (Un siège d'en face jamais
+    // occupé n'est pas une déconnexion : le salon attend encore son deuxième joueur.)
+    else if (this.playerNames[opponentId]) send(socket, { type: 'opponent-disconnected' });
 
     if (this.match) {
       this.sendStateTo(playerId);
       this.sendStateTo(opponentId);
+      // Même chose pour la revanche déjà demandée par l'autre camp pendant l'absence.
+      for (const id of this.rematchVotes) send(socket, { type: 'rematch-requested', by: id });
+    } else if (this.draftPools[playerId]) {
+      // Reprise en plein draft : sans sa réserve, le client restait sur « en attente d'un
+      // adversaire » alors que la sélection l'attend (cf. addPlayer, même cas).
+      this.sendDraftTo(playerId);
     } else {
       send(socket, { type: 'waiting-for-opponent' });
     }

@@ -21,9 +21,13 @@ function reachableTargets(ctx: EffectContext): CharacterInstance[] {
   if (active) targets.push(active);
   for (const benched of ctx.getBench(ctx.opponentId)) {
     if (getCurrentHP(benched) >= TRAQUE_HP_THRESHOLD) continue;
-    // Le banc reste soumis aux protections générales (Bouclier Ultime, Arène) : "Traque"
-    // lève la restriction de ciblage par défaut, pas celle qu'une carte adverse impose.
-    if (!canTargetBench(ctx.state, ctx.sourceInstanceId, benched.instanceId, true).allow) continue;
+    // Interrogé avec le défaut REFUSÉ : seule la voix du modifier "Traque" ci-dessous peut
+    // ouvrir le banc -- et elle se tait sous silence passif (`silencedByPassive`). Avec
+    // `true`, l'absence de voix suffisait à autoriser et Levi gardait Traque une fois
+    // silencé. Le banc reste par ailleurs soumis aux protections générales (Bouclier
+    // Ultime, Arène) : "Traque" lève la restriction de ciblage par défaut, pas celle
+    // qu'une carte adverse impose.
+    if (!canTargetBench(ctx.state, ctx.sourceInstanceId, benched.instanceId, false).allow) continue;
     targets.push(benched);
   }
   return targets;

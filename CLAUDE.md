@@ -49,7 +49,7 @@ lecture de ce fichier + l'écriture du fichier de carte + l'edit de `index.ts`.
 
 ## ⚠️ Les `description` sont le texte EXACT de la carte
 
-**Source de vérité : le dossier `ADMIN Cartes tout/` à la racine.** Un `<carte>.json` par
+**Source de vérité : le dossier `E:\Code\ADMIN Cartes tout\` (dans le dossier PARENT du dépôt, pas à sa racine).** Un `<carte>.json` par
 carte, exporté par l'éditeur de cartes, avec le PNG à côté. `nom`, `hp`, `attacks[].name /
 damage / desc`, `abilities[].name / desc` et `description` (objets et terrains) y sont le
 texte imprimé, et c'est CE texte que le moteur doit porter, au caractère près — fautes de

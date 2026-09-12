@@ -156,6 +156,11 @@ export function DraftScreen({ conn, pool }: { conn: GameConnection; pool: DraftP
 
   /** Pourquoi cette carte ne peut-elle pas être ajoutée maintenant ? `null` = elle le peut. */
   function blockedReasonFor(key: DeckSectionKey, entry: DeckPoolEntry): string | null {
+    // Le plafond d'exemplaires n'est pas une incompatibilité non plus : sans ce garde,
+    // chaque personnage ou terrain déjà pris (tous uniques) se retrouvait grisé et barré
+    // d'un « Trop d'exemplaires » -- l'équipe en cours ressemblait à une liste de refus.
+    // Son « + » se ferme (voir `disabledAdd`), la carte reste en couleur.
+    if (countOf(roster[key], entry.id) >= entry.maxCopies) return null;
     const probe: RosterConfig = { ...roster, [key]: [...roster[key], entry.id] };
     const check = validateDraftedRoster(probe, pool);
     if (check.ok) return null;
@@ -315,7 +320,7 @@ export function DraftScreen({ conn, pool }: { conn: GameConnection; pool: DraftP
                                 key={entry.id}
                                 entry={entry}
                                 count={count}
-                                disabledAdd={submitted || blockedReason !== null || full}
+                                disabledAdd={submitted || blockedReason !== null || full || count >= entry.maxCopies}
                                 // Une équipe validée est partie au serveur : la retoucher ici
                                 // ne changerait rien en face, autant fermer les deux boutons.
                                 disabledRemove={submitted || count === 0}

@@ -753,7 +753,11 @@ export function Board({ conn }: { conn: GameConnection }) {
     player.benchCharacterInstanceIds.length + (player.activeCharacterInstanceId ? 1 : 0);
 
   const drawMode = state.mode === 'draw';
-  const errorMessage = conn.error ?? localError;
+  // Socket morte : la bannière persistante ci-dessous le dit déjà (et reste), inutile de
+  // faire passer en plus le « connexion perdue » de `conn.error` dans la bannière qui
+  // s'efface toute seule au bout de quatre secondes.
+  const connectionLost = conn.status === 'error' && !conn.reconnecting;
+  const errorMessage = connectionLost ? localError : (conn.error ?? localError);
   const showInitiativeWheel = !wheelDone && state.phase === 'setup';
 
   // Ambiance de fond : le terrain que le joueur a posé teinte tout le plateau. La classe
@@ -888,6 +892,21 @@ export function Board({ conn }: { conn: GameConnection }) {
             l'en-tête, au lieu de s'insérer dans le flux et de faire sauter tout le plateau
             de 40 px à chaque refus d'action. */}
           <div className="board-notices">
+            {/* Coupure de NOTRE côté : la reprise est automatique, mais le joueur doit voir
+                que le plateau est figé -- sinon ses clics partent dans le vide sans un mot. */}
+            {conn.reconnecting && (
+              <p className="warning board-notice board-notice-link" role="status" aria-live="polite">
+                <span aria-hidden="true">⚡</span> Connexion perdue, reprise en cours…
+              </p>
+            )}
+            {connectionLost && (
+              <p className="warning board-notice board-notice-link" role="alert">
+                <span aria-hidden="true">⚡</span> Connexion au serveur perdue.
+                <button className="board-notice-action" onClick={conn.reconnect}>
+                  Reconnecter
+                </button>
+              </p>
+            )}
             {conn.opponentDisconnected && (
               <p className="warning board-notice" role="status" aria-live="polite">
                 <span aria-hidden="true">⚡</span> L'adversaire s'est déconnecté.

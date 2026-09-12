@@ -177,6 +177,12 @@ describe('Aki -- une passive imprimée, trois events', () => {
     const foeId = match.state.players.p2.activeCharacterInstanceId!;
 
     await drive(match, 'p2', { kind: 'use-ability', characterInstanceId: foeId, abilityId: 'self-buff' });
+    // « Aki va stun au prochain tour » : le tour en cours de l'ennemi n'est pas coupé, le
+    // stun tombe au tick qui ouvre son tour suivant (marqueur différé, cf. aki.ts).
+    expect(match.state.players.p2.characters[foeId]!.statuses.some((s) => s.statusId === 'stun')).toBe(false);
+    expect(match.state.players.p2.characters[foeId]!.statuses.some((s) => s.statusId === 'aki-stun-imminent')).toBe(true);
+    await drive(match, 'p2', { kind: 'pass' });
+    await drive(match, 'p1', { kind: 'pass' });
     expect(match.state.players.p2.characters[foeId]!.statuses.some((s) => s.statusId === 'stun')).toBe(true);
   });
 

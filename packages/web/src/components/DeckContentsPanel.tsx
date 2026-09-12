@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { DECK_LIMITS, type DeckPoolEntry } from 'engine';
 import { CardFrame } from './CardFrame';
 import { CardPreviewPanel } from './CardPreviewPanel';
@@ -111,6 +111,9 @@ export function CardPreviewProvider({ children }: { children: ReactNode }) {
       showTimer.current = null;
     }
   }
+  // Quitter l'écran (Retour, Échap) pendant qu'un survol arme l'aperçu : le minuteur
+  // survivait au démontage et tentait d'ouvrir l'aperçu sur un composant disparu.
+  useEffect(() => clearTimer, []);
 
   const api: CardPreviewApi = {
     requestShow(entry, target) {

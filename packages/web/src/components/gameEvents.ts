@@ -747,13 +747,17 @@ export function useGameEvents(state: GameState): {
     }
     if (newSpotlights.length > 0) {
       // Plusieurs cartes jouées dans le même lot (une carte qui en déclenche une autre) se
-      // suivent au lieu de se superposer : chacune attend la fin de la précédente.
+      // suivent au lieu de se superposer : chacune attend la fin de la précédente. Le
+      // décalage part de la file DÉJÀ à l'écran, comme pour les roues : un lot arrivé
+      // pendant qu'une carte est encore projetée voyait sa propre carte expirer avant
+      // même d'avoir été montrée (ou coupée après quelques dixièmes de seconde).
+      const queued = spotlights.length;
       setSpotlights((list) => [...list, ...newSpotlights]);
       newSpotlights.forEach((s, i) => {
         timersRef.current.push(
           setTimeout(
             () => setSpotlights((list) => list.filter((x) => x.id !== s.id)),
-            SPOTLIGHT_DURATION_MS * (i + 1)
+            SPOTLIGHT_DURATION_MS * (queued + i + 1)
           )
         );
       });

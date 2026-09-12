@@ -368,6 +368,10 @@ export function reviveCharacter(state: GameState, characterInstanceId: string, h
   char.damage = Math.max(0, char.currentMaxHP - reviveHP);
   char.shield = 0;
   char.statuses = [];
+  // `startTurn` ne remet à zéro que les compteurs des personnages SUR le plateau : un mort
+  // gardait donc ceux de sa vie d'avant, et revenait (Pheonix arrive après cette remise à
+  // zéro) avec une capacité « déjà utilisée ce tour ». Le quota de la partie, lui, reste.
+  char.abilityUsesThisTurn = {};
 
   if (placement === 'active' && player.activeCharacterInstanceId === null) {
     player.activeCharacterInstanceId = characterInstanceId;

@@ -1,4 +1,11 @@
-import { DECK_LIMITS, DEMO_STARTER_DECK, listDeckPool, validateRoster, type RosterConfig } from 'engine';
+import {
+  DECK_LIMITS,
+  DEMO_STARTER_DECK,
+  listDeckPool,
+  validateRoster,
+  type DeckPoolEntry,
+  type RosterConfig,
+} from 'engine';
 
 export interface Deck {
   id: string;
@@ -43,19 +50,23 @@ function sanitizeDeck(raw: unknown): Deck | null {
   // stored deck that predates a card becoming unique is trimmed here instead of being
   // rejected later with an opaque server error.
   const pool = listDeckPool();
-  const maxCopiesById = new Map(pool.map((entry) => [entry.id, entry.maxCopies] as const));
+  const entryById = new Map(pool.map((entry) => [entry.id, entry] as const));
   const incompatibleById = new Map(pool.map((entry) => [entry.id, entry.incompatibleWith] as const));
   // Même logique pour les incompatibilités (Chopper / Soraka) : la première carte gardée
   // interdit l'autre pour tout le reste du deck. `banned` est volontairement partagé entre
   // les trois appels de `trim` -- une incompatibilité n'a aucune raison de rester dans un
   // seul groupe de cartes.
   const banned = new Set<string>();
-  const trim = (ids: string[], max: number) => {
+  const trim = (ids: string[], type: DeckPoolEntry['type'], max: number) => {
     const kept: string[] = [];
     const copies = new Map<string, number>();
     for (const id of ids) {
-      const maxCopies = maxCopiesById.get(id);
-      if (maxCopies === undefined || kept.length >= max || banned.has(id)) continue;
+      const entry = entryById.get(id);
+      // Une carte d'un autre type dans ce groupe (un objet rangé parmi les personnages par
+      // un stockage abîmé) est écartée ici : `validateRoster` la refuserait de toute façon,
+      // mais avec un message qui nomme l'id brut et laisse le deck injouable sans recours.
+      if (entry === undefined || entry.type !== type || kept.length >= max || banned.has(id)) continue;
+      const maxCopies = entry.maxCopies;
       const used = copies.get(id) ?? 0;
       if (used >= maxCopies) continue;
       copies.set(id, used + 1);
@@ -68,10 +79,20 @@ function sanitizeDeck(raw: unknown): Deck | null {
   return {
     id: source['id'],
     name: typeof source['name'] === 'string' ? source['name'] : '',
-    characterCardIds: trim(asIdArray(source['characterCardIds']), DECK_LIMITS.character),
-    objectCardIds: trim(asIdArray(source['objectCardIds']), DECK_LIMITS.object),
-    terrainCardIds: trim(asIdArray(source['terrainCardIds']), DECK_LIMITS.terrain),
+    characterCardIds: trim(asIdArray(source['characterCardIds']), 'character', DECK_LIMITS.character),
+    objectCardIds: trim(asIdArray(source['objectCardIds']), 'object', DECK_LIMITS.object),
+    terrainCardIds: trim(asIdArray(source['terrainCardIds']), 'terrain', DECK_LIMITS.terrain),
   };
+}
+
+/**
+ * Un deck venu d'ailleurs que du stockage local (la sauvegarde en ligne), ramené à ce que
+ * le moteur accepte. Même nettoyage que `loadDecks` : sans lui, un roster incomplet ou
+ * périmé (carte retirée du jeu, tableau manquant) arrivait tel quel dans la galerie et
+ * faisait planter la vignette qui en compte les cartes.
+ */
+export function normalizeDeck(raw: { id: string; name: string } & Partial<RosterConfig>): Deck {
+  return sanitizeDeck(raw) ?? { ...createEmptyDeck(), id: raw.id, name: raw.name };
 }
 
 export function loadDecks(): Deck[] {

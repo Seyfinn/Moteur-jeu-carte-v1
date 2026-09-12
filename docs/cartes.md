@@ -105,8 +105,9 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   20HP ou moins, il meurt immédiatement. »*
   - Moteur : exécuté dans l'`AttackDef` de Kunaï, via `ctx.koCharacter` — donc hors du
     pipeline de dégâts. La carte teste elle-même `hasDeathWard` avant d'achever :
-    Détermination protège bien contre l'exécution. Une esquive l'empêche aussi (pas de
-    dégâts = seuil jamais atteint).
+    Détermination protège bien contre l'exécution. Le seuil est lu **après** le coup, qu'il
+    ait touché ou non : un ennemi déjà à 20 PV ou moins avant une Kunaï esquivée est quand
+    même achevé (« si après l'attaque de Akali, l'ennemi est à 20hp ou moins »).
 
 ### Aki — 240 HP
 
@@ -122,10 +123,17 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   - **Objet** : +40 **cumulables** (2 objets = +80) sur un statut `aki-vision-bonus` sans
     durée — il tient jusqu'à la prochaine attaque d'Aki, qui le dépense. Passe par un
     modifier `getEffectiveATK`, donc buffs et malus s'appliquent au total.
-  - **Actif** : Aki **inflige** un stun à l'actif adverse (`remainingTurns: 2`, le +1 des
-    statuts bloquants posés sur l'ennemi). Attention : une capacité adverse qui neutralise
-    Aki au passage (stun, silence passif) l'empêche de riposter — le moteur revérifie
-    l'éligibilité d'une passive juste avant de l'exécuter.
+  - **Actif** : Aki **inflige** un stun à l'actif adverse, **au tour suivant de l'ennemi
+    seulement** (« au prochain tour »). Un stun posé directement fermait déjà le reste du
+    tour en cours (la capacité est gratuite, l'ennemi comptait encore attaquer) en plus du
+    suivant (bug corrigé). Montage : marqueur caché `aki-stun-imminent` (`remainingTurns: 1`,
+    `ticksOnBench`) dont l'`onExpire` pose `stun` (`remainingTurns: 1`, sans `+1` puisque
+    posé après la passe de décompte) — même schéma que le tour arrêté de Dio. Le marqueur
+    passe par l'esquive comme le stun d'avant ; l'immunité (Toji) est vérifiée par la carte
+    via `canApplyStatus` au moment de la pose, car le chemin `onExpire` du moteur ne la
+    consulte pas. Attention : une capacité adverse qui neutralise Aki au passage (stun,
+    silence passif) l'empêche de riposter — le moteur revérifie l'éligibilité d'une passive
+    juste avant de l'exécuter.
   - **Atk** : un simple `heal(20)`. Le plafond de PV **ne bouge pas** : Aki déjà à pleine
     vie ne gagne rien, et le soin est plafonné aux dégâts réellement subis. `onAttackDeclared`
     part avant que le coup ne soit résolu, donc le soin arrive avant les dégâts de l'attaque
@@ -193,7 +201,10 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     (`blitzcrank-mana-barrier-shield`, volontairement **visible**) consommé par un modifier
     `getIncomingDamageAmount`. Conséquence : Voleur de bouclier n'a aucune prise dessus. Le
     verrou de Hook est le statut `blitzcrank-hook-locked`, avec `ticksOnBench: true` (même
-    règle que les recharges d'ability : Mana Barrier se déclenche justement depuis le banc).
+    règle que les recharges d'ability : Mana Barrier se déclenche justement depuis le banc)
+    et `remainingTurns = 2 + 1` : statut bloquant posé pendant le tour adverse (celui du
+    coup qui fait passer sous 50), sans le `+1` il ne tenait qu'**un** tour de Blitzcrank
+    (bug corrigé, couvert par `cards-audit-a-k.spec.ts`).
   - La réserve restante vit dans `data.shield`, la convention que le client lit pour
     afficher le chiffre sur le badge, la barre de bouclier sous les PV et le halo : à
     l'écran, elle se lit donc exactement comme un bouclier natif, tout en restant
@@ -229,10 +240,10 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     de Guts / Execution de Caitlyn, mais séparé en deux `AbilityDef` puisque Mangeur de
     démons doit rester activable manuellement (`kind: 'active'` sans `trigger`) alors que
     le comptage réagit à un event.
-  - ⚠️ Angle mort assumé : seuls les kills où Chainsaw Man est le tueur **direct**
-    comptent (attribution portée par `ctx.dealDamage`). Un ennemi achevé par le tic du
-    bleed posé par Chainsaw ne compte pas : les tics de statuts (poison/burn/bleed)
-    n'attribuent pas de tueur (voir `tickStatusesAtTurnStart`, `statuses.ts`).
+  - Un ennemi achevé par le tic du bleed posé par Chainsaw Man **compte aussi** :
+    `tickStatusesAtTurnStart` attribue le tic à `status.sourceCardInstanceId`, donc
+    `onCharacterKO` nomme bien Chainsaw Man (vérifié lors de l'audit ; l'ancien « angle
+    mort » documenté ici n'existe plus).
 
 ### Chrollo Lucilfer — 225 HP
 
@@ -283,7 +294,13 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
 - **Fermeture du Livre** (active) — retire le sceau et la marque. La marque est retirée dans
   tous les cas, même si la victime est morte entre-temps : c'est elle qui porte la saignée et
   l'attaque volée. Un livre dont la victime part au cimetière se referme d'ailleurs tout
-  seul (les lecteurs vérifient qu'elle est encore sur le plateau).
+  seul (**tous** les lecteurs — saignée, actif volé ET attaque volée — passent par
+  `sealedVictim`, qui vérifie qu'elle est encore sur le plateau ; un KO ne vide pas les
+  statuts, donc le sceau sur le cadavre ne suffit pas). Avant, seule l'attaque volée lisait
+  le sceau sans ce test : Chrollo la gardait gratuitement après la mort de sa victime, et un
+  second Double Face empilait une deuxième marque derrière la première, périmée — le nouveau
+  livre ne donnait ni son attaque ni son actif (bug corrigé, couvert par
+  `cards-audit-a-k.spec.ts`). Double Face remplace désormais la marque au lieu de l'empiler.
 
 ### Chopper — 250 HP — incompatible avec Soraka
 
@@ -427,9 +444,14 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     inconditionnellement (le soin n'est pas subordonné à ce que le coup touche).
 - **Berserk** (passive, `afterDamage`, banc) — *« Tous les 100 HP que Guts perd au cours de
   la partie, "Coup d'épée" inflige 50 dégâts supplémentaires de façon permanente. »*
-  - Moteur : compteur cumulé dans un statut caché (`data.count`) qui ne redescend jamais,
-    même après un soin ; le bonus lui-même passe par un modifier `getEffectiveATK`. Le
-    compteur est privé à la carte : il ne peut pas être volé par Aizen ou la Poupée Voodoo.
+  - Moteur : statut caché `guts-berserk-record` (`data.highestDamage`) = le **record de
+    dégâts encaissés** (`damage` le plus haut jamais atteint), qui ne redescend jamais, même
+    après un soin ; paliers = `floor(record / 100)`, bonus via un modifier `getEffectiveATK`.
+    ⚠️ Ce n'est **pas** un cumul des HP perdus : 90 subis, 90 soignés, 90 subis = 0 palier
+    (record 90) là où « tous les 100 HP que Guts perd » lu en cumulé donnerait 1 palier
+    (180 perdus). Avec son auto-soin de 25 par coup, la lecture cumulée le ferait monter
+    bien plus vite — point à trancher par l'auteur, laissé en l'état à l'audit. Le compteur
+    est privé à la carte : il ne peut pas être volé par Aizen ou la Poupée Voodoo.
 
 ### Gojo Satoru — 190 HP
 
@@ -586,6 +608,13 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   utilisée par l'adversaire, mais lancée par Kakashi. Utilisation unique. »*
   - Moteur : l'attaque est réexécutée avec Kakashi comme source. Une attaque adossée à un
     compteur propre à son porteur d'origine (Berserk, Enervement) rend donc moins.
+  - Moteur : l'attaque mémorisée est relue via `queries.ts::findAttackFor` (et non
+    `getCharacterCard(...).attacks`) : si l'ennemi a frappé avec une attaque **empruntée**
+    (Livre de Chrollo), elle n'est pas sur sa carte, et Copie de Technique ne trouvait rien
+    tout en brûlant son unique utilisation (bug corrigé, couvert par
+    `cards-audit-a-k.spec.ts`). La `condition` grise la capacité exactement quand rien ne
+    peut être rejoué. La `condition` de l'attaque copiée n'est **pas** rejouée sur Kakashi
+    (contrairement à Chrollo/Zoé) : copier « Cycle 4 - Soleil » donne bien 150 ATK, une fois.
 
 ### Katarina — 240 HP
 
@@ -610,6 +639,11 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
     `remainingTurns` : jamais retiré par la passe de décompte, il survit aux allers-retours
     au banc. Les 3 attaques n'ont pas à être consécutives, et une attaque esquivée compte
     quand même (c'est le coup porté qui est compté, pas le coup qui touche).
+  - Le compteur n'avance que si la source de la Faux est **Kayn lui-même** (`cardId ===
+    'kayn'`, donc aussi un Métamorphe devenu Kayn) : volée par Chrollo ou copiée par Kakashi,
+    la Faux frappe mais ne compte pas — sans ce garde, le voleur se voyait demander « quelle
+    voie Kayn emprunte-t-il ? » au 3ᵉ coup pour une évolution refusée de toute façon (bug
+    corrigé, couvert par `cards-audit-a-k.spec.ts`).
   - **« Double ses hp actuels » = un soin, plafonné aux PV max.** Les trois formes sont à
     240 PV max, donc la transformation soigne exactement les PV restants : un Kayn à 200 PV
     ressort à 240/240, un Kayn à 80 PV à 160/240. Le plafond ne monte jamais au-dessus de
@@ -792,6 +826,11 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   → Le banc reste soumis aux protections générales : Traque lève la **restriction de
   ciblage par défaut**, pas un refus posé par une carte adverse (Bouclier Ultime le protège,
   Arène l'isole).
+  → **Coupée par le silence passif / ultime**, comme toute passive imprimée : la portée est
+  un modifier `canTargetBench` marqué `silencedByPassive`, et les deux attaques interrogent
+  `canTargetBench(..., false)` (défaut refusé) — seule la voix de ce modifier ouvre le banc.
+  Avec le défaut `true` d'avant, l'absence de voix suffisait à autoriser et Levi gardait
+  Traque une fois silencé (bug corrigé, couvert par `cards-audit-l-z-objects.spec.ts`).
 
 ### Locke — 250 HP
 
@@ -937,6 +976,10 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
 
 - **Black Blood** (40 ATK) — *« Inflige 40 dégâts à l'actif adverse et applique Poison
   pendant 1 tour. »*
+  - Moteur : un seul jet d'esquive partagé (`ctx.rollEvasion` + `skipEvasionRoll`) pour
+    les dégâts et le poison, comme Rengoku / Sukuna. Avant, deux jets indépendants : une
+    esquive réussie posait `evasion-locked` (0 %) et le poison passait alors à coup sûr —
+    « esquive les dégâts mais empoisonné quand même » (bug corrigé).
 - **Sang Maudit** (passive) — *« Tant que Muzan est actif, le poison des personnages
   adverses ronge leurs HP max au lieu d'infliger des dégâts soignables. Redevient du poison
   normal dès que Muzan quitte le poste actif. »*
@@ -1396,6 +1439,11 @@ mort. Un exemplaire. »*
   tous les switchs. Le défensif prime sur l'offensif.
 - Le remplacement après un KO n'est pas concerné (il ne passe pas par `switchActive`) : un
   personnage mort n'est plus enchaîné.
+- Le statut porte `data.objectInstanceId` : l'entrave est l'effet de **cet objet-là**.
+  Détruire Chaînes (terrain Destruction) libère donc son porteur, `zones.destroyObject`
+  retirant tout statut qui nomme l'objet détruit — sans ce champ, il restait enchaîné par
+  une carte déjà au cimetière (bug corrigé). Le sens inverse (`statuses.ts` détruit l'objet
+  quand le statut expire) ne joue jamais : sans `remainingTurns`, `chained` n'expire pas.
 
 ### Chasseur De Prime — objet à lier
 
@@ -1465,9 +1513,13 @@ attaque inflige maximum 5 de dégâts. »*
   instance de dégâts, si l'attaque en inflige plusieurs). Un contexte d'effet est
   reconstruit pour ce personnage (`EffectContext.buildEffectContext`, nouveau sur
   l'`EffectContext` -- voir `cards/types.ts`) pour que l'ATK, l'esquive et le critique se
-  calculent avec SES stats à lui, pas celles de Coup de main. Un personnage étourdi ou
-  désarmé n'est pas proposé (`unplayableReason` grise la carte si tout le banc est dans ce
-  cas). N'émet pas `onAttackDeclared` : les rares passifs qui y réagissent (la mémoire de
+  calculent avec SES stats à lui, pas celles de Coup de main. Les attaques proposées sont
+  celles que le personnage porte **vraiment** (`queries.ts::attacksAvailableTo`, l'empruntée
+  du Livre de Chrollo comprise) et que `canAttack` ne refuse pas une par une (stun, désarmé,
+  sceau de Makima, `borrowed-attack` qui ferme les siennes) — les gardes du handleAttack
+  normal, rejoués ici puisqu'on le court-circuite. Un personnage sans aucune attaque
+  utilisable n'est pas proposé (`unplayableReason` grise la carte si tout le banc est dans
+  ce cas). N'émet pas `onAttackDeclared` : les rares passifs qui y réagissent (la mémoire de
   Copie de Technique de Kakashi) ne voient pas cette attaque.
 - « Sans mettre fin au tour » : l'attaque est jouée en appelant directement
   `attack.execute()`, sans passer par le gestionnaire d'action `attack` normal (qui est le
@@ -1524,6 +1576,8 @@ cimetières. »*
   qu'elle vienne de votre propre cimetière ou de celui de l'adversaire.
 - Moteur : `ctx.chooseOption` avec un `card` par option — la modale montre les cartes
   tirées en illustration, pas seulement leurs noms.
+- Refusée avant d'être consommée (`unplayableReason`) quand les deux cimetières objet sont
+  vides : « aucune carte objet dans les cimetières ».
 
 ### Détermination — exemplaire unique, objet à lier
 
@@ -1547,7 +1601,13 @@ finir votre tour. Ignore Stun. »*
   depuis que `chained` bloque tout switch, ni au travers d'un interdit explicite (Bouclier
   Ultime).
 - Refusée avant d'être consommée (`unplayableReason`) quand la téléportation n'aurait pas
-  lieu : banc vide, actif enchaîné, ou switch interdit par une carte en jeu.
+  lieu : banc vide, actif enchaîné, ou switch interdit par une carte en jeu. Ce dernier cas
+  est jugé par **`canSwitchAny`** — le garde de `zones.switchActive`, celui que le
+  `forceSwitch` rencontrera vraiment (Arène ferme tout, le scellement de Chrollo refuse une
+  carte précise à l'entrée) — et non par `canSwitchStandard`, que la carte ne consulte pas
+  puisqu'elle le contourne. Avant, la carte était jouable sous Arène et se consumait dans le
+  vide (bug corrigé). Seuls les personnages du banc que le switch laisserait entrer sont
+  proposés.
 
 ### Echange équivalent
 
@@ -1566,12 +1626,16 @@ objet ou terrain parmi toutes les cartes du jeu. »*
   besoin de fabriquer un terrain tout neuf plutôt que d'en récupérer un existant. Ajoute une
   instance à la réserve non jouée avec `remainingTurns`/`data` indéfinis, redéfinis
   normalement à la prochaine pose.
+- Refusée avant d'être consommée (`unplayableReason`) sans 2 **autres** cartes objet ou
+  terrain en réserve : au moment de la question, Echange équivalent est encore dans la
+  réserve non jouée, d'où le `- 1`.
 
 ### Extension du territoire — exemplaire unique
 
 *« Exemplaire unique. Rajoute 2 tours au terrain actif du joueur qui la joue. »*
 
-- Moteur : no-op si le terrain est de durée indéfinie ou s'il n'y a pas de terrain en jeu.
+- Refusée avant d'être consommée (`unplayableReason`) s'il n'y a pas de terrain actif ou
+  si celui-ci est à durée indéfinie (`extendTerrain` y serait un no-op).
 
 ### Jacob et Essau
 
@@ -1684,7 +1748,8 @@ ferra pas effet. »*
 - Moteur : objet **à lier** (`equipment: true` + `ctx.attachSelfTo`). Le joueur choisit
   un de ses personnages (actif ou banc) ; seuls ceux qui ont encore un emplacement d'objet
   libre sont proposés, sinon `api.attachObject` refuserait en silence et la poche partirait
-  au cimetière après avoir quand même donné ses HP max.
+  au cimetière après avoir quand même donné ses HP max. Le banc passe par `canTargetBench`
+  (un banc isolé par Arène n'est plus équipable), comme les autres objets à lier.
 - Moteur : `ctx.raiseMaxHP(id, 200, { keepCurrentHP: true })` — c'est l'option
   `keepCurrentHP` qui réalise le « sans augmenter les hp actuel » de la carte.
 - ⚠️ Le bonus est un changement d'état **permanent**, pas un modifier : il n'existe aucune
@@ -1772,6 +1837,8 @@ même. »*
 
 - Moteur : agit sur le champ `shield` natif ; le pseudo-bouclier de Mana Barrier n'est pas un
   `shield` et n'est donc pas volable. S'ajoute au bouclier existant.
+- Refusée avant d'être consommée (`unplayableReason`) quand l'actif adverse n'a pas de
+  bouclier : « l'actif adverse n'a pas de bouclier ».
 
 ---
 

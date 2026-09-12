@@ -1,5 +1,5 @@
-import type { CharacterCardDef } from '../types.js';
-import { getCharacterCard } from '../registry.js';
+import type { AttackDef, CharacterCardDef, EffectContext } from '../types.js';
+import { findAttackFor } from '../../queries.js';
 import { EVASIVE_STATUS_CHANCE_PERCENT, getStatus } from '../../statuses.js';
 
 const RAIKIRI_ATK = 60;
@@ -7,6 +7,25 @@ const RAIKIRI_ATK = 60;
 const LAST_ENEMY_ATTACK_STATUS_ID = 'kakashi-last-enemy-attack';
 /** Même lecture que L'Infini de Gojo : « l'effet Esquive », donc le taux du moteur. */
 const SHARINGAN_EVASION_PERCENT = EVASIVE_STATUS_CHANCE_PERCENT;
+
+/**
+ * L'attaque mémorisée, telle que son auteur la porterait AUJOURD'HUI. `findAttackFor` et
+ * pas `getCharacterCard(...).attacks` : l'ennemi a pu attaquer avec une attaque empruntée
+ * (Livre de Chrollo), qui n'est pas sur sa carte -- sans ça, Copie de Technique ne trouvait
+ * rien et brûlait son unique utilisation pour rien. Partagé entre `condition` et `execute`
+ * pour que la capacité soit grisée exactement quand elle n'aurait rien à rejouer.
+ */
+function rememberedAttack(ctx: EffectContext): AttackDef | undefined {
+  const record = getStatus(ctx.getCharacter(ctx.sourceInstanceId), LAST_ENEMY_ATTACK_STATUS_ID);
+  const characterInstanceId = record?.data?.['characterInstanceId'];
+  const attackId = record?.data?.['attackId'];
+  if (typeof characterInstanceId !== 'string' || typeof attackId !== 'string') return undefined;
+  try {
+    return findAttackFor(ctx.state, characterInstanceId, attackId);
+  } catch {
+    return undefined; // plus disponible (ex: le personnage d'origine a changé de forme depuis)
+  }
+}
 
 export const kakashi: CharacterCardDef = {
   type: 'character',
@@ -72,21 +91,17 @@ export const kakashi: CharacterCardDef = {
         "Utilisation Unique : Copie la dernière attaque utilisée par l'adversaire lors de la partie et l'exécute immédiatement.",
       usesPerGame: 1,
       condition(ctx) {
-        const self = ctx.getCharacter(ctx.sourceInstanceId);
-        return !!getStatus(self, LAST_ENEMY_ATTACK_STATUS_ID);
+        return !!rememberedAttack(ctx);
       },
       async execute(ctx) {
-        const self = ctx.getCharacter(ctx.sourceInstanceId);
-        const record = getStatus(self, LAST_ENEMY_ATTACK_STATUS_ID);
-        const characterInstanceId = record?.data?.['characterInstanceId'] as string | undefined;
-        const attackId = record?.data?.['attackId'] as string | undefined;
-        if (!characterInstanceId || !attackId) return;
+        const stolenAttack = rememberedAttack(ctx);
+        if (!stolenAttack) return;
+        const record = getStatus(ctx.getCharacter(ctx.sourceInstanceId), LAST_ENEMY_ATTACK_STATUS_ID);
 
-        const stolenCardId = ctx.getCharacter(characterInstanceId).cardId;
-        const stolenAttack = getCharacterCard(stolenCardId).attacks.find((a) => a.id === attackId);
-        if (!stolenAttack) return; // plus disponible (ex: le personnage d'origine a changé de forme depuis)
-
-        ctx.log(`Copie de Technique : Kakashi utilise ${stolenAttack.name}`, { attackId, stolenFrom: characterInstanceId });
+        ctx.log(`Copie de Technique : Kakashi utilise ${stolenAttack.name}`, {
+          attackId: stolenAttack.id,
+          stolenFrom: record?.data?.['characterInstanceId'],
+        });
         await stolenAttack.execute(ctx);
       },
     },

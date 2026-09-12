@@ -82,11 +82,14 @@ export function selectionHint(min: number, max: number, noun: string): string {
 function SelectCharacters({
   state,
   spec,
+  choiceId,
   onAnswer,
   hintId,
 }: {
   state: GameState;
   spec: Extract<PendingChoice['spec'], { kind: 'select-characters' }>;
+  /** Identité de la question : c'est elle (et non l'objet `spec`) qui remet la sélection à zéro. */
+  choiceId: string;
   onAnswer: (answer: ChoiceAnswer) => void;
   hintId: string;
 }) {
@@ -95,8 +98,10 @@ function SelectCharacters({
 
   // Consecutive choices reuse this component instance, so the previous answer's
   // selection would otherwise carry over into the next prompt (and could contain ids
-  // that aren't even offered any more).
-  useEffect(() => setSelected([]), [spec]);
+  // that aren't even offered any more). Calé sur l'id du choix et non sur `spec` : chaque
+  // rediffusion d'état (reconnexion de l'adversaire, par exemple) apporte un nouvel objet
+  // `spec` pour la même question, et effaçait la sélection en cours sous la souris.
+  useEffect(() => setSelected([]), [choiceId]);
 
   function toggle(id: string) {
     if (spec.max === 1) {
@@ -296,10 +301,13 @@ function move<T>(arr: T[], from: number, to: number): T[] {
  */
 function OrderChoice({
   spec,
+  choiceId,
   onAnswer,
   hintId,
 }: {
   spec: Extract<PendingChoice['spec'], { kind: 'order' }>;
+  /** Même rôle que dans `SelectCharacters` : un ordre en cours ne repart de zéro que pour une NOUVELLE question. */
+  choiceId: string;
   onAnswer: (answer: ChoiceAnswer) => void;
   hintId: string;
 }) {
@@ -310,7 +318,10 @@ function OrderChoice({
     setOrder(spec.items.map((i) => i.key));
     setDragIndex(null);
     setOverIndex(null);
-  }, [spec]);
+    // `spec` n'est lu qu'à la remise à zéro : le lister ici referait partir l'ordre de zéro
+    // à chaque rediffusion d'état pour la même question.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [choiceId]);
 
   const onDragStart = (index: number) => (e: DragEvent<HTMLLIElement>) => {
     setDragIndex(index);
@@ -502,11 +513,11 @@ export function ChoiceModal({
           {deadline !== null && <ChoiceCountdown deadline={deadline} />}
         </div>
         {choice.spec.kind === 'select-characters' && (
-          <SelectCharacters state={state} spec={choice.spec} onAnswer={answerAndClose} hintId={hintId} />
+          <SelectCharacters state={state} spec={choice.spec} choiceId={choice.id} onAnswer={answerAndClose} hintId={hintId} />
         )}
         {choice.spec.kind === 'select-option' && <SelectOption spec={choice.spec} onAnswer={answerAndClose} hintId={hintId} />}
         {choice.spec.kind === 'yes-no' && <YesNo onAnswer={answerAndClose} />}
-        {choice.spec.kind === 'order' && <OrderChoice spec={choice.spec} onAnswer={answerAndClose} hintId={hintId} />}
+        {choice.spec.kind === 'order' && <OrderChoice spec={choice.spec} choiceId={choice.id} onAnswer={answerAndClose} hintId={hintId} />}
         {onCancel && (
           <button className="modal-cancel" onClick={onCancel}>
             Annuler cette action
