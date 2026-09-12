@@ -1,14 +1,24 @@
 import type { CharacterCardDef } from '../types.js';
 import { getStatus, hasStatus } from '../../statuses.js';
+import { canApplyStatus } from '../../queries.js';
+import { cardName } from '../../names.js';
 import { getObjectCard } from '../registry.js';
 
 const SABRE_ATK = 55;
 
 const OBJECT_DAMAGE_BONUS = 40;
 const ATTACK_HP_GAIN = 20;
+/**
+ * « Aki va stun au prochain tour » : le stun ne tombe qu'au tour SUIVANT de l'ennemi, pas
+ * dans la foulée de son actif. Posé directement, le statut fermait déjà le reste du tour en
+ * cours (une capacité est gratuite, l'ennemi comptait encore attaquer) en plus du suivant.
+ * D'où le marqueur d'attente : il expire au tick qui ouvre le tour suivant de l'ennemi et
+ * pose le stun à ce moment-là. `onExpire` est appliqué APRÈS la passe de décompte, donc le
+ * stun n'est pas décompté à son arrivée : sa durée part de ce tour-là, sans `+1` (même
+ * montage que le silence différé d'Attaque cloné et le tour arrêté de Dio).
+ */
+const STUN_PENDING_STATUS_ID = 'aki-stun-imminent';
 const STUN_EFFECTIVE_TURNS = 1;
-/** Posé sur l'ennemi pendant SON tour : il doit survivre au tick qui ouvre son tour suivant. */
-const STUN_REMAINING_TURNS = STUN_EFFECTIVE_TURNS + 1;
 
 /**
  * Le bonus de dégâts accumulé par "Vision du Futur". `data.bonus` monte de 40 par objet
@@ -99,12 +109,36 @@ S'il effectue une Atk : Gagne 20 HP `,
         if (event.name === 'onAbilityUsed') {
           const target = ctx.getActive(ctx.opponentId);
           if (!target) return;
+          // Le stun différé est posé par le moteur à l'expiration du marqueur, hors de
+          // `ctx.applyStatus` -- donc sans passer par `canApplyStatus`. L'immunité (Toji)
+          // est vérifiée ici, au moment où Aki lit le jeu.
+          if (!canApplyStatus(ctx.state, target.instanceId, 'stun').allow) {
+            ctx.log(`${cardName(target.cardId)} est immunisé contre « Stun (Vision du Futur) »`, {
+              kind: 'status',
+              targetInstanceId: target.instanceId,
+              statusId: 'stun',
+              sourceInstanceId: ctx.sourceInstanceId,
+              blocked: true,
+            });
+            return;
+          }
           ctx.applyStatus(target.instanceId, {
-            statusId: 'stun',
-            label: 'Stun (Vision du Futur)',
+            statusId: STUN_PENDING_STATUS_ID,
+            label: 'Vision du Futur (stun imminent)',
             sourcePlayerId: ctx.ownerId,
             sourceCardInstanceId: ctx.sourceInstanceId,
-            remainingTurns: STUN_REMAINING_TURNS,
+            remainingTurns: 1,
+            // Le stun est daté (« au prochain tour ») : il tombe à ce tour-là, que l'ennemi
+            // ait replié ce personnage au banc entre-temps ou non.
+            ticksOnBench: true,
+            onExpire: {
+              statusId: 'stun',
+              label: 'Stun (Vision du Futur)',
+              sourcePlayerId: ctx.ownerId,
+              sourceCardInstanceId: ctx.sourceInstanceId,
+              remainingTurns: STUN_EFFECTIVE_TURNS,
+              ticksOnBench: true,
+            },
           });
           return;
         }

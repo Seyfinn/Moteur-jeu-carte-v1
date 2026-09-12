@@ -2063,6 +2063,18 @@ input::placeholder {
   box-shadow: var(--shadow-md);
   animation: fade-slide-in 0.2s var(--ease);
 }
+/* Liaison perdue : même pastille, avec le bouton de reprise à la main posé dedans. */
+.board-notice-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.board-notice-action {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
 
 /* Corps du plateau : [banc joueur] [bande centrale] [banc adverse], sur TOUTE la hauteur.
    Les rails ont quitté la ligne de bataille (où ils étaient coincés entre l'en-tête et la

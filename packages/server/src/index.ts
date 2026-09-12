@@ -43,10 +43,24 @@ const connections = new Map<WebSocket, { roomCode: string; playerId: PlayerId }>
  */
 const sessions = new Map<string, { roomCode: string; playerId: PlayerId }>();
 
+/** Longueur max d'un pseudo, la même que celle du champ du lobby : un nom démesuré serait rediffusé dans chaque état. */
+const MAX_PLAYER_NAME_LENGTH = 24;
+const GAME_MODES: ReadonlySet<string> = new Set(['normal', 'random', 'draw']);
+
 function issueSession(roomCode: string, playerId: PlayerId): string {
+  // Un siège n'a qu'un titulaire : quand quelqu'un le prend (création, arrivée dans le
+  // salon), le jeton de son occupant précédent doit mourir -- sinon deux onglets se
+  // disputeraient la même place à coups de `resume-session`, chacun éjectant l'autre.
+  for (const [token, session] of sessions) {
+    if (session.roomCode === roomCode && session.playerId === playerId) sessions.delete(token);
+  }
   const token = randomUUID();
   sessions.set(token, { roomCode, playerId });
   return token;
+}
+
+function sanitizePlayerName(name: string): string {
+  return name.trim().slice(0, MAX_PLAYER_NAME_LENGTH);
 }
 
 // packages/server/src/index.ts (or dist/index.js) -> packages/web/dist, same relative depth either way.
@@ -246,10 +260,11 @@ function sendError(socket: WebSocket, message: string): void {
  * can send any shape at all. Validate the envelope here so a malformed payload becomes a
  * clean error instead of an exception deep inside the match.
  */
+const isString = (value: unknown): value is string => typeof value === 'string';
+
 function parseClientMessage(raw: unknown): ClientMessage | null {
   if (!raw || typeof raw !== 'object') return null;
   const message = raw as Record<string, unknown>;
-  const isString = (value: unknown): value is string => typeof value === 'string';
 
   switch (message['type']) {
     case 'create-room':
@@ -263,7 +278,7 @@ function parseClientMessage(raw: unknown): ClientMessage | null {
     case 'action': {
       const action = message['action'];
       if (!action || typeof action !== 'object') return null;
-      return isString((action as Record<string, unknown>)['kind']) ? (message as unknown as ClientMessage) : null;
+      return isValidAction(action as Record<string, unknown>) ? (message as unknown as ClientMessage) : null;
     }
     case 'forfeit':
     case 'rematch':
@@ -285,6 +300,32 @@ function parseClientMessage(raw: unknown): ClientMessage | null {
     }
     default:
       return null;
+  }
+}
+
+/**
+ * Forme d'une action joueur, champ par champ. `Match.validateAction` vérifie ensuite que
+ * les ids désignent bien quelque chose, mais il suppose des chaînes : un `kind` inconnu ou
+ * un id d'un autre type lui faisait lever une exception au lieu d'un refus propre.
+ */
+function isValidAction(action: Record<string, unknown>): boolean {
+  switch (action['kind']) {
+    case 'play-object':
+      return isString(action['objectInstanceId']);
+    case 'play-terrain':
+      return isString(action['terrainInstanceId']);
+    case 'use-ability':
+      return isString(action['characterInstanceId']) && isString(action['abilityId']);
+    case 'attack':
+      return isString(action['characterInstanceId']) && isString(action['attackId']);
+    case 'switch':
+      return isString(action['newActiveInstanceId']);
+    case 'recycle-objects':
+      return Array.isArray(action['objectInstanceIds']) && action['objectInstanceIds'].every(isString);
+    case 'pass':
+      return true;
+    default:
+      return false;
   }
 }
 
@@ -349,8 +390,10 @@ function handleMessage(socket: WebSocket, message: ClientMessage): void {
       }
       const room = new Room(code);
       rooms.set(code, room);
-      // Le mode n'est lu qu'ici : c'est l'hôte qui décide pour le salon entier.
-      const playerId = room.addPlayer(socket, message.playerName, message.roster, message.mode);
+      // Le mode n'est lu qu'ici : c'est l'hôte qui décide pour le salon entier. Un mode
+      // inconnu retombe sur le mode normal plutôt que d'être affiché tel quel dans la liste.
+      const mode = isString(message.mode) && GAME_MODES.has(message.mode) ? message.mode : undefined;
+      const playerId = room.addPlayer(socket, sanitizePlayerName(message.playerName), message.roster, mode);
       connections.set(socket, { roomCode: code, playerId });
       const sessionToken = issueSession(code, playerId);
       sendMessage(socket, { type: 'room-created', roomCode: code, you: playerId, sessionToken });
@@ -371,7 +414,17 @@ function handleMessage(socket: WebSocket, message: ClientMessage): void {
         sendError(socket, 'Ce salon est déjà complet');
         return;
       }
-      const playerId = room.addPlayer(socket, message.playerName, message.roster);
+      // Un siège vide n'est pas forcément libre : celui d'un joueur déconnecté en pleine
+      // partie (ou en plein draft) lui appartient encore via son jeton de reprise. Sans ce
+      // garde, n'importe qui muni du code s'asseyait à sa place et recevait son état de jeu.
+      if (!room.isOpen) {
+        sendError(
+          socket,
+          room.isAbandoned ? "Ce salon n'a plus d'occupant" : 'Cette partie a déjà commencé'
+        );
+        return;
+      }
+      const playerId = room.addPlayer(socket, sanitizePlayerName(message.playerName), message.roster);
       connections.set(socket, { roomCode: room.code, playerId });
       const sessionToken = issueSession(room.code, playerId);
       sendMessage(socket, { type: 'joined', roomCode: room.code, you: playerId, sessionToken });
@@ -470,5 +523,10 @@ const heartbeat = setInterval(() => {
 heartbeat.unref?.();
 
 httpServer.listen(PORT, () => {
-  console.log(`Card game server listening on http://localhost:${PORT}`);
+  // Le port réellement pris, pas celui demandé : `SERVER_PORT=0` en laisse le choix au
+  // système (c'est ce que font les tests d'intégration pour ne jamais entrer en collision
+  // avec un serveur de dev déjà lancé), et c'est cette ligne qui le leur dit.
+  const address = httpServer.address();
+  const port = address && typeof address === 'object' ? address.port : PORT;
+  console.log(`Card game server listening on http://localhost:${port}`);
 });

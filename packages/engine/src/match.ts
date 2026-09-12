@@ -29,6 +29,7 @@ import * as hp from './hp.js';
 import * as statusesMod from './statuses.js';
 import * as zones from './zones.js';
 import {
+  attacksAvailableTo,
   canAttack,
   canAttackFromBench,
   canPlayObject,
@@ -529,6 +530,11 @@ export class Match {
   }
 
   private requestChoice(playerId: PlayerId, spec: ChoiceSpec): Promise<ChoiceAnswer> {
+    // Partie terminée (abandon en plein effet) : `forfeit` a déjà libéré le prompt en cours
+    // avec la réponse neutre, mais la coroutine qu'il a réveillée peut en poser d'autres.
+    // Les résoudre d'office plutôt que de laisser un choix armé -- et un minuteur serveur --
+    // sur une partie que plus personne ne joue. L'issue est scellée, la réponse n'importe pas.
+    if (this.state.result) return Promise.resolve(defaultChoiceAnswer(spec));
     // The protocol carries exactly one pending choice. Overwriting a live one would
     // strand its resolver and hang the match forever, so fail loudly instead: a card
     // must await its prompts one at a time, never in parallel.
@@ -663,6 +669,10 @@ export class Match {
       }
       case 'pass':
         return { ok: true };
+      default:
+        // Le serveur filtre déjà l'enveloppe ; un appelant direct avec un `kind` inconnu
+        // recevait `undefined` et `applyAction` levait sur `validation.ok`.
+        return { ok: false, error: 'Action inconnue' };
     }
   }
 
@@ -723,6 +733,13 @@ export class Match {
 
     zones.checkWinCondition(state);
     if (state.result) return;
+    // L'action est résolue : ce qui suit (fin de tour, début du tour d'en face) n'en fait
+    // plus partie. Un prompt levé à partir d'ici pour l'auteur de l'action (une passive de
+    // son camp qui l'interroge au début du tour adverse, la Main Personnage qui regarnit
+    // son banc en Mode Pioche) ne doit plus lui permettre de tout dérouler en arrière --
+    // sinon il annulerait son propre tour après l'avoir rendu.
+    this.cancellableSnapshot = null;
+    this.cancellableActionOwner = null;
     if (endsTurn) await endTurn(state, this.api);
   }
 
@@ -838,6 +855,10 @@ export class Match {
 
     const remaining = Number(grant.data?.['remaining'] ?? 0);
     if (remaining > 0) {
+      // Une attaque qui laisse le tour ouvert d'elle-même (`endsTurn: false`, la Voracity
+      // de Katarina après un kill) n'a rien à racheter : la charge reste entière pour
+      // l'attaque qui, elle, aurait fermé le tour.
+      if (!endsTurn) return endsTurn;
       grant.data = { ...grant.data, remaining: remaining - 1, armed: true };
       const percent = Number(grant.data['damagePercent'] ?? 100);
       this.api.log(
@@ -852,6 +873,17 @@ export class Match {
     // to expire so a later attack this turn (another card granting yet another swing)
     // can't inherit the discount.
     statusesMod.removeStatus(attacker, 'extra-attack');
+    // La contrepartie différée (`onExpire`, le silence d'Attaque cloné) est due que la
+    // charge ait été dépensée ou qu'elle ait expiré : consommer le statut ici sans la poser
+    // laissait la carte gratuite dès qu'on l'utilisait vraiment. Le tick pose un `onExpire`
+    // APRÈS sa passe de décompte, donc jamais décompté à l'arrivée ; posé ici en plein tour,
+    // le statut hérité subira la passe du prochain début de tour -- le `+1` conserve donc
+    // exactement la même fenêtre que l'expiration naturelle.
+    if (grant.onExpire) {
+      const handoff = { ...grant.onExpire };
+      if (handoff.remainingTurns !== undefined) handoff.remainingTurns += 1;
+      statusesMod.applyStatus(attacker, handoff);
+    }
     return endsTurn;
   }
 
@@ -928,7 +960,10 @@ export class Match {
     // nothing. canAttack also lets any card veto via its own modifier.
     if (!canAttack(state, partnerInstanceId).allow) return;
 
-    const partnerAttacks = getCharacterCard(partner.cardId).attacks;
+    // `attacksAvailableTo` et pas `def.attacks` : un partenaire qui a emprunté une attaque
+    // ("Livre de Chrollo") n'a plus que celle-là d'autorisée par `canAttack` -- lue sur sa
+    // carte seule, la liste était vide et le partenaire restait les bras croisés.
+    const partnerAttacks = attacksAvailableTo(state, partnerInstanceId);
     const ctx = this.api.buildEffectContext(partnerInstanceId, playerId, undefined, 'attack');
     const available = partnerAttacks.filter(
       // Un sceau ne vise qu'une attaque : le partenaire garde les autres.
@@ -1204,7 +1239,11 @@ export class Match {
       },
 
       destroyObject(objectInstanceId) {
-        const owner = zones.findObjectOwner(state, objectInstanceId);
+        // Tolérant à un id qui ne résout plus (objet recyclé dans une pile en Mode Pioche,
+        // statut qui nomme un objet disparu) : lancer ici faisait avorter l'action ou le
+        // tick de statut en cours, alors qu'il n'y a simplement plus rien à détruire.
+        const owner = zones.safeFindObjectOwner(state, objectInstanceId);
+        if (!owner) return;
         const obj = state.players[owner].objects[objectInstanceId];
         zones.destroyObject(state, objectInstanceId);
         api.log(`${cardName(obj?.cardId ?? '')} est détruit`, { kind: 'destroy-object', objectInstanceId, ownerId: owner });
@@ -1301,7 +1340,11 @@ export class Match {
         const player = state.players[ownerId];
         player.objects[instanceId] = { instanceId, cardId, ownerId };
         player.unplayedObjectInstanceIds.push(instanceId);
-        api.log(`${playerName(state, ownerId)} récupère une nouvelle carte objet`, { kind: 'gain-object', instanceId, cardId }, ownerId);
+        // La carte rejoint une main SECRÈTE : le geste est public, son identité ne l'est
+        // pas. Même découpage que le Recycleur -- une ligne commune sans `cardId`, une
+        // ligne privée qui nomme la carte pour son seul destinataire.
+        api.log(`${playerName(state, ownerId)} récupère une nouvelle carte objet`, { kind: 'gain-object', instanceId }, ownerId);
+        api.log(`Nouvelle carte en main : ${cardName(cardId)}`, { kind: 'gain-object', privateTo: ownerId, instanceId, cardId }, ownerId);
         return instanceId;
       },
 
@@ -1310,7 +1353,8 @@ export class Match {
         const player = state.players[ownerId];
         player.terrains[instanceId] = { instanceId, cardId, ownerId };
         player.unplayedTerrainInstanceIds.push(instanceId);
-        api.log(`${playerName(state, ownerId)} récupère une nouvelle carte terrain`, { kind: 'gain-terrain', instanceId, cardId }, ownerId);
+        api.log(`${playerName(state, ownerId)} récupère une nouvelle carte terrain`, { kind: 'gain-terrain', instanceId }, ownerId);
+        api.log(`Nouvelle carte en main : ${cardName(cardId)}`, { kind: 'gain-terrain', privateTo: ownerId, instanceId, cardId }, ownerId);
         return instanceId;
       },
 

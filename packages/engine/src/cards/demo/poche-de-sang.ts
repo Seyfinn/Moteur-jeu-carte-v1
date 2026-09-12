@@ -1,5 +1,5 @@
 import type { ObjectCardDef } from '../types.js';
-import { getMaxAttachedObjects } from '../../queries.js';
+import { canTargetBench, getMaxAttachedObjects } from '../../queries.js';
 
 const MAX_HP_BONUS = 200;
 
@@ -25,9 +25,17 @@ export const pocheDeSang: ObjectCardDef = {
     // Seuls les personnages qui ont encore un emplacement d'objet libre : sinon
     // api.attachObject refuse silencieusement (match.ts) et la poche partirait au
     // cimetière après avoir quand même donné ses HP max.
+    const activeAlly = ctx.getActive(ctx.ownerId);
     const candidates = ctx
       .getAllOnBoard(ctx.ownerId)
-      .filter((c) => c.attachedObjectInstanceIds.length < getMaxAttachedObjects(ctx.state, c.instanceId));
+      .filter((c) => c.attachedObjectInstanceIds.length < getMaxAttachedObjects(ctx.state, c.instanceId))
+      // Un banc isolé (Arène) n'est plus équipable, même par son propre camp -- comme pour
+      // les autres objets à lier (Berserk, Crit +, Potion force...).
+      .filter(
+        (c) =>
+          c.instanceId === activeAlly?.instanceId ||
+          canTargetBench(ctx.state, ctx.sourceInstanceId, c.instanceId, true).allow
+      );
     if (candidates.length === 0) return;
 
     const [targetId] = await ctx.choose({

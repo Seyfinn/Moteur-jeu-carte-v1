@@ -23,15 +23,27 @@ export const muzan: CharacterCardDef = {
       async execute(ctx) {
         const target = ctx.getActive(ctx.opponentId);
         if (!target) return;
+
+        // Un seul jet d'esquive partagé entre les dégâts et le poison (même pattern que
+        // Rengoku / Sukuna) : soit le coup touche et les deux s'appliquent, soit il est
+        // esquivé et rien ne passe. Deux jets indépendants donnaient « esquive les dégâts
+        // mais empoisonné quand même » -- à coup sûr, même, puisqu'une esquive réussie
+        // pose `evasion-locked` (0 %) avant le second jet.
+        if (ctx.rollEvasion(target.instanceId)) return;
+
         const atk = ctx.getEffectiveATK(ctx.sourceInstanceId, BLACK_BLOOD_ATK);
-        await ctx.dealDamage(target.instanceId, atk);
-        ctx.applyStatus(target.instanceId, {
-          statusId: 'poison',
-          label: 'Poison (Black Blood)',
-          sourcePlayerId: ctx.ownerId,
-          sourceCardInstanceId: ctx.sourceInstanceId,
-          remainingTurns: POISON_REMAINING_TURNS,
-        });
+        await ctx.dealDamage(target.instanceId, atk, { skipEvasionRoll: true });
+        ctx.applyStatus(
+          target.instanceId,
+          {
+            statusId: 'poison',
+            label: 'Poison (Black Blood)',
+            sourcePlayerId: ctx.ownerId,
+            sourceCardInstanceId: ctx.sourceInstanceId,
+            remainingTurns: POISON_REMAINING_TURNS,
+          },
+          { skipEvasionRoll: true }
+        );
       },
     },
   ],

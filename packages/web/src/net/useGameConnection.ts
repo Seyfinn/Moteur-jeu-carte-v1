@@ -20,6 +20,13 @@ const WS_URL =
 // few times before surfacing an error.
 const MAX_CONNECT_RETRIES = 4;
 const RETRY_DELAY_MS = 2000;
+/**
+ * Coupure en pleine partie (Wi-Fi qui saute, serveur redémarré) : le siège survit côté
+ * serveur, donc on le reprend tout seul avec le jeton plutôt que d'exiger un rechargement.
+ * Chaque tentative rejoue les `MAX_CONNECT_RETRIES` essais de connexion ci-dessus ; au-delà
+ * de ce nombre de reprises, on rend la main au joueur (bouton « Reconnecter »).
+ */
+const MAX_RESUME_ATTEMPTS = 3;
 
 /**
  * Seat credential handed out by the server. Reloading the page tears down the socket but
@@ -65,6 +72,10 @@ export interface GameConnection {
   choiceDeadline: number | null;
   /** True while an interrupted session is being reclaimed on page load. */
   resuming: boolean;
+  /** True while a socket lost mid-game is being reopened on the same seat (automatic, with backoff). */
+  reconnecting: boolean;
+  /** Retente la reprise du siège à la main, une fois les reprises automatiques épuisées. */
+  reconnect(): void;
   /** `roster` optionnel, pour la même raison que `joinRoom` ci-dessous. */
   createRoom(playerName: string, roster?: RosterConfig, mode?: GameMode): void;
   /**
@@ -114,7 +125,21 @@ export function useGameConnection(): GameConnection {
   const [draftSubmittedBy, setDraftSubmittedBy] = useState<PlayerId[]>([]);
   const [lastDraftRoster, setLastDraftRoster] = useState<RosterConfig | null>(null);
   const [resuming, setResuming] = useState(() => readSessionToken() !== null);
+  const [reconnecting, setReconnecting] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
+  /** Reprises automatiques enchaînées depuis la dernière connexion réussie. */
+  const resumeAttemptsRef = useRef(0);
+  /** `ensureSocket` doit pouvoir se rappeler lui-même depuis son gestionnaire de fermeture. */
+  const ensureSocketRef = useRef<(onOpen: () => void) => void>(() => {});
+
+  const send = useCallback((message: ClientMessage) => {
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      setError('Pas de connexion au serveur.');
+      return;
+    }
+    socket.send(JSON.stringify(message));
+  }, []);
 
   const ensureSocket = useCallback((onOpen: () => void) => {
     setStatus('connecting');
@@ -133,11 +158,28 @@ export function useGameConnection(): GameConnection {
       const socket = new WebSocket(WS_URL);
       socketRef.current = socket;
       let opened = false;
+      /** Vrai dès que le serveur a donné un siège sur CETTE socket (room-created / joined). */
+      let seated = false;
 
       socket.addEventListener('open', () => {
         opened = true;
         onOpen();
       });
+
+      // La partie ne répond plus : retenter tout seul tant qu'il reste un jeton de siège.
+      // Sinon la bannière « connexion perdue » s'effaçait au bout de quatre secondes et le
+      // plateau redevenait un plateau normal, sur lequel plus rien ne partait.
+      const tryResume = (): boolean => {
+        const token = readSessionToken();
+        if (!token || resumeAttemptsRef.current >= MAX_RESUME_ATTEMPTS) return false;
+        resumeAttemptsRef.current += 1;
+        setReconnecting(true);
+        setTimeout(() => {
+          if (socketRef.current !== socket) return; // une autre connexion a pris le relais
+          ensureSocketRef.current(() => send({ type: 'resume-session', sessionToken: token }));
+        }, RETRY_DELAY_MS);
+        return true;
+      };
 
       socket.addEventListener('message', (event) => {
         let message: ServerMessage;
@@ -150,6 +192,7 @@ export function useGameConnection(): GameConnection {
         }
         switch (message.type) {
           case 'room-created':
+            seated = true;
             writeSessionToken(message.sessionToken);
             setRoomCode(message.roomCode);
             setYou(message.you);
@@ -157,11 +200,15 @@ export function useGameConnection(): GameConnection {
             setResuming(false);
             break;
           case 'joined':
+            seated = true;
             writeSessionToken(message.sessionToken);
             setRoomCode(message.roomCode);
             setYou(message.you);
             setStatus('playing');
             setResuming(false);
+            // Siège repris : le compteur de reprises repart de zéro pour la prochaine coupure.
+            resumeAttemptsRef.current = 0;
+            setReconnecting(false);
             break;
           case 'waiting-for-opponent':
             setStatus('waiting');
@@ -202,12 +249,34 @@ export function useGameConnection(): GameConnection {
             break;
           case 'session-expired':
             // The room is gone for good -- drop the stale credential and show the lobby.
+            // L'état de jeu part avec : sans ça, une reprise automatique refusée laissait le
+            // plateau affiché (`App` le montre dès qu'un état existe), figé pour de bon.
             writeSessionToken(null);
             setResuming(false);
+            setReconnecting(false);
+            setState(null);
+            setYou(null);
+            setRoomCode(null);
+            setDraftPool(null);
+            setDraftSubmittedBy([]);
+            setChoiceDeadline(null);
+            setOpponentDisconnected(false);
             setStatus('idle');
             break;
           case 'error':
             setError(message.message);
+            // Refus AVANT d'avoir obtenu un siège (salon introuvable ou complet, deck
+            // refusé) : le serveur ne ferme pas la socket, et `status` restait sur
+            // 'connecting' pour toujours -- lobby figé, boutons grisés, polling des salons
+            // arrêté. On revient au repos et on referme la socket orpheline, qui n'a plus
+            // rien à faire (la prochaine tentative en rouvrira une).
+            if (!seated) {
+              socketRef.current = null; // la fermeture ne doit ni reprendre ni signaler une perte
+              socket.close();
+              setResuming(false);
+              setReconnecting(false);
+              setStatus('idle');
+            }
             break;
         }
       });
@@ -219,16 +288,22 @@ export function useGameConnection(): GameConnection {
           setTimeout(() => attemptConnect(attempt + 1), RETRY_DELAY_MS);
           return;
         }
+        // Reprise automatique seulement après une connexion qui a VÉCU (ou pendant une
+        // chaîne de reprises déjà engagée) : un serveur injoignable dès le chargement de la
+        // page doit rendre le lobby tout de suite, pas après trente secondes d'essais.
+        if ((opened || resumeAttemptsRef.current > 0) && tryResume()) return;
         if (!opened) setError('Connexion au serveur impossible.');
         else setError('Connexion au serveur perdue.');
         setStatus('error');
         // Never leave the lobby stuck behind a "reprise en cours" spinner.
         setResuming(false);
+        setReconnecting(false);
       });
     };
 
     attemptConnect(0);
-  }, []);
+  }, [send]);
+  ensureSocketRef.current = ensureSocket;
 
   useEffect(
     () => () => {
@@ -238,15 +313,6 @@ export function useGameConnection(): GameConnection {
     },
     []
   );
-
-  const send = useCallback((message: ClientMessage) => {
-    const socket = socketRef.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-      setError('Pas de connexion au serveur.');
-      return;
-    }
-    socket.send(JSON.stringify(message));
-  }, []);
 
   const createRoom = useCallback(
     (playerName: string, roster?: RosterConfig, mode?: GameMode) => {
@@ -270,6 +336,16 @@ export function useGameConnection(): GameConnection {
   useEffect(() => {
     const token = readSessionToken();
     if (!token) return;
+    ensureSocket(() => send({ type: 'resume-session', sessionToken: token }));
+  }, [ensureSocket, send]);
+
+  // Reprise à la main, une fois les reprises automatiques épuisées : même chemin que le
+  // rechargement de page, avec le jeton encore en poche.
+  const reconnect = useCallback(() => {
+    const token = readSessionToken();
+    if (!token) return;
+    resumeAttemptsRef.current = 0;
+    setReconnecting(true);
     ensureSocket(() => send({ type: 'resume-session', sessionToken: token }));
   }, [ensureSocket, send]);
 
@@ -299,6 +375,8 @@ export function useGameConnection(): GameConnection {
     const socket = socketRef.current;
     socketRef.current = null;
     socket?.close();
+    resumeAttemptsRef.current = 0;
+    setReconnecting(false);
     setChoiceDeadline(null);
     setResuming(false);
     setState(null);
@@ -336,5 +414,7 @@ export function useGameConnection(): GameConnection {
     leave,
     choiceDeadline,
     resuming,
+    reconnecting,
+    reconnect,
   };
 }

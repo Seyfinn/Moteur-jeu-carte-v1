@@ -50,19 +50,17 @@ function sealedVictim(ctx: EffectContext): CharacterInstance | undefined {
  */
 const usableByChrollo = isRelaunchable;
 
-/** L'attaque volée, telle qu'elle est aujourd'hui : lue sur la carte de la victime à chaque coup. */
+/**
+ * L'attaque volée, telle qu'elle est aujourd'hui : lue sur la carte de la victime à chaque
+ * coup. Passe par `sealedVictim` : une victime partie au cimetière garde son sceau (un KO
+ * ne vide pas les statuts), mais le livre est refermé -- sans ce test Chrollo gardait
+ * l'attaque volée gratuitement alors que la Contrainte, elle, avait déjà cessé.
+ */
 function stolenAttack(ctx: EffectContext): AttackDef | undefined {
-  const state = ctx.state;
-  const ownerId = ctx.ownerId;
-  const self = state.players[ownerId].characters[ctx.sourceInstanceId];
-  if (!self) return undefined;
-  const book = getStatus(self, BOOK_STATUS_ID);
-  const victimId = book?.data?.['victimInstanceId'];
-  const attackId = book?.data?.['stolenAttackId'];
-  if (typeof victimId !== 'string' || typeof attackId !== 'string') return undefined;
-  const enemy = state.players[otherPlayer(ownerId)];
-  const victim = enemy.characters[victimId];
-  if (!victim || !hasStatus(victim, SEAL_STATUS_ID)) return undefined;
+  const victim = sealedVictim(ctx);
+  const self = ctx.getCharacter(ctx.sourceInstanceId);
+  const attackId = getStatus(self, BOOK_STATUS_ID)?.data?.['stolenAttackId'];
+  if (!victim || typeof attackId !== 'string') return undefined;
   const attack = getCharacterCard(victim.cardId).attacks.find((a) => a.id === attackId);
   // Attaque volée inutilisable en l'état : Chrollo retombe sur sa Dague de Ben.
   return attack && usableByChrollo(attack, ctx) ? attack : undefined;
@@ -189,6 +187,9 @@ Tant que la carte est scellée, Chrollo perd 25 % de ses PV actuels au début de
           sourceCardInstanceId: ctx.sourceInstanceId,
           data: { stolenAttackId, stolenAbilityId },
         });
+        // Une marque périmée (victime précédente morte sans Fermeture du Livre) est
+        // remplacée, jamais empilée : `getStatus` lirait sinon toujours la première.
+        ctx.removeStatus(ctx.sourceInstanceId, BOOK_STATUS_ID);
         ctx.applyStatus(ctx.sourceInstanceId, {
           statusId: BOOK_STATUS_ID,
           label: `Livre ouvert (${victimCard.name})`,
@@ -207,7 +208,7 @@ Tant que la carte est scellée, Chrollo perd 25 % de ses PV actuels au début de
       id: 'actif-vole',
       name: 'Actif volé',
       kind: 'active',
-      description: "Chrollo remplace son attaque de base par l'Attaque et l'Actif de la carte scellée.",
+      description: "Chrollo remplace son attaque par l'Attaque de l'ennemi scellé et cet actif par l'actif de l'ennemi est scellé.",
       condition(ctx) {
         return !!stolenAbility(ctx);
       },

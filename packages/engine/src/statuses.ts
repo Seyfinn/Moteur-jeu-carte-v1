@@ -1,6 +1,7 @@
 import type { BuiltinStatusId, CharacterInstance, GameState, PlayerId, StatusInstance } from './types.js';
 import type { EngineApi } from './engine-api.js';
 import { cardName } from './names.js';
+import { canApplyStatus } from './queries.js';
 
 /** Fixed damage-per-tick formulas -- not customizable via a status's `data`.
  * Exported so the in-game glossary (web/components/EffectsGlossary) states the rules the
@@ -344,7 +345,19 @@ export async function tickStatusesAtTurnStart(state: GameState, playerId: Player
       // decrement pass above, so the newcomer isn't ticked on arrival -- its duration
       // starts at the bearer's next turn, which is why it needs no `+1`.
       if (status.onExpire && api.isOnBoard(instanceId)) {
-        applyStatus(char, { ...status.onExpire });
+        // Même garde d'immunité que `EffectContext.applyStatus` : un stun/silence différé
+        // (Vision du Futur d'Aki) ne doit pas passer sous une immunité innée (Toji) juste
+        // parce qu'il arrive par le tick et non par une carte.
+        if (canApplyStatus(state, instanceId, status.onExpire.statusId).allow) {
+          applyStatus(char, { ...status.onExpire });
+        } else {
+          api.log(`${cardName(char.cardId)} est immunisé contre « ${status.onExpire.label || status.onExpire.statusId} »`, {
+            kind: 'status',
+            targetInstanceId: instanceId,
+            statusId: status.onExpire.statusId,
+            blocked: true,
+          });
+        }
       }
       // Same convention as 'damage-reflect' (data.objectInstanceId), but for a status that
       // is consumed by TIME instead of by a hit: whichever object carried this status is

@@ -1,15 +1,21 @@
 import type { ObjectCardDef } from '../types.js';
-import type { CharacterInstance } from '../../types.js';
-import { getCharacterCard } from '../registry.js';
+import type { GameState } from '../../types.js';
+import { attacksAvailableTo, canAttack } from '../../queries.js';
 import { cardName } from '../../names.js';
 
 const DAMAGE_CAP = 5;
 
-/** Miroir de queries.ts::canAttack : un personnage étourdi ou désarmé ne peut pas
- * attaquer, y compris via Coup de main -- vérifié ici à la main puisqu'on court-circuite
- * complètement le handleAttack normal (donc son propre appel à canAttack). */
-function canBenchAttack(char: CharacterInstance): boolean {
-  return !char.statuses.some((s) => s.statusId === 'stun' || s.statusId === 'disarmed');
+/**
+ * Les attaques que ce personnage du banc peut réellement porter : celles qu'il a en main
+ * (`attacksAvailableTo`, l'empruntée du Livre de Chrollo comprise -- jamais
+ * `getCharacterCard(...).attacks` en direct, cf. CLAUDE.md) et que `canAttack` ne refuse
+ * pas une par une (stun, désarmé, sceau de Makima, attaque empruntée qui ferme les siennes).
+ * On court-circuite complètement le handleAttack normal, donc ses gardes sont rejoués ici.
+ */
+function attackIdsUsableBy(state: GameState, characterInstanceId: string): string[] {
+  return attacksAvailableTo(state, characterInstanceId)
+    .filter((a) => canAttack(state, characterInstanceId, a.id).allow)
+    .map((a) => a.id);
 }
 
 export const coupDeMain: ObjectCardDef = {
@@ -22,7 +28,7 @@ export const coupDeMain: ObjectCardDef = {
     const bench = state.players[ownerId].benchCharacterInstanceIds;
     const eligible = bench.filter((id) => {
       const c = state.players[ownerId].characters[id];
-      return !!c && canBenchAttack(c);
+      return !!c && attackIdsUsableBy(state, id).length > 0;
     });
     if (eligible.length === 0) {
       return "Aucun personnage du banc n'est en état d'attaquer (banc vide, étourdi ou désarmé).";
@@ -30,7 +36,7 @@ export const coupDeMain: ObjectCardDef = {
     return null;
   },
   async execute(ctx) {
-    const eligible = ctx.getBench(ctx.ownerId).filter(canBenchAttack);
+    const eligible = ctx.getBench(ctx.ownerId).filter((c) => attackIdsUsableBy(ctx.state, c.instanceId).length > 0);
     if (eligible.length === 0) return;
 
     const [benchCharId] = await ctx.choose({
@@ -51,7 +57,10 @@ export const coupDeMain: ObjectCardDef = {
     const benchCtx = ctx.buildEffectContext(benchCharId, 'attack');
 
     const benchCardId = ctx.getCharacter(benchCharId).cardId;
-    const attacksAvailable = getCharacterCard(benchCardId).attacks.filter((a) => !a.condition || a.condition(benchCtx));
+    const usableIds = new Set(attackIdsUsableBy(ctx.state, benchCharId));
+    const attacksAvailable = attacksAvailableTo(ctx.state, benchCharId).filter(
+      (a) => usableIds.has(a.id) && (!a.condition || a.condition(benchCtx))
+    );
     if (attacksAvailable.length === 0) return;
 
     const attackId = await ctx.chooseOption(

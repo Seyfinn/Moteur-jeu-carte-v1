@@ -19,6 +19,7 @@ import {
   deckToRoster,
   encodeDeckCode,
   loadDecks,
+  normalizeDeck,
   saveDecks,
   type Deck,
 } from '../decks';
@@ -716,11 +717,13 @@ function CloudDeckBar({ onImportDecks }: { onImportDecks: (decks: Deck[]) => voi
       return;
     }
     setStatus('idle');
-    const decks: Deck[] = (result.decks ?? []).map((d) => ({
-      id: `deck-cloud-${d.deckName}-${Date.now()}`,
-      name: d.deckName,
-      ...d.roster,
-    }));
+    // L'indice fait partie de l'id : deux decks en ligne du même nom arrivaient dans la
+    // même milliseconde avec le même id, donc la même `key` React -- et « Supprimer » sur
+    // l'un emportait les deux. Le roster passe par le même nettoyage que le stockage local.
+    const stamp = Date.now();
+    const decks: Deck[] = (result.decks ?? []).map((d, index) =>
+      normalizeDeck({ id: `deck-cloud-${d.deckName}-${stamp}-${index}`, name: d.deckName, ...d.roster })
+    );
     onImportDecks(decks);
     setLoadedCount(decks.length);
     window.setTimeout(() => setLoadedCount(null), NOTICE_MS);

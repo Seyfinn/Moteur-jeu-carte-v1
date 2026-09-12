@@ -10,6 +10,15 @@ export const dechetterie: ObjectCardDef = {
   description:
     'Permet de récupérer une carte objet parmi une sélection aléatoire de 5 cartes objets des 2 cimetières. ',
   maxCopies: 1,
+  // Refusée avant d'être consommée quand les deux cimetières objet sont vides : la carte
+  // n'aurait rien à proposer et partirait au cimetière dans le vide (cf. CLAUDE.md).
+  unplayableReason(state, ownerId) {
+    const opponentId = ownerId === 'p1' ? 'p2' : 'p1';
+    const total =
+      state.players[ownerId].graveyardObjectInstanceIds.length + state.players[opponentId].graveyardObjectInstanceIds.length;
+    if (total === 0) return 'aucune carte objet dans les cimetières';
+    return null;
+  },
   async execute(ctx) {
     const own = ctx.state.players[ctx.ownerId];
     const enemy = ctx.state.players[ctx.opponentId];

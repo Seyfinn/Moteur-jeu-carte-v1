@@ -24,6 +24,14 @@ export const chaines: ObjectCardDef = {
       // Pas de remainingTurns : dure indéfiniment jusqu'à la mort du personnage.
       // Le blocage lui-même est générique (statut 'chained') : zones.switchActive
       // refuse TOUT départ du poste actif, switch forcé compris.
+      //
+      // `data.objectInstanceId` : l'entrave est l'effet de CET objet-là, pas un état acquis
+      // du personnage. Détruire Chaînes (terrain Destruction...) libère donc son porteur
+      // (zones.destroyObject retire tout statut qui nomme l'objet détruit) -- sans quoi il
+      // restait enchaîné par une carte déjà au cimetière. Le sens inverse (statuses.ts
+      // détruit l'objet quand le statut expire) ne joue jamais ici : sans `remainingTurns`,
+      // 'chained' n'expire pas, il part avec le porteur (zones.koCharacter).
+      data: { objectInstanceId: ctx.sourceInstanceId },
     });
   },
 };

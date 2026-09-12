@@ -8,6 +8,11 @@ const HOOK_LOCK_STATUS_ID = 'blitzcrank-hook-locked';
 const SHIELD_AMOUNT = 150;
 const HP_THRESHOLD = 50;
 const HOOK_LOCK_TURNS = 2;
+// Statut bloquant posé (en général) pendant le tour adverse, celui du coup qui fait
+// passer Blitzcrank sous la barre : le tick qui ouvre son tour suivant décrémente PUIS
+// filtre, donc sans le +1 le verrou ne tenait qu'un seul tour (cf. CLAUDE.md, le piège
+// des durées).
+const HOOK_LOCK_REMAINING_TURNS = HOOK_LOCK_TURNS + 1;
 
 /** Bench targets Hook is allowed to pull, excluding any protected by e.g. Bouclier Ultime. */
 function getHookableBench(ctx: EffectContext) {
@@ -52,7 +57,7 @@ export const blitzcrank: CharacterCardDef = {
           statusId: HOOK_LOCK_STATUS_ID,
           label: 'Hook verrouillé',
           sourceCardInstanceId: ctx.sourceInstanceId,
-          remainingTurns: HOOK_LOCK_TURNS,
+          remainingTurns: HOOK_LOCK_REMAINING_TURNS,
           // Même règle que les recharges d'ability : le verrou descend aussi au banc --
           // et Mana Barrier se déclenche justement depuis le banc.
           ticksOnBench: true,

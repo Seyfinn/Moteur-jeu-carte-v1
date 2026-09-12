@@ -3,6 +3,7 @@ import { getStatus } from '../../statuses.js';
 
 const FAUX_ATK = 40;
 const ATTACKS_BEFORE_EVOLUTION = 3;
+const KAYN_CARD_ID = 'kayn';
 
 /** Les deux voies déclarées par `evolvesTo`, partagées avec les fichiers des formes. */
 export const KAYN_ASSASSIN_CARD_ID = 'kayn-assassin';
@@ -41,6 +42,11 @@ async function askPath(ctx: EffectContext): Promise<string> {
  */
 async function advanceDarkin(ctx: EffectContext): Promise<void> {
   if (ctx.isKO(ctx.sourceInstanceId)) return;
+  // La Faux peut être portée par quelqu'un d'autre (volée par Chrollo, copiée par Kakashi) :
+  // le compteur et la transformation n'appartiennent qu'à Kayn lui-même. Sans ce garde, le
+  // voleur se voyait demander « quelle voie Kayn emprunte-t-il ? » au 3e coup, pour une
+  // évolution que `evolveCharacter` refusait de toute façon.
+  if (ctx.getCharacter(ctx.sourceInstanceId).cardId !== KAYN_CARD_ID) return;
 
   const counter = getStatus(ctx.getCharacter(ctx.sourceInstanceId), ATTACK_COUNT_STATUS_ID);
   const count = Number(counter?.data?.['count'] ?? 0) + 1;
