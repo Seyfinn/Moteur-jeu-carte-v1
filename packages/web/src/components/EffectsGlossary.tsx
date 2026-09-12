@@ -108,6 +108,13 @@ const ENTRIES: GlossaryEntry[] = [
     text: 'Bloque simultanément les abilities actives et passives.',
   },
   {
+    id: 'sealed',
+    name: 'Scellé',
+    icon: '✕',
+    tone: 'debuff',
+    text: "Une ability ou une attaque précise du personnage est définitivement désactivée. Les autres restent utilisables.",
+  },
+  {
     id: 'critical',
     name: 'Critique',
     icon: '◎',

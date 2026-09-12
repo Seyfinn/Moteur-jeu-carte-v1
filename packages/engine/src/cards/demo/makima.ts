@@ -1,22 +1,24 @@
 import type { CharacterCardDef, EffectContext } from '../types.js';
 import type { CharacterInstance, GameState, PlayerId } from '../../types.js';
-import { getStatus, hasStatus } from '../../statuses.js';
+import { getSealedIds, hasStatus } from '../../statuses.js';
 import { getCharacterCard } from '../registry.js';
 
 const BANG_BASE_ATK = 40;
 const BANG_BONUS_PER_SEAL = 30;
 
 /**
- * Le sceau posé par "Sacrifice". Porté par l'allié sacrifié, jamais par Makima : c'est lui
- * qui perd l'usage de la compétence, et c'est sa mort qui doit faire disparaître le sceau
- * (donc le bonus de Bang !). `data.sealedIds` accumule les ids scellés sur ce personnage --
- * un même allié peut être sacrifié plusieurs fois, une compétence à la fois.
+ * Le sceau posé par "Sacrifice" : le statut GÉNÉRIQUE `sealed` du moteur
+ * (`data.abilityIds` / `data.attackIds`, lus par `queries.ts::canUseAbility` / `canAttack`).
+ * Porté par l'allié sacrifié, jamais par Makima : c'est lui qui perd l'usage de la
+ * compétence, et c'est sa mort qui doit faire disparaître le sceau (donc le bonus de
+ * Bang !). Un même allié peut être sacrifié plusieurs fois, une compétence à la fois.
  *
- * Statut privé à la carte, donc jamais déplacé par un effet « échange tous les statuts »
- * (cf. BUILTIN_STATUS_IDS) : posé sur une carte qui ne sait pas le lire, il ne voudrait rien
- * dire, et le sceau doit rester là où la compétence scellée se trouve.
+ * « De manière permanente » : le refus vit dans le moteur et non dans un modifier de
+ * Makima, pour que le sceau **survive à sa mort** (un modifier cesse d'être scanné dès que
+ * sa carte quitte le jeu). Contrepartie assumée : comme tout statut reconnu par le moteur,
+ * il est déplaçable par un effet « échange tous les statuts » (Aizen, Poupée Voodoo).
  */
-const SEAL_STATUS_ID = 'makima-sceau';
+const SEAL_STATUS_ID = 'sealed';
 
 /** Marque interne : la manipulation est armée, la cible attend le tour d'en face. */
 const MANIPULATION_MARK_STATUS_ID = 'makima-manipulation-armee';
@@ -29,11 +31,17 @@ const MANIPULATION_COOLDOWN_REMAINING_TURNS = 1 + 1;
  *  suivant, celui d'en face, pour que le moteur le résolve avant que le joueur n'agisse. */
 const FORCED_ATTACK_REMAINING_TURNS = 2;
 
-/** Les ids (compétences + attaques) scellés sur ce personnage. */
+type SealKind = 'ability' | 'attack';
+interface SealEntry {
+  key: string;
+  label: string;
+  kind: SealKind;
+}
+
+/** Les ids (compétences + attaques) scellés sur ce personnage, toutes catégories confondues. */
 function sealedIdsOf(char: CharacterInstance): string[] {
-  const seal = getStatus(char, SEAL_STATUS_ID);
-  const ids = seal?.data?.['sealedIds'];
-  return Array.isArray(ids) ? (ids as string[]) : [];
+  const { abilityIds, attackIds } = getSealedIds(char);
+  return [...abilityIds, ...attackIds];
 }
 
 /**
@@ -55,22 +63,26 @@ function countSeals(state: GameState, ownerId: PlayerId): number {
 }
 
 /** Toutes les compétences et attaques d'un allié, scellées ou non. */
-function allEntries(char: CharacterInstance): { key: string; label: string }[] {
+function allEntries(char: CharacterInstance): SealEntry[] {
   const def = getCharacterCard(char.cardId);
-  const entries: { key: string; label: string }[] = [];
+  const entries: SealEntry[] = [];
   for (const ability of def.abilities) {
-    entries.push({ key: ability.id, label: `${ability.name} (${ability.kind === 'active' ? 'Actif' : 'Passif'})` });
+    entries.push({
+      key: ability.id,
+      label: `${ability.name} (${ability.kind === 'active' ? 'Actif' : 'Passif'})`,
+      kind: 'ability',
+    });
   }
   for (const attack of def.attacks) {
-    entries.push({ key: attack.id, label: `${attack.name} (ATK)` });
+    entries.push({ key: attack.id, label: `${attack.name} (ATK)`, kind: 'attack' });
   }
   return entries;
 }
 
 /** Ce qui reste à sceller chez un allié : ses compétences et ses attaques pas encore prises. */
-function sealableEntries(char: CharacterInstance): { key: string; label: string }[] {
-  const already = new Set(sealedIdsOf(char));
-  return allEntries(char).filter((e) => !already.has(e.key));
+function sealableEntries(char: CharacterInstance): SealEntry[] {
+  const { abilityIds, attackIds } = getSealedIds(char);
+  return allEntries(char).filter((e) => !(e.kind === 'ability' ? abilityIds : attackIds).includes(e.key));
 }
 
 /**
@@ -135,24 +147,31 @@ export const makima: CharacterCardDef = {
         const victim = ctx.getCharacter(victimId);
         const entries = sealableEntries(victim);
         if (entries.length === 0) return;
-        const chosenId = await ctx.chooseOption('Sacrifice : choisissez la compétence à sceller', entries);
+        const chosenId = await ctx.chooseOption(
+          'Sacrifice : choisissez la compétence à sceller',
+          entries.map(({ key, label }) => ({ key, label }))
+        );
         if (!chosenId) return;
+        const chosen = entries.find((e) => e.key === chosenId);
+        if (!chosen) return;
 
         // Pas d'API « mettre à jour un statut » : on repose le sceau complet avec la liste
         // augmentée (cf. CLAUDE.md, pattern du compteur persistant).
-        const sealedIds = [...sealedIdsOf(victim), chosenId];
+        const previous = getSealedIds(victim);
+        const abilityIds = chosen.kind === 'ability' ? [...previous.abilityIds, chosenId] : previous.abilityIds;
+        const attackIds = chosen.kind === 'attack' ? [...previous.attackIds, chosenId] : previous.attackIds;
         if (hasStatus(victim, SEAL_STATUS_ID)) ctx.removeStatus(victimId, SEAL_STATUS_ID);
         ctx.applyStatus(victimId, {
           statusId: SEAL_STATUS_ID,
-          label: sealedStatusLabel(victim, sealedIds),
+          label: sealedStatusLabel(victim, [...abilityIds, ...attackIds]),
           sourcePlayerId: ctx.ownerId,
           sourceCardInstanceId: ctx.sourceInstanceId,
           // Aucun `remainingTurns` : un sacrifice ne se reprend pas, le sceau tient toute
           // la partie. C'est ce qui le rend cumulable et ce qui alimente Bang !.
-          data: { sealedIds },
+          data: { abilityIds, attackIds },
         });
 
-        const label = entries.find((e) => e.key === chosenId)?.label ?? chosenId;
+        const label = chosen.label;
         ctx.log(`Sacrifice : ${label} de ${getCharacterCard(victim.cardId).name} est scellé`, {
           kind: 'status',
           characterInstanceId: victimId,
@@ -235,31 +254,7 @@ Désigne 1 carte du banc adverse. Au prochain tour, le personnage actif ennemi e
         return (current as number) + countSeals(ctx.state, ctx.sourceOwnerId) * BANG_BONUS_PER_SEAL;
       },
     },
-    {
-      // Le sceau, côté compétences : refuse UNE compétence nommée (active comme passive),
-      // pas toutes celles du personnage comme le ferait un silence.
-      query: 'canUseAbility',
-      vote(ctx) {
-        const targetId = ctx.query['characterInstanceId'] as string;
-        const abilityId = ctx.query['abilityId'] as string;
-        const char = ctx.state.players[ctx.sourceOwnerId].characters[targetId];
-        if (!char || !sealedIdsOf(char).includes(abilityId)) return undefined;
-        return { allow: false, source: 'makima-sacrifice', reason: 'scellé par Sacrifice' };
-      },
-    },
-    {
-      // Le sceau, côté attaque : refuse UNE attaque nommée. Sans `attackId` (une requête
-      // qui jauge le personnage en général), on ne refuse rien -- sinon un sceau sur une
-      // seule attaque désarmerait un personnage qui en a plusieurs.
-      query: 'canAttack',
-      vote(ctx) {
-        const targetId = ctx.query['characterInstanceId'] as string;
-        const attackId = ctx.query['attackId'];
-        if (typeof attackId !== 'string') return undefined;
-        const char = ctx.state.players[ctx.sourceOwnerId].characters[targetId];
-        if (!char || !sealedIdsOf(char).includes(attackId)) return undefined;
-        return { allow: false, source: 'makima-sacrifice', reason: 'scellé par Sacrifice' };
-      },
-    },
+    // Le refus lui-même (canUseAbility / canAttack) vit dans le moteur, porté par le
+    // statut `sealed` de la victime -- pas ici, pour qu'il survive à la mort de Makima.
   ],
 };

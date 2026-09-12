@@ -18,6 +18,9 @@ import { ChoiceCountdownBadge, ChoiceModal } from './ChoiceModal';
 import { switchTargeting, TargetingBar, useBoardTargeting, type BoardTargeting } from './Targeting';
 import { CommandPanel } from './CommandPanel';
 import { EffectsGlossaryButton } from './EffectsGlossary';
+import { BoardBackdrop } from './BoardBackdrop';
+import { BoardThemeButton } from './BoardThemeSettings';
+import { useBoardTheme } from '../boardTheme';
 import { EventLog } from './EventLog';
 import { GraveyardPile } from './GraveyardPile';
 import { InitiativeWheel } from './InitiativeWheel';
@@ -760,13 +763,25 @@ export function Board({ conn }: { conn: GameConnection }) {
   const errorMessage = connectionLost ? localError : (conn.error ?? localError);
   const showInitiativeWheel = !wheelDone && state.phase === 'setup';
 
-  // Ambiance de fond : le terrain que le joueur a posé teinte tout le plateau. La classe
-  // est dérivée de l'id de carte, pas d'une liste tenue à la main -- ajouter une ambiance
-  // à un nouveau terrain est alors une règle CSS et rien d'autre, et un terrain sans règle
-  // dédiée retombe simplement sur le fond neutre.
-  const myTerrainId = me.activeTerrainInstanceId;
-  const myTerrainCardId = myTerrainId ? me.terrains[myTerrainId]?.cardId : undefined;
-  const ambience = myTerrainCardId ? `board-terrain board-terrain-${myTerrainCardId}` : '';
+  // Fond du plateau : l'illustration du terrain en jeu, floutée et assombrie derrière tout
+  // le reste. Priorité au terrain du joueur, sinon celui de l'adversaire -- il n'y a qu'un
+  // décor, et c'est celui qu'on a posé soi-même qui compte d'abord. Sans terrain, `null`
+  // laisse voir l'arène sombre par défaut. En mode `custom`, l'image importée par le joueur
+  // remplace tout ça, terrain ou pas.
+  const theme = useBoardTheme();
+  const terrainCardIdOf = (player: PlayerState) =>
+    player.activeTerrainInstanceId ? player.terrains[player.activeTerrainInstanceId]?.cardId : undefined;
+  const shownTerrainCardId = terrainCardIdOf(me) ?? terrainCardIdOf(opponent);
+  const customBackdrop = theme.mode === 'custom' && theme.customImage ? theme.customImage : null;
+  const backdropSrc = customBackdrop ?? (shownTerrainCardId ? `/cards/${shownTerrainCardId}.png` : null);
+
+  // Ambiance de couleur : le terrain affiché en fond teinte tout le plateau. La classe est
+  // dérivée de l'id de carte, pas d'une liste tenue à la main -- ajouter une ambiance à un
+  // nouveau terrain est alors une règle CSS et rien d'autre, et un terrain sans règle
+  // dédiée retombe simplement sur le fond neutre. Un fond personnalisé n'est jamais teinté :
+  // le joueur a choisi son image, le terrain n'a pas à la recolorer.
+  const ambienceCardId = customBackdrop ? undefined : shownTerrainCardId;
+  const ambience = ambienceCardId ? `board-terrain board-terrain-${ambienceCardId}` : '';
 
   // Capsule de tour : « à qui est-ce ? » ne se résume pas à `activePlayerId`. Pendant un
   // choix du moteur, c'est celui qui doit répondre qui tient la main -- l'adversaire peut
@@ -796,6 +811,9 @@ export function Board({ conn }: { conn: GameConnection }) {
         boardQuake ? ` board-quake board-quake-${boardQuake.tier}${boardQuake.critical ? ' board-quake-crit' : ''}` : ''
       }${canAct ? ' can-act' : ''}`}
     >
+      {/* Premier enfant, en `z-index` négatif : derrière tout le contenu, devant le fond
+          propre de `.board` (cf. le bloc `.board-backdrop` de styles.css). */}
+      <BoardBackdrop src={backdropSrc} />
       {/* Les deux rails encadrent TOUT le plateau, du haut de la fenêtre jusqu'en bas : le
           banc n'est plus coincé entre l'en-tête et la main, et n'abandonne plus les deux
           coins du bas au vide. Tout le reste (en-tête, arène, main, Recycleur) vit dans la
@@ -879,6 +897,7 @@ export function Board({ conn }: { conn: GameConnection }) {
               </span>
               <span className="board-header-sep" aria-hidden="true" />
               <EffectsGlossaryButton />
+              <BoardThemeButton />
               {/* Leaving was only possible from the result screen: a player whose opponent
                 never comes back had no way out short of reloading. */}
               <ForfeitButton onForfeit={conn.forfeit} />

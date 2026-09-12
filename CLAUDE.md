@@ -424,7 +424,10 @@ autour de l'appel à `evolveCharacter` -- il n'y a volontairement pas de champ d
   `dealDamage` sur chaque instance.
 - **Fermer UNE compétence / UNE attaque précise** (le « Sacrifice » de Makima) : les statuts
   `silence-active` / `silence-passive` / `disarmed` ferment des **catégories entières**, ils ne
-  savent pas viser une compétence nommée. Pour ça, un modifier qui refuse un id précis :
+  savent pas viser une compétence nommée. Pour ça, le statut générique **`sealed`**
+  (`data: { abilityIds, attackIds }`, voir la liste plus bas) posé sur la victime : le moteur
+  refuse ces ids dans `canUseAbility` / `canAttack`, et le sceau survit à la carte qui l'a
+  posé. Un sceau **temporaire** peut aussi être un modifier qui refuse un id précis :
   `canUseAbility` reçoit `{ characterInstanceId, abilityId }` et `canAttack` reçoit
   `{ characterInstanceId, attackId? }`. ⚠️ Sur `canAttack`, ne rien refuser quand `attackId`
   est absent (la requête jauge alors le personnage en général) — sinon un sceau sur une seule
@@ -476,7 +479,8 @@ autour de l'appel à `evolveCharacter` -- il n'y a volontairement pas de champ d
   carte est en jeu (voir `queries.ts` et le README pour la liste des `QueryName`).
 - **Taux d'esquive / de critique innés** (ex: L'Infini de Gojo, Black Flash de Todo,
   Execution de Caitlyn) : modifier `getEvasionPercent` / `getCriticalPercent` renvoyant
-  `Math.max(current, MON_POURCENTAGE)`. Base : 1 % d'esquive, 1 % de critique ; le statut
+  `Math.max(current, MON_POURCENTAGE)`. Base : 1 % d'esquive, 5 % de critique
+  (`BASE_EVASION_CHANCE_PERCENT` / `BASE_CRITICAL_CHANCE_PERCENT` dans `statuses.ts`) ; le statut
   `evasive` monte l'esquive à 20 %, `critical` monte le critique à 33 % (`critical` accepte
   un `data.percent` pour un one-shot, cf. Godspeed de Killua à 100 %). Ces bases sont celles
   lues par `getEvasionPercent`/`getCriticalPercent` **avant** un modifier de carte : un taux
@@ -562,6 +566,12 @@ autour de l'appel à `evolveCharacter` -- il n'y a volontairement pas de champ d
     `queries.ts::attacksAvailableTo(state, instanceId)` (ou `findAttackFor`) et jamais par
     `getCharacterCard(...).attacks` en direct — qui raterait l'empruntée. C'est déjà le cas
     dans `match.ts`, `turn.ts` et côté client (`boardActions.tsx`, `cardDetails.tsx`).
+  - `sealed` (`data: { abilityIds?: string[], attackIds?: string[] }`) : les compétences et
+    attaques nommées du porteur sont refusées par `canUseAbility` / `canAttack` (sans
+    `attackId`, rien n'est refusé). Sans `remainingTurns` : permanent, il survit à la mort de
+    la carte qui l'a posé — c'est le point de la « Sacrifice » de Makima, dont les sceaux
+    tenaient auparavant à des modifiers de Makima. Cumulable en reposant le statut avec les
+    listes augmentées (pas d'API « update »).
   - `forced-attack` (`data: { targetInstanceId }`) : au début du tour de son porteur, celui-ci
     retourne les **dégâts** de son attaque (ATK effectif) sur le personnage désigné de son
     PROPRE banc, puis son tour se termine aussitôt. Ex : Manipulation de Makima. Résolu par
@@ -709,7 +719,7 @@ autour de l'appel à `evolveCharacter` -- il n'y a volontairement pas de champ d
 ## Ce que le serveur impose par-dessus le moteur
 
 - Un choix sans réponse pendant 120 s est résolu automatiquement avec
-  `defaultChoiceAnswer(spec)` (`engine/src/choices.ts`) : première sélection légale, "oui",
+  `defaultChoiceAnswer(spec)` (`engine/src/choices.ts`) : première sélection légale, "non",
   ou l'ordre tel que présenté. Une carte ne doit donc jamais supposer qu'un prompt sera
   forcément répondu « intelligemment » — s'il existe un choix catastrophique, ne pas le
   mettre en première position.

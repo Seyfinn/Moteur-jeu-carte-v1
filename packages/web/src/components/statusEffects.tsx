@@ -90,8 +90,9 @@ const STATUS_VISUALS: Record<string, StatusVisual> = {
   'ronces-grimpantes-emprise': { className: 'fx-vulnerable', particles: 'target', tone: 'debuff' },
   // « Manipulation » de Makima : le porteur est visé pour frapper son propre camp.
   'forced-attack': { className: 'fx-vulnerable', particles: 'target', tone: 'debuff' },
-  // « Sacrifice » de Makima : une compétence fermée, comme un silence -- mais ciblée.
-  'makima-sceau': { className: 'fx-silence', particles: 'mute', tone: 'debuff' },
+  // « Sacrifice » de Makima (statut générique `sealed`) : une compétence ou une attaque
+  // fermée, comme un silence -- mais ciblée sur un id précis.
+  sealed: { className: 'fx-silence', particles: 'mute', tone: 'debuff' },
   // « Serment de Vengeance » / « Écriture du Nom » de Light Yagami : les marques "Nom"
   // avant la crise cardiaque. Le symbole de la marque, celui qui dit « repéré » sans
   // annoncer de dégâts immédiats.

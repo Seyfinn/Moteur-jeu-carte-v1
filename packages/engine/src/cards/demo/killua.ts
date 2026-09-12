@@ -9,10 +9,10 @@ const DISARM_REMAINING_TURNS = DISARM_EFFECTIVE_TURNS + 1;
 
 const GODSPEED_READY_STATUS_ID = 'killua-godspeed-ready';
 // +1, comme partout ailleurs (cf. CLAUDE.md) : le statut est posé au moment où Killua
-// entre en poste actif, ce qui arrive soit en fin de tour (le switch est une action
-// finale), soit pendant le tour adverse (remplacement après KO). Dans les deux cas le
-// prochain tick est le début du tour où Killua veut attaquer -- avec remainingTurns: 1
-// le "prêt" était donc retiré juste avant, et Godspeed ne se déclenchait jamais.
+// entre en poste actif par un switch, c'est-à-dire en fin de tour (le switch est une
+// action finale) ou pendant un `forceSwitch` adverse. Le prochain tick est le début du
+// tour où Killua veut attaquer -- avec remainingTurns: 1 le "prêt" était donc retiré
+// juste avant, et Godspeed ne se déclenchait jamais.
 const GODSPEED_READY_REMAINING_TURNS = 2;
 
 export const killua: CharacterCardDef = {
@@ -75,9 +75,10 @@ export const killua: CharacterCardDef = {
         "Lorsque Killua devient le personnage actif via un switch, la première attaque qu'il effectue lors de ce tour inflige obligatoirement un coup Critique",
       trigger: 'onBecomeActive',
       condition(ctx) {
-        // 'setup' = personnage actif de départ : la carte dit "via un switch", donc la
-        // mise en place initiale (et elle seule) ne doit pas armer le critique garanti.
-        if (ctx.event?.data['reason'] === 'setup') return false;
+        // « via un switch » = un vrai switch, et rien d'autre : ni l'actif de départ
+        // (`setup`), ni le remplacement d'un allié KO (`ko-replacement`) n'arment le
+        // critique garanti (décision de l'auteur à l'audit).
+        if (ctx.event?.data['reason'] !== 'switch') return false;
         return ctx.event?.data['characterInstanceId'] === ctx.sourceInstanceId;
       },
       async execute(ctx) {

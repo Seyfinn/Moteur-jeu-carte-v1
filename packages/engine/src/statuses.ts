@@ -50,6 +50,7 @@ export const BUILTIN_STATUS_IDS: ReadonlySet<string> = new Set<BuiltinStatusId>(
   'evasion-locked',
   'sacrifice-revive',
   'borrowed-attack',
+  'sealed',
   'survival-vow',
   'bounty-vow',
   'berserk-vow',
@@ -140,6 +141,32 @@ export function hasDeathWard(char: CharacterInstance): boolean {
  */
 export function isUnhealable(char: CharacterInstance): boolean {
   return hasStatus(char, 'unhealable');
+}
+
+/**
+ * Les deux statuts qui rendent un personnage insensible à tout `heal()` : 'unhealable'
+ * (Marque de Mahito) et 'buveur-de-sang' (récompense de Berserk, dont le lifesteal est
+ * restauré par `hp.heal()` en direct, exprès hors de ce canal). Seule source de vérité,
+ * lue par match.ts::heal ET par tout effet qui soigne en direct via `hp.heal()` au lieu de
+ * passer par `api.heal()` (Régulation Thermique) -- sinon ce soin-là contournait les deux.
+ */
+export function isHealBlocked(char: CharacterInstance): boolean {
+  return isUnhealable(char) || hasStatus(char, 'buveur-de-sang');
+}
+
+/**
+ * "Sacrifice" de Makima : les ids de compétences et d'attaques scellés sur ce personnage
+ * par le statut générique 'sealed' (`data.abilityIds` / `data.attackIds`). Listes vides
+ * sans le statut.
+ */
+export function getSealedIds(char: CharacterInstance): { abilityIds: string[]; attackIds: string[] } {
+  const seal = getStatus(char, 'sealed');
+  const abilityIds = seal?.data?.['abilityIds'];
+  const attackIds = seal?.data?.['attackIds'];
+  return {
+    abilityIds: Array.isArray(abilityIds) ? (abilityIds as string[]) : [],
+    attackIds: Array.isArray(attackIds) ? (attackIds as string[]) : [],
+  };
 }
 
 /**

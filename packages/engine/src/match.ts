@@ -13,7 +13,7 @@ import type {
   PlayerState,
   TerrainInstance,
 } from './types.js';
-import type { EngineApi } from './engine-api.js';
+import type { ChooseForOptions, EngineApi } from './engine-api.js';
 import { evolutionFormsOf, getCharacterCard, getObjectCard, getTerrainCard } from './cards/registry.js';
 import {
   DRAW_MODE_STARTING_CHARACTERS,
@@ -456,7 +456,7 @@ export class Match {
     const pending = this.state.pendingChoice;
     if (!pending) return { ok: false, error: 'Aucun choix en attente' };
     if (pending.playerId !== playerId) return { ok: false, error: "Ce choix n'est pas le vôtre" };
-    if (!this.cancellableSnapshot || this.cancellableActionOwner !== playerId) {
+    if (!pending.cancellable || !this.cancellableSnapshot || this.cancellableActionOwner !== playerId) {
       return { ok: false, error: 'Cette action ne peut plus être annulée' };
     }
 
@@ -529,7 +529,7 @@ export class Match {
     return { ok: true };
   }
 
-  private requestChoice(playerId: PlayerId, spec: ChoiceSpec): Promise<ChoiceAnswer> {
+  private requestChoice(playerId: PlayerId, spec: ChoiceSpec, options?: ChooseForOptions): Promise<ChoiceAnswer> {
     // Partie terminée (abandon en plein effet) : `forfeit` a déjà libéré le prompt en cours
     // avec la réponse neutre, mais la coroutine qu'il a réveillée peut en poser d'autres.
     // Les résoudre d'office plutôt que de laisser un choix armé -- et un minuteur serveur --
@@ -540,6 +540,15 @@ export class Match {
     // must await its prompts one at a time, never in parallel.
     if (this.state.pendingChoice) {
       throw new Error('A choice is already pending -- card effects must await prompts sequentially');
+    }
+    // Point de non-retour demandé par l'appelant (le remplacement d'un actif KO) : on jette
+    // l'instantané, donc ni ce prompt ni ceux qui suivront dans la même action ne sont
+    // annulables. Rembobiner ici rejouerait la mort elle-même -- un attaquant tué par un
+    // renvoi de dégâts (Miroir de Renvoi, Puzzle Millénaire) pendant sa propre attaque
+    // pouvait ainsi ressusciter en cliquant « Annuler » sur le choix de son remplaçant.
+    if (options?.cancellable === false) {
+      this.cancellableSnapshot = null;
+      this.cancellableActionOwner = null;
     }
     const id = randomUUID();
     this.state.pendingChoice = {
@@ -1134,7 +1143,9 @@ export class Match {
         // 'buveur-de-sang' (Berserk) : même blocage, mais seulement pour CE canal --
         // effect-context.ts::dealDamage restaure son lifesteal via hp.heal() en direct,
         // qui ne passe jamais par ici et n'est donc jamais concerné par ce blocage.
-        if (statusesMod.isUnhealable(target) || statusesMod.hasStatus(target, 'buveur-de-sang')) return 0;
+        // La liste vit dans statuses.ts::isHealBlocked, partagée avec les soins qui
+        // passent par hp.heal() en direct (Régulation Thermique).
+        if (statusesMod.isHealBlocked(target)) return 0;
         const boosted = evaluateTransform(state, 'getIncomingHealAmount', { targetInstanceId }, amount);
         const finalAmount = Math.max(0, boosted);
         if (finalAmount <= 0) return 0;
@@ -1362,8 +1373,8 @@ export class Match {
         await emitEvent(state, event, api);
       },
 
-      async chooseFor(playerId, spec) {
-        return self.requestChoice(playerId, spec);
+      async chooseFor(playerId, spec, options) {
+        return self.requestChoice(playerId, spec, options);
       },
 
       log(message, data, playerId) {

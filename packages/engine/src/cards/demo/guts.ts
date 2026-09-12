@@ -2,7 +2,7 @@ import type { CharacterCardDef } from '../types.js';
 import { getStatus } from '../../statuses.js';
 import { findCharacter } from '../../queries.js';
 
-const BERSERK_COUNTER_STATUS_ID = 'guts-berserk-record';
+const BERSERK_COUNTER_STATUS_ID = 'guts-berserk-total';
 const HP_CHUNK = 100;
 const BONUS_PER_CHUNK = 50;
 
@@ -49,23 +49,28 @@ export const guts: CharacterCardDef = {
         return !!event && event.data['targetInstanceId'] === ctx.sourceInstanceId;
       },
       async execute(ctx) {
+        // « Tous les 100 HP que Guts perd » = CUMUL des PV réellement perdus au fil de la
+        // partie (90 subis, 90 soignés, 90 subis = 180 perdus = 1 palier), pas un record de
+        // dégâts atteints. `amount` est ce qui a vraiment quitté la barre de PV, bouclier
+        // déjà déduit. Confirmé par l'auteur à l'audit.
+        const lost = Number(ctx.event?.data['amount'] ?? 0);
+        if (lost <= 0) return;
         const self = ctx.getCharacter(ctx.sourceInstanceId);
         const existing = getStatus(self, BERSERK_COUNTER_STATUS_ID);
-        const previousRecord = Number(existing?.data?.['highestDamage'] ?? 0);
-        const highestDamage = Math.max(previousRecord, self.damage);
-        if (highestDamage === previousRecord) return; // pas de nouveau palier, rien à mettre à jour
+        const previousTotal = Number(existing?.data?.['totalLost'] ?? 0);
+        const totalLost = previousTotal + lost;
 
         if (existing) ctx.removeStatus(ctx.sourceInstanceId, BERSERK_COUNTER_STATUS_ID);
         ctx.applyStatus(ctx.sourceInstanceId, {
           statusId: BERSERK_COUNTER_STATUS_ID,
-          label: 'Berserk (record de dégâts subis)',
+          label: 'Berserk (HP perdus)',
           sourceCardInstanceId: ctx.sourceInstanceId,
           hidden: true, // compteur interne : le palier atteint est déjà annoncé dans le journal
-          data: { highestDamage },
+          data: { totalLost },
         });
 
-        const previousStacks = Math.floor(previousRecord / HP_CHUNK);
-        const newStacks = Math.floor(highestDamage / HP_CHUNK);
+        const previousStacks = Math.floor(previousTotal / HP_CHUNK);
+        const newStacks = Math.floor(totalLost / HP_CHUNK);
         if (newStacks > previousStacks) {
           ctx.log(`Berserk : nouveau palier atteint, "Coup d'épée" inflige désormais +${newStacks * BONUS_PER_CHUNK} dégâts`, {
             characterInstanceId: ctx.sourceInstanceId,
@@ -85,8 +90,8 @@ export const guts: CharacterCardDef = {
         if (ctx.query['characterInstanceId'] !== ctx.sourceInstanceId) return current;
         const char = findCharacter(ctx.state, ctx.sourceInstanceId);
         const record = getStatus(char, BERSERK_COUNTER_STATUS_ID);
-        const highestDamage = Number(record?.data?.['highestDamage'] ?? 0);
-        const stacks = Math.floor(highestDamage / HP_CHUNK);
+        const totalLost = Number(record?.data?.['totalLost'] ?? 0);
+        const stacks = Math.floor(totalLost / HP_CHUNK);
         return (current as number) + stacks * BONUS_PER_CHUNK;
       },
     },

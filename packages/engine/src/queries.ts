@@ -10,6 +10,7 @@ import {
   getAtkMultiplierTotal,
   getAtkReductionTotal,
   getExtraAttackDamageMultiplier,
+  getSealedIds,
   getStatus,
   hasStatus,
   isDisarmed,
@@ -193,6 +194,12 @@ export function canAttack(state: GameState, characterInstanceId: string, attackI
   if (borrowed && attackId !== undefined && attackId !== borrowed.data?.['attackId']) {
     extra.push({ allow: false, source: 'status:borrowed-attack' });
   }
+  // 'sealed' ("Sacrifice" de Makima) : refuse UNE attaque nommée. Même réserve que
+  // ci-dessus -- sans `attackId`, on ne refuse rien, sinon un sceau sur une seule attaque
+  // désarmerait un personnage qui en a plusieurs.
+  if (attackId !== undefined && getSealedIds(char).attackIds.includes(attackId)) {
+    extra.push({ allow: false, source: 'status:sealed', reason: 'scellé par Sacrifice' });
+  }
   return evaluatePermission(state, 'canAttack', { characterInstanceId, attackId }, true, extra);
 }
 
@@ -325,6 +332,11 @@ export function canUseAbility(state: GameState, characterInstanceId: string, abi
   // actif/passif". Stronger than the default rule above -- it denies even an ability
   // that declares usableFromBench, which is the whole point of the clause.
   if (!isActiveChar && hasStatus(char, 'linked')) extra.push({ allow: false, source: 'status:linked' });
+  // 'sealed' ("Sacrifice" de Makima) : refuse UNE compétence nommée, active comme passive --
+  // pas toute une catégorie comme le ferait un silence.
+  if (getSealedIds(char).abilityIds.includes(ability.id)) {
+    extra.push({ allow: false, source: 'status:sealed', reason: 'scellé par Sacrifice' });
+  }
 
   const perTurnLimit = getAbilityUsesPerTurn(state, characterInstanceId, ability.id, ability.usesPerTurn ?? 1);
   const usedThisTurn = char.abilityUsesThisTurn[ability.id] ?? 0;
@@ -470,7 +482,7 @@ export function rollEvasion(state: GameState, char: CharacterInstance): boolean 
 }
 
 /**
- * Critique: every character has a base 1% chance for an attack/ability they
+ * Critique: every character has a base 5% chance (BASE_CRITICAL_CHANCE_PERCENT) for an attack/ability they
  * deal damage with to double. The 'critical' status raises that to 33% while
  * it's present (replaces the base rate, doesn't stack with it) -- unless the
  * status carries its own `data.percent` (e.g. Killua's Godspeed arming a
