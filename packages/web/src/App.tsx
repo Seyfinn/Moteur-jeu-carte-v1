@@ -5,6 +5,7 @@ import { DeckBuilder } from './components/DeckBuilder';
 import { DraftScreen } from './components/DraftScreen';
 import { Board } from './components/Board';
 import { HoverCardProvider } from './components/HoverCard';
+import { VersionBadge } from './components/VersionBadge';
 import { loadDecks, saveDecks } from './decks';
 
 /**
@@ -67,6 +68,7 @@ export default function App() {
           onImportDeck={() => openDeckBuilder('import')}
         />
       )}
+      <VersionBadge />
     </HoverCardProvider>
   );
 }
