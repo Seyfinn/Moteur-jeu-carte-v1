@@ -8,7 +8,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "new-card": "node scripts/new-card.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
