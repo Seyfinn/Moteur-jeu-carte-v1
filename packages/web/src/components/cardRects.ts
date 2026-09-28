@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 /**
  * Dernière position connue à l'écran de chaque carte de personnage et de chaque pile de
  * cimetière.
@@ -25,4 +27,17 @@ export function trackCardRect(key: string, el: HTMLElement | null): void {
 
 export function readCardRect(key: string): DOMRect | undefined {
   return rects.get(key);
+}
+
+/** Read again after all CharacterCard layout effects, regardless of sibling order. A newly mounted
+ * card (revive/switch) has no cached rectangle during render; using only that read
+ * would silently omit its effect. Keep the last rectangle for cards removed by KO. */
+export function useCardRect(key: string): DOMRect | undefined {
+  const [rect, setRect] = useState(() => readCardRect(key));
+  useEffect(() => {
+    const next = readCardRect(key);
+    setRect(current => current?.x === next?.x && current?.y === next?.y
+      && current?.width === next?.width && current?.height === next?.height ? current : next);
+  });
+  return rect;
 }

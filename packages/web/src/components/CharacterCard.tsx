@@ -9,6 +9,7 @@ import { attackReadouts, type AttachedObjectView } from './boardActions';
 import { CharacterActionBadges } from './gameEventBadges';
 import { trackCardRect } from './cardRects';
 import type { CharacterBadge, CharacterImpact } from './gameEvents';
+import { EffectGlyph } from './EffectPrimitives';
 
 function cardName(cardId: string): string {
   try {
@@ -436,7 +437,7 @@ export function CharacterCard({
 
   const prevHpRef = useRef(currentHP);
   const floaterSeqRef = useRef(0);
-  const [flash, setFlash] = useState<'damage' | 'heal' | null>(null);
+  const [flash, setFlash] = useState<{ id: number; kind: 'damage' | 'heal' } | null>(null);
   const [floaters, setFloaters] = useState<HpFloater[]>([]);
 
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -448,12 +449,12 @@ export function CharacterCard({
     const id = ++floaterSeqRef.current;
     const kind = delta < 0 ? 'damage' : 'heal';
     setFloaters((list) => [...list, { id, amount: Math.abs(delta), kind }]);
-    setFlash(kind);
+    setFlash({ id, kind });
     // Timers are collected and cleared on unmount only. Clearing them in the effect's
     // own cleanup (i.e. on the *next* hit) cancelled the pending removal, so rapid
     // successive hits left their floaters stuck on the card forever.
     timersRef.current.push(
-      setTimeout(() => setFlash(null), 400),
+      setTimeout(() => setFlash(current => current?.id === id ? null : current), 400),
       setTimeout(() => setFloaters((list) => list.filter((f) => f.id !== id)), 1100)
     );
   }, [currentHP]);
@@ -463,7 +464,7 @@ export function CharacterCard({
   // couvre les deux sources (le bouclier natif du moteur et celui porté par un statut, cf.
   // `characterVitals`) sans avoir à en connaître aucune.
   const prevShieldRef = useRef(shieldTotal);
-  const [shieldFx, setShieldFx] = useState<'gain' | 'break' | null>(null);
+  const [shieldFx, setShieldFx] = useState<{ id: number; kind: 'gain' | 'break' } | null>(null);
   useEffect(() => {
     const before = prevShieldRef.current;
     prevShieldRef.current = shieldTotal;
@@ -472,8 +473,9 @@ export function CharacterCard({
     // (`shield-hit`), pas la carte -- sinon le moindre coup encaissé rejouait un bris.
     const kind = shieldTotal > before ? 'gain' : shieldTotal === 0 ? 'break' : null;
     if (!kind) return;
-    setShieldFx(kind);
-    timersRef.current.push(setTimeout(() => setShieldFx(null), 720));
+    const id = ++floaterSeqRef.current;
+    setShieldFx({ id, kind });
+    timersRef.current.push(setTimeout(() => setShieldFx(current => current?.id === id ? null : current), 720));
   }, [shieldTotal]);
 
   useEffect(() => () => timersRef.current.forEach(clearTimeout), []);
@@ -562,8 +564,8 @@ export function CharacterCard({
           <StatusEffectLayers statuses={visibleStatuses} />
           {/* Éclat d'impact au centre de la carte touchée : griffure à partir du coup
               moyen, éclair rouge plein cadre sur un gros coup. */}
-          {impact?.role === 'target' && impact.tier !== 'light' && (
-            <div className={`fx-layer fx-impact fx-impact-${impact.tier}`}>
+          {impact?.role === 'target' && (
+            <div key={impact.id} className={`fx-layer fx-impact fx-impact-${impact.tier}`}>
               <span className="fx-impact-slash" />
             </div>
           )}
@@ -594,15 +596,17 @@ export function CharacterCard({
           )}
           {/* Bouclier posé (bulle qui se referme) ou brisé (éclats qui partent) : deux temps
               que rien ne signalait, faute de mouvement sur la barre de PV. */}
-          {shieldFx && <div className={`fx-layer fx-shield-${shieldFx}`} />}
+          {shieldFx && <div key={`shield-${shieldFx.id}`} className={`fx-layer fx-shield-${shieldFx.kind}`}><EffectGlyph kind="shield" className="fx-shield-emblem" /></div>}
           {chipAttachments.length > 0 && <AttachedObjectChips objects={chipAttachments} />}
           {badges && <CharacterActionBadges badges={badges} />}
-          {flash && <div className={`fx-hp-flash fx-hp-flash-${flash}`} />}
+          {flash && <div key={`flash-${flash.id}`} className={`fx-hp-flash fx-hp-flash-${flash.kind}`} />}
           {/* Soin : des motes de lumière qui montent le long de la carte. Le voile vert seul
               se lisait comme un dégât d'une autre couleur -- ici le sens de lecture (ça
               monte) dit à lui seul qu'on rend de la vie. */}
           {healFloater && (
             <div className="fx-layer fx-heal-bloom" key={healFloater.id}>
+              <span className="fx-heal-ring" />
+              <span className="fx-heal-ring fx-heal-ring-delayed" />
               {Array.from({ length: HEAL_MOTE_COUNT }, (_, i) => (
                 <span key={i} className="fx-heal-mote" style={{ ['--mote-i' as string]: i }} />
               ))}

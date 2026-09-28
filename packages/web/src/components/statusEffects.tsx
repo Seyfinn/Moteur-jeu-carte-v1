@@ -1,3 +1,5 @@
+import { EffectGlyph, type EffectGlyphKind } from './EffectPrimitives';
+
 /**
  * Famille de couleur d'un statut. C'est le code couleur que le joueur apprend une fois
  * pour toutes : violet = poison, orange = brûlure, rouge = saignement, cyan = entravé
@@ -191,35 +193,25 @@ function Particles({ kind, bleedStacks }: { kind: StatusVisual['particles']; ble
         </>
       );
     }
-    case 'chain':
-      return <span className="fx-icon fx-chain-icon">⛓</span>;
-    case 'arrow-up':
-      return <span className="fx-icon fx-arrow-up-icon">▲</span>;
-    case 'arrow-down':
-      return <span className="fx-icon fx-arrow-down-icon">▼</span>;
-    case 'stun-stars':
-      return <span className="fx-icon fx-stun-icon">✦</span>;
-    case 'ban':
-      return <span className="fx-icon fx-ban-icon">⊘</span>;
-    case 'dash':
-      return <span className="fx-icon fx-dash-icon">»</span>;
-    case 'target':
-      return <span className="fx-icon fx-target-icon">◎</span>;
-    case 'mute':
-      return <span className="fx-icon fx-mute-icon">✕</span>;
-    case 'sparkle':
-      return <span className="fx-icon fx-sparkle-icon">✨</span>;
-    case 'lock':
-      return <span className="fx-icon fx-lock-icon">🔒</span>;
-    case 'shield':
-      return <span className="fx-icon fx-shield-icon">🛡</span>;
-    case 'mark':
-      return <span className="fx-icon fx-mark-icon">❖</span>;
-    case 'bounty':
-      return <span className="fx-icon fx-bounty-icon">❖</span>;
     default:
-      return null;
+      return kind ? <StatusGlyph kind={kind} /> : null;
   }
+}
+
+function StatusGlyph({ kind }: { kind: EffectGlyphKind }) {
+  return (
+    <>
+      <span className={`fx-rune fx-rune-${kind}`}><EffectGlyph kind={kind} /></span>
+      {kind === 'chain' && <svg className="fx-binding" viewBox="0 0 100 140" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M-10 28 110 112M-10 112 110 28" />
+      </svg>}
+      {kind === 'stun-stars' && <span className="fx-stun-orbit"><i /><i /><i /></span>}
+      {(kind === 'arrow-up' || kind === 'arrow-down' || kind === 'dash') && <span className={`fx-stream fx-stream-${kind}`}><i /><i /><i /></span>}
+      {(kind === 'target' || kind === 'mark' || kind === 'bounty') && <span className="fx-reticle" />}
+      {(kind === 'mute' || kind === 'ban' || kind === 'lock') && <span className="fx-seal" />}
+      {kind === 'shield' && <span className="fx-ward-grid" />}
+    </>
+  );
 }
 
 /** Ce dont les calques ont besoin d'un statut : son id, et son `data` pour les stacks. */
@@ -250,8 +242,9 @@ export function StatusEffectLayers({ statuses }: { statuses: StatusLike[] }) {
   const visuals: StatusVisual[] = [];
   for (const s of statuses) {
     const v = visualForStatus(s.statusId);
-    if (!seen.has(v.className)) {
-      seen.add(v.className);
+    const key = `${v.className}:${v.tone}`;
+    if (!seen.has(key)) {
+      seen.add(key);
       visuals.push(v);
     }
   }
@@ -266,7 +259,7 @@ export function StatusEffectLayers({ statuses }: { statuses: StatusLike[] }) {
           sous l'autre. Sans lui, poison + brûlure + bonus d'ATK posaient leurs trois
           symboles exactement au même pixel, et seul le dernier se lisait. */}
       {visuals.map((v, i) => (
-        <div key={v.className} className={`fx-layer ${v.className}`} style={{ ['--fx-i' as string]: i }}>
+        <div key={`${v.className}:${v.tone}`} className={`fx-layer fx-status ${v.className}`} aria-hidden="true" style={{ ['--fx-i' as string]: i, ['--status-color' as string]: STATUS_TONE_COLOR[v.tone] }}>
           <Particles kind={v.particles} bleedStacks={bleedStacks} />
         </div>
       ))}

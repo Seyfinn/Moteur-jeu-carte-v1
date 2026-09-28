@@ -1,0 +1,23 @@
+.effects-workshop { min-height: 100vh; padding: 36px clamp(18px, 5vw, 90px); color: #dbe5f4; background: radial-gradient(ellipse at 50% 20%, #19263e, transparent 60%), #080d17; }
+.effects-workshop header { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-bottom: 28px; }
+.workshop-eyebrow { color: #93d8de; letter-spacing: .23em; font-size: 10px; }
+.effects-workshop h1 { font-size: clamp(26px, 3vw, 42px); letter-spacing: -.04em; margin: 8px 0; }
+.effects-workshop p { color: #8c9eb5; font-size: 13px; }
+.effects-workshop a { color: #93d8de; font-size: 13px; }
+.workshop-stage { border: 1px solid #8bc5e122; border-radius: 24px; padding: 24px; background: radial-gradient(ellipse at 50% 30%, #47628018, transparent 70%), #0d142080; }
+.workshop-duel { display: flex; justify-content: center; align-items: center; gap: clamp(20px, 6vw, 110px); min-height: 355px; padding: 10px 0 25px; }
+.workshop-duel > .tcg-card { width: clamp(120px, 17vw, 210px); }
+.effects-workshop .tcg-card { pointer-events: none; }
+.workshop-vs { color: #8fc9dc; font-size: 30px; text-align: center; letter-spacing: .2em; }
+.workshop-vs span { display: block; color: #8c9eb5; font-size: 11px; margin-top: 15px; letter-spacing: .04em; }
+.workshop-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; position: relative; z-index: 60; }
+.workshop-controls button { border: 1px solid #9eb8e12c; border-radius: 8px; padding: 8px 13px; background: #182336; color: #b5c9df; font-size: 12px; cursor: pointer; }
+.workshop-controls button[aria-pressed="true"] { color: #d9fff5; background: #224845; border-color: #74d8bb; }
+.workshop-timeline { display: flex; align-items: center; gap: 20px; justify-content: center; margin-top: 18px; font-size: 12px; color: #9cadc5; position: relative; z-index: 60; }
+.workshop-timeline label { display: flex; align-items: center; gap: 8px; }
+.workshop-timeline input[type="range"] { width: min(35vw, 300px); accent-color: #8dd9d3; }
+.effects-workshop h2 { margin-top: 40px; font-size: 20px; }
+.workshop-statuses { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 24px; padding: 20px 0; }
+.workshop-statuses .tcg-card { width: 100%; }
+.workshop-statuses h3 { text-align: center; margin: 12px 0; font-size: 12px; font-weight: 500; color: #b2c4d7; }
+@media (max-width: 600px) { .effects-workshop { padding: 20px 12px; } .workshop-stage { padding: 14px 8px; } .workshop-duel { gap: 12px; min-height: 270px; } .workshop-vs { font-size: 18px; } .effects-workshop header { align-items: flex-start; } }

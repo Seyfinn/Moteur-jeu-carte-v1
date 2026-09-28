@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
-import { readCardRect } from './cardRects';
+import { useCardRect } from './cardRects';
 import type { CardFlourish, EvolutionFlourishVariant, StrikeBolt } from './gameEvents';
+import { EffectGlyph, EffectParticles, EffectSigil } from './EffectPrimitives';
 
 /**
  * Les deux calques d'effet posés PAR-DESSUS le plateau, et non dans le calque d'effets
@@ -16,8 +17,7 @@ import type { CardFlourish, EvolutionFlourishVariant, StrikeBolt } from './gameE
  * Aucun des deux ne capte le moindre clic : une animation ne doit jamais avaler une action.
  */
 
-function centerOf(instanceId: string): { x: number; y: number; w: number; h: number } | null {
-  const rect = readCardRect(instanceId);
+function centerOf(rect: DOMRect | undefined): { x: number; y: number; w: number; h: number } | null {
   if (!rect || rect.width === 0) return null;
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, w: rect.width, h: rect.height };
 }
@@ -32,8 +32,8 @@ function centerOf(instanceId: string): { x: number; y: number; w: number; h: num
  * la cible : `transform-origin` sur son bord gauche, donc le point d'ancrage ne bouge pas.
  */
 function StrikeTracer({ bolt }: { bolt: StrikeBolt }) {
-  const from = centerOf(bolt.fromInstanceId);
-  const to = centerOf(bolt.toInstanceId);
+  const from = centerOf(useCardRect(bolt.fromInstanceId));
+  const to = centerOf(useCardRect(bolt.toInstanceId));
   if (!from || !to) return null;
 
   const dx = to.x - from.x;
@@ -54,6 +54,9 @@ function StrikeTracer({ bolt }: { bolt: StrikeBolt }) {
       {/* Pointe lumineuse qui court le long de la barre : c'est elle qui donne le sens de
           la frappe, la traînée seule pouvant se lire dans les deux sens. */}
       <span className="strike-bolt-head" />
+      <span className="strike-bolt-filament strike-bolt-filament-a" />
+      <span className="strike-bolt-filament strike-bolt-filament-b" />
+      <span className="strike-bolt-contact" />
     </div>
   );
 }
@@ -78,18 +81,24 @@ const CRIT_SPARK_COUNT = 8;
  * chaque effet déborde librement autour.
  */
 function Flourish({ flourish }: { flourish: CardFlourish }) {
-  const rect = readCardRect(flourish.characterInstanceId);
+  const rect = useCardRect(flourish.characterInstanceId);
   if (!rect || rect.width === 0) return null;
 
-  const style: CSSProperties = {
+  const style = {
     left: `${Math.round(rect.left)}px`,
     top: `${Math.round(rect.top)}px`,
     width: `${Math.round(rect.width)}px`,
     height: `${Math.round(rect.height)}px`,
-  };
+    ...(flourish.color ? { '--flourish-color': flourish.color } : {}),
+  } as CSSProperties;
 
   return (
-    <div className={`card-flourish card-flourish-${flourish.kind}`} style={style}>
+    <div className={`card-flourish card-flourish-${flourish.kind}${flourish.tier ? ` flourish-${flourish.tier}` : ''}`} style={style}>
+      <EffectParticles count={flourish.kind === 'crit' ? 12 : 8} className={`flourish-dust${flourish.variant ? ' flourish-dust-delayed' : ''}`} />
+      {(flourish.kind === 'revive' || flourish.kind === 'evolve') && <EffectSigil className="flourish-sigil" />}
+      {flourish.kind === 'shield-hit' && <EffectGlyph kind="shield" className="flourish-shield" />}
+      {flourish.kind === 'lock' && <EffectGlyph kind="lock" className="flourish-lock" />}
+      {flourish.kind === 'evasion' && <><span className="flourish-afterimage" /><span className="flourish-afterimage" /></>}
       {/* Une scène d'évolution dédiée remplace l'éclat générique (anneau, cœur, colonne) :
           sa colonne blanche jurait sous la brume bleue de Kayn ou les veines de Rhaast. */}
       {flourish.variant ? (
