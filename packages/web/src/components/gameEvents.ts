@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { STATUS_TONE_COLOR, toneForStatus } from './statusEffects';
 import {
   attacksAvailableTo,
   getCharacterCard,
@@ -98,7 +99,7 @@ export type StrikeBolt = {
  * calque d'effets de la carte : un anneau de souffle ou une colonne de lumière doit pouvoir
  * déborder du cadre, que l'`overflow: hidden` de `.tcg-card` rognerait net.
  */
-export type CardFlourishKind = 'crit' | 'evolve' | 'revive' | 'shield-hit';
+export type CardFlourishKind = 'crit' | 'evolve' | 'revive' | 'shield-hit' | 'impact' | 'evasion' | 'lock' | 'status';
 /**
  * Mise en scène propre à UNE forme évoluée : chaque évolution rejoue la scène qui l'a
  * rendue célèbre, au lieu de la même éclosion blanche pour tout le monde. Une forme qui
@@ -109,6 +110,8 @@ export type CardFlourish = {
   id: number;
   characterInstanceId: string;
   kind: CardFlourishKind;
+  color?: string;
+  tier?: ImpactTier;
   /** Uniquement pour `kind: 'evolve'` : la scène de la forme d'arrivée. */
   variant?: EvolutionFlourishVariant;
 };
@@ -130,6 +133,10 @@ export const FLOURISH_DURATION_MS: Record<CardFlourishKind | EvolutionFlourishVa
   evolve: 1200,
   revive: 1200,
   'shield-hit': 1200,
+  impact: 850,
+  evasion: 900,
+  lock: 1100,
+  status: 950,
   'gon-adulte': 2800,
   'kayn-assassin': 2000,
   rhaast: 2900,
@@ -293,9 +300,7 @@ function classifyLogEntry(entry: LogEntry, state: GameState, ctx: BatchContext):
           : []),
         // Le critique a sa propre déflagration sur la cible, quel que soit le montant :
         // c'est ce qui le distingue d'un gros coup ordinaire au même palier.
-        ...(critical
-          ? [{ anchor: 'flourish' as const, flourish: { characterInstanceId: targetInstanceId, kind: 'crit' as const } }]
-          : []),
+        { anchor: 'flourish', flourish: { characterInstanceId: targetInstanceId, kind: critical ? 'crit' : 'impact', tier } },
       ];
     }
 
@@ -418,6 +423,22 @@ function classifyLogEntry(entry: LogEntry, state: GameState, ctx: BatchContext):
       return [{ anchor: 'flourish', flourish: { characterInstanceId: targetInstanceId, kind: 'shield-hit' } }];
     }
 
+    case 'valeur-lock': {
+      const targetInstanceId = d['targetInstanceId'] as string | undefined;
+      if (!targetInstanceId || Number(d['amount'] ?? 0) <= 0) return [];
+      return [{ anchor: 'flourish', flourish: { characterInstanceId: targetInstanceId, kind: 'lock' } }];
+    }
+
+    case 'status': {
+      // Only explicit applications carry a statusId; narrative/counter logs stay quiet.
+      const targetInstanceId = d['targetInstanceId'] as string | undefined;
+      const statusId = d['statusId'] as string | undefined;
+      if (!targetInstanceId || !statusId) return [];
+      return [{ anchor: 'flourish', flourish: {
+        characterInstanceId: targetInstanceId, kind: 'status', color: STATUS_TONE_COLOR[toneForStatus(statusId)],
+      } }];
+    }
+
     case 'coin-flip': {
       const result = d['result'] as string | undefined;
       return [{ anchor: 'table', event: { kind: 'coin-flip', label: result === 'heads' ? 'Pile' : 'Face' } }];
@@ -505,8 +526,10 @@ function classifyLogEntry(entry: LogEntry, state: GameState, ctx: BatchContext):
       const targetInstanceId = d['targetInstanceId'] as string | undefined;
       const char = findCharacter(state, targetInstanceId);
       if (!targetInstanceId || !char) return [];
+      const flourish: Classified = { anchor: 'flourish', flourish: { characterInstanceId: targetInstanceId, kind: 'evasion' } };
       if (d['fromCard'] === true) {
         return [
+          flourish,
           {
             anchor: 'proc',
             proc: { kind: 'evasion', hit: true, percent: Math.round(Number(d['percent'] ?? 0)), ...procSubject(state, targetInstanceId) },
@@ -514,6 +537,7 @@ function classifyLogEntry(entry: LogEntry, state: GameState, ctx: BatchContext):
         ];
       }
       return [
+        flourish,
         {
           anchor: 'character',
           characterInstanceId: targetInstanceId,

@@ -4,6 +4,7 @@ import { registerDemoCards } from 'engine';
 import App from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './styles.css';
+import './combatEffects.css';
 
 registerDemoCards();
 

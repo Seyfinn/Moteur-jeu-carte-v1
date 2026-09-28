@@ -1,5 +1,6 @@
 import type { CardSpotlight as Spotlight } from './gameEvents';
 import { CardFrame } from './CardFrame';
+import { EffectParticles, EffectSigil } from './EffectPrimitives';
 
 /**
  * La carte qui vient d'être jouée, projetée en très grand au centre du plateau -- objet,
@@ -17,11 +18,13 @@ export function CardSpotlights({ spotlights }: { spotlights: Spotlight[] }) {
     <div className="card-spotlight-layer" aria-hidden="true">
       {/* La clé porte l'id : deux cartes qui se suivent rejouent bien l'animation d'entrée
           au lieu de se remplacer en silence dans le même noeud. */}
-      <div className="card-spotlight" key={current.id}>
+      <div className={`card-spotlight spotlight-${current.cardKind}`} key={current.id}>
         {/* Gerbe de rayons + onde de choc, DERRIÈRE la carte : c'est ce qui fait qu'une carte
             jouée entre en scène au lieu d'apparaître. Purement décoratif, aucun texte. */}
         <span className="card-spotlight-rays" />
         <span className="card-spotlight-burst" />
+        <EffectSigil className="spotlight-sigil" />
+        <EffectParticles count={12} className="spotlight-dust" />
         <span className="card-spotlight-action">{current.action}</span>
         <div className="card-spotlight-card">
           <CardFrame cardId={current.cardId} kind={current.cardKind} name={current.name} size="large" />

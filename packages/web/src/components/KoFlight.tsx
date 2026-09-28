@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { CardArt } from './CardArt';
-import { graveyardRectKey, readCardRect } from './cardRects';
+import { graveyardRectKey, useCardRect } from './cardRects';
 import type { KoFlight } from './gameEvents';
 
 /** Éclats projetés quand la carte se brise. Purement décoratif. */
@@ -18,8 +18,8 @@ const KO_SHARD_COUNT = 7;
  * rien : mieux vaut pas d'animation qu'un fantôme dans le coin de l'écran.
  */
 function KoGhost({ flight }: { flight: KoFlight }) {
-  const from = readCardRect(flight.instanceId);
-  const to = readCardRect(graveyardRectKey(flight.ownerId));
+  const from = useCardRect(flight.instanceId);
+  const to = useCardRect(graveyardRectKey(flight.ownerId));
   if (!from || from.width === 0) return null;
 
   // Cible par défaut : là où la carte est déjà, donc une simple dissolution sur place quand

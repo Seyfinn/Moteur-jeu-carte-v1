@@ -1,0 +1,254 @@
+/* Combat art direction. Loaded after the board layout; all overlays are decorative.
+   Transient scenes stay within gameEvents.ts lifetimes. Persistent scenes use slow
+   transform/opacity loops, with fewer particles on small screens. */
+.effect-glyph { width: 32px; height: 32px; flex: none; }
+.effect-sigil { position: absolute; pointer-events: none; }
+.effect-particles { position: absolute; inset: 0; pointer-events: none; color: var(--flourish-color, #aee9ff); }
+.effect-particles i {
+  position: absolute; left: 50%; top: 50%; width: var(--particle-size); height: var(--particle-size);
+  border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor;
+  opacity: 0; animation: arcane-particle 720ms cubic-bezier(.12,.65,.2,1) var(--particle-delay) both;
+}
+@keyframes arcane-particle {
+  0% { opacity: 0; transform: rotate(var(--particle-angle)) translateX(8px) scale(.3); }
+  18% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--particle-angle)) translateX(var(--particle-reach, var(--particle-distance))) scale(.2); }
+}
+
+/* Statuts : la couleur et le mouvement bordent l'illustration, sans la masquer. */
+.fx-status { color: var(--status-color); animation: none; background: none; box-shadow: inset 0 -12px 24px -22px currentColor; }
+.fx-rune {
+  position: absolute; right: 6px; top: calc(7px + var(--fx-i) * 26px);
+  width: 22px; height: 22px; display: grid; place-items: center; border-radius: 6px;
+  border: 1px solid color-mix(in srgb, currentColor 50%, transparent);
+  background: #09111bdf; box-shadow: 0 0 10px color-mix(in srgb, currentColor 20%, transparent);
+  animation: rune-arrive 420ms cubic-bezier(.16,1,.3,1) both;
+}
+.fx-rune .effect-glyph { width: 17px; height: 17px; }
+.tcg-card-large .fx-rune { width: 30px; height: 30px; top: calc(10px + var(--fx-i) * 34px); right: 10px; }
+.tcg-card-large .fx-rune .effect-glyph { width: 22px; height: 22px; }
+@keyframes rune-arrive { from { opacity: 0; transform: scale(1.7); } to { opacity: 1; transform: scale(1); } }
+.fx-status::after {
+  content: ''; position: absolute; inset: 1px; border-radius: inherit; pointer-events: none;
+  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+  mask-image: linear-gradient(transparent 30%, #000); opacity: .55;
+}
+.fx-poison-mist {
+  inset: 20% -20% -20%; filter: none;
+  background: radial-gradient(ellipse at 20% 95%, #bf7bff70, transparent 56%), radial-gradient(ellipse at 90% 85%, #7f35d669, transparent 55%);
+  animation-duration: 7s;
+}
+.fx-bubble {
+  width: 7px; height: 7px; background: transparent; border: 1px solid #cf9fff;
+  box-shadow: inset 1px 1px 3px #eccbff, 0 0 7px #a775cf90; animation-duration: 3s;
+}
+@keyframes fx-bubble-rise {
+  0% { transform: translate(0, 0) scale(.4); opacity: 0; }
+  20% { opacity: .75; }
+  75% { opacity: .4; }
+  100% { transform: translate(12px, -100px) scale(1.15); opacity: 0; }
+}
+.tcg-card.amb-poison:not(.impact-hit):not(.impact-dash) { animation: none; box-shadow: 0 0 18px #ad68dd30; }
+.tcg-card.amb-burn:not(.impact-hit):not(.impact-dash) { animation: none; box-shadow: 0 0 20px #ff782a35; }
+.tcg-card.amb-burn .tcg-card-art img { filter: none; }
+.tcg-card.amb-frozen .tcg-card-art img { filter: saturate(.75) brightness(.95); }
+.tcg-card.amb-frozen .tcg-card-art::after { opacity: .4; }
+.tcg-card.amb-frozen .tcg-card-art::before { animation-duration: 6s; opacity: .35; }
+.fx-burn-flames {
+  bottom: -5%; height: 35%; filter: none;
+  background: radial-gradient(ellipse at 20% 100%, #ffcc7270, transparent 50%), radial-gradient(ellipse at 75% 100%, #ff581a80, transparent 62%);
+  mask-image: linear-gradient(transparent, #000 60%); animation: ember-bed 3s ease-in-out infinite alternate;
+}
+@keyframes ember-bed { from { opacity: .45; transform: scaleY(.8); } to { opacity: .85; transform: scaleY(1.15); } }
+.fx-ember { width: 3px; height: 7px; border-radius: 50%; background: #ffe6b0; box-shadow: 0 0 6px #ff7a27; animation-duration: 2.5s; }
+@keyframes fx-ember-rise {
+  0% { opacity: 0; transform: translate(0,0) rotate(-20deg) scale(.6); }
+  15% { opacity: .95; }
+  65% { opacity: .6; }
+  100% { opacity: 0; transform: translate(18px,-140px) rotate(35deg) scale(.2); }
+}
+.fx-drip { width: 3px; height: 15px; background: linear-gradient(transparent, var(--status-color)); box-shadow: 0 0 5px currentColor; animation-duration: 2.5s; }
+.fx-bleed-pool { background: linear-gradient(transparent, color-mix(in srgb, var(--status-color) 45%, transparent)); height: calc(7% + var(--pool) * 10%); }
+.fx-binding { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 3; stroke-dasharray: 5 3; opacity: .45; filter: drop-shadow(0 0 3px currentColor); animation: binding-tighten 650ms ease-out both; }
+@keyframes binding-tighten { from { opacity: 0; transform: scale(1.5); } to { opacity: .45; transform: scale(1); } }
+.fx-stun-orbit { position: absolute; width: 56%; height: 16%; left: 22%; top: 14%; border: 1px solid #92e9ff60; border-radius: 50%; transform: rotate(-12deg); }
+.fx-stun-orbit i { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; background: #e5faff; box-shadow: 0 0 8px #71ddff; clip-path: polygon(50% 0,65% 35%,100% 50%,65% 65%,50% 100%,35% 65%,0 50%,35% 35%); animation: stun-orbit 3s linear infinite; }
+.fx-stun-orbit i:nth-child(2) { animation-delay: -1s; }
+.fx-stun-orbit i:nth-child(3) { animation-delay: -2s; }
+@keyframes stun-orbit { from { transform: rotate(0deg) translateX(24px) rotate(0deg); } to { transform: rotate(360deg) translateX(24px) rotate(-360deg); } }
+.fx-stream { position: absolute; inset: 15% 8%; }
+.fx-stream i { position: absolute; bottom: 0; left: 5%; width: 1px; height: 24%; background: linear-gradient(transparent, currentColor, transparent); animation: status-stream 2.8s ease-in-out infinite; opacity: 0; }
+.fx-stream i:nth-child(2) { left: 92%; animation-delay: -.9s; }
+.fx-stream i:nth-child(3) { left: 14%; animation-delay: -1.8s; }
+.fx-stream-arrow-down { rotate: 180deg; }
+.fx-stream-dash { rotate: 65deg; }
+@keyframes status-stream { 0% { opacity: 0; transform: translateY(0); } 30% { opacity: .8; } 100% { opacity: 0; transform: translateY(-180%); } }
+.fx-reticle { position: absolute; left: 18%; top: 28%; width: 64%; aspect-ratio: 1; border: 1px dashed currentColor; border-radius: 50%; opacity: .28; animation: status-orbit 18s linear infinite; }
+.fx-reticle::before, .fx-reticle::after { content: ''; position: absolute; inset: 15%; border: 1px solid currentColor; border-radius: 50%; }
+.fx-reticle::after { inset: 45%; background: currentColor; }
+@keyframes status-orbit { to { transform: rotate(360deg); } }
+.fx-seal { position: absolute; inset: 12%; border: 1px solid currentColor; clip-path: polygon(0 0,25% 0,25% 1%,1% 1%,1% 25%,0 25%,0 0,100% 100%,75% 100%,75% 99%,99% 99%,99% 75%,100% 75%,100% 100%); opacity: .45; }
+.fx-ward-grid { position: absolute; inset: 0; opacity: .16; background: repeating-linear-gradient(60deg, transparent 0 24px, currentColor 25px 26px, transparent 27px 50px), repeating-linear-gradient(-60deg, transparent 0 24px, currentColor 25px 26px, transparent 27px 50px); mask-image: radial-gradient(ellipse, transparent 25%, #000); }
+.fx-shield-halo { background: radial-gradient(ellipse, transparent 58%, #8de5ff24); border: 1px solid #a5eaff80; box-shadow: inset 0 0 18px #67cfff30; animation: ward-breathe 4s ease-in-out infinite; }
+@keyframes ward-breathe { 0%,100% { opacity: .45; } 50% { opacity: .8; } }
+
+/* Attacks: a needle of light, twin trails and a small contact shockwave. */
+.strike-bolt-beam { height: 45%; top: 28%; filter: drop-shadow(0 0 5px var(--bolt-color)); }
+.strike-bolt-filament { position: absolute; inset: -5px 0; border-top: 1px solid var(--bolt-color); opacity: 0; transform-origin: left; animation: strike-filament var(--bolt-dur) ease-out both; }
+.strike-bolt-filament-b { inset: 8px 0 -8px; animation-delay: 35ms; }
+@keyframes strike-filament { 0% { opacity: 0; transform: scaleX(0); } 30% { opacity: .65; transform: scaleX(1); } 100% { opacity: 0; transform: scaleX(.96); } }
+.strike-bolt-contact { position: absolute; left: 100%; top: 50%; width: 40px; height: 40px; border: 1px solid var(--bolt-color); border-radius: 50%; translate: -50% -50%; opacity: 0; animation: strike-contact 350ms 100ms ease-out both; }
+@keyframes strike-contact { 0% { opacity: 0; scale: .2; } 20% { opacity: .9; } 100% { opacity: 0; scale: 1.7; } }
+.strike-cataclysm { --bolt-color: #bcecff; --bolt-thick: 11px; }
+.strike-crit { --bolt-color: #ffdc83; }
+.fx-impact-slash { height: 3px; background: linear-gradient(90deg, transparent, #f6e8cd, transparent); }
+.fx-impact-light .fx-impact-slash { opacity: .65; }
+.tcg-card.impact-dash.impact-heavy { --dash-dist: 42px; }
+.tcg-card.impact-dash.impact-brutal { --dash-dist: 58px; }
+.tcg-card.impact-dash.impact-devastating { --dash-dist: 76px; }
+.tcg-card.impact-dash.impact-cataclysm { --dash-dist: 96px; }
+.tcg-card.impact-hit.impact-heavy { --shake: 6px; --blast-peak: 1.18; --blast-spread: 22px; }
+.tcg-card.impact-hit.impact-brutal { --shake: 10px; --blast-peak: 1.28; --blast-spread: 32px; }
+.tcg-card.impact-hit.impact-devastating { --shake: 14px; --blast-peak: 1.4; --blast-spread: 44px; }
+.tcg-card.impact-hit.impact-cataclysm { --shake: 18px; --blast-peak: 1.5; --blast-spread: 56px; }
+.tcg-card.impact-hit.impact-crit { --blast-peak: 1.5; --blast-spread: 48px; }
+.board-quake-crit::after { background: radial-gradient(ellipse, #ffdc8314, transparent 65%); }
+.board-quake-heavy { --quake: 2px; }
+.board-quake-brutal { --quake: 4px; }
+.board-quake-devastating { --quake: 6px; }
+.board-quake-cataclysm { --quake: 8px; --quake-dur: 600ms; }
+.board-quake-cataclysm::after { background: radial-gradient(ellipse, #cceaff28, transparent 65%); }
+@keyframes impact-lunge {
+  0%,100% { translate: 0 0; rotate: 0deg; }
+  18% { translate: calc(var(--dash-dist) * var(--dash-sign) * -.14) 0; rotate: calc(var(--dash-sign) * -1deg); }
+  38% { translate: calc(var(--dash-dist) * var(--dash-sign)) -2px; rotate: calc(var(--dash-sign) * 2deg); }
+  65% { translate: calc(var(--dash-dist) * var(--dash-sign) * -.07) 0; rotate: 0deg; }
+}
+
+/* Bursts overflow the card on the existing fixed board layer. */
+.card-flourish { color: var(--flourish-color, #b9e8ff); --flourish-color: #b9e8ff; }
+.card-flourish-impact { --flourish-color: #b9e8ff; }
+.flourish-heavy { --flourish-color: #ffcd96; }
+.flourish-brutal { --flourish-color: #ffad70; }
+.flourish-devastating { --flourish-color: #ffd784; }
+.flourish-cataclysm { --flourish-color: #d3f5ff; }
+.card-flourish-crit { --flourish-color: #ffdc83; }
+.card-flourish-revive { --flourish-color: #91ffd0; }
+.card-flourish-evolve { --flourish-color: #d0baff; }
+.card-flourish-shield-hit { --flourish-color: #93ddff; }
+.card-flourish-evasion { --flourish-color: #9ef5ea; }
+.card-flourish-lock { --flourish-color: #da99fc; }
+.card-flourish-ring { border-width: 1px; box-shadow: 0 0 12px color-mix(in srgb, currentColor 30%, transparent); }
+.card-flourish-impact .card-flourish-ring, .card-flourish-status .card-flourish-ring, .card-flourish-lock .card-flourish-ring { animation: flourish-ring 650ms cubic-bezier(.16,1,.3,1) both; }
+.card-flourish-impact .card-flourish-core, .card-flourish-status .card-flourish-core, .card-flourish-lock .card-flourish-core {
+  background: radial-gradient(ellipse, color-mix(in srgb, currentColor 22%, transparent), transparent 65%);
+  animation: flourish-core 550ms ease-out both;
+}
+.card-flourish-impact.flourish-light .flourish-dust i:nth-child(n+5) { display: none; }
+.card-flourish-impact.flourish-light .card-flourish-ring { width: 30%; }
+.card-flourish-crit .card-flourish-core { background: radial-gradient(ellipse, #fff3d570, #ffce6328 35%, transparent 65%); }
+.card-flourish-crit .card-flourish-star { height: 3px; }
+.card-flourish-spark { width: 2px; height: 17px; }
+.flourish-dust-delayed i { animation-delay: calc(1200ms + var(--particle-delay)); }
+.flourish-sigil { width: 110%; bottom: -10%; color: currentColor; opacity: 0; animation: sigil-rise 1100ms ease-out both; }
+@keyframes sigil-rise { 0% { opacity: 0; transform: perspective(400px) rotateX(65deg) scale(.3); } 25% { opacity: .8; } 100% { opacity: 0; transform: perspective(400px) rotateX(65deg) scale(1.3); } }
+.card-flourish-evolve:has([class^="evo-"]) .flourish-sigil { animation-delay: 700ms; }
+.card-flourish-beam { width: 65%; background: linear-gradient(0deg, color-mix(in srgb, currentColor 42%, transparent), transparent 90%); mask-image: linear-gradient(90deg, transparent, #000 35% 65%, transparent); }
+.flourish-shield, .flourish-lock { position: absolute; width: 38%; height: 38%; filter: drop-shadow(0 0 8px currentColor); animation: glyph-burst 850ms ease-out both; }
+@keyframes glyph-burst { 0% { opacity: 0; transform: scale(1.4); } 20% { opacity: 1; transform: scale(1); } 60% { opacity: .8; } 100% { opacity: 0; transform: translateY(-12px) scale(.85); } }
+.card-flourish-status .card-flourish-ring { width: 75%; border-style: dashed; }
+.card-flourish-lock .card-flourish-ring { border-radius: 12%; rotate: 45deg; }
+.flourish-afterimage { position: absolute; inset: 3%; border: 1px solid currentColor; border-radius: 12px; background: linear-gradient(90deg, transparent, #9ef5ea28); animation: evade-echo 650ms ease-out both; }
+.flourish-afterimage:nth-of-type(3) { animation-delay: 90ms; }
+@keyframes evade-echo { 0% { opacity: 0; transform: translateX(0) skewX(0); } 25% { opacity: .7; } 100% { opacity: 0; transform: translateX(-55%) skewX(-8deg); } }
+
+/* Restoring life: rising rings and actual travelling motes (not 190% of an 8px dot). */
+.fx-heal-bloom { background: radial-gradient(ellipse at 50% 100%, #63e6ac35, transparent 70%); animation: heal-bloom 1050ms ease-out both; }
+@keyframes heal-bloom { 0% { opacity: 0; } 25% { opacity: 1; } 100% { opacity: 0; } }
+.fx-heal-ring { position: absolute; left: 10%; bottom: 10%; width: 80%; height: 16%; border: 1px solid #a1ffd7; border-radius: 50%; box-shadow: 0 0 10px #72ffbf50; animation: heal-ring 800ms ease-out both; }
+.fx-heal-ring-delayed { animation-delay: 170ms; }
+@keyframes heal-ring { 0% { opacity: 0; transform: translateY(0) scale(.6); } 25% { opacity: .8; } 100% { opacity: 0; transform: translateY(-95px) scale(1.15); } }
+.fx-heal-mote { bottom: 6%; width: 5px; height: 5px; background: #c5ffe7; box-shadow: 0 0 8px #7affe0; animation: heal-travel 760ms calc(var(--mote-i) * 45ms) ease-out both; }
+.fx-heal-mote:nth-child(3n) { clip-path: polygon(35% 0,65% 0,65% 35%,100% 35%,100% 65%,65% 65%,65% 100%,35% 100%,35% 65%,0 65%,0 35%,35% 35%); width: 11px; height: 11px; }
+@keyframes heal-travel { 0% { opacity: 0; transform: translateY(0) scale(.3); } 25% { opacity: 1; } 100% { opacity: 0; transform: translateY(-120px) scale(.6); } }
+.fx-shield-emblem { position: absolute; left: 32%; top: 30%; width: 36%; height: 36%; color: #d0f4ff; filter: drop-shadow(0 0 9px #6bd8ff); }
+.fx-shield-break .fx-shield-emblem { clip-path: polygon(0 0,45% 0,52% 35%,42% 52%,57% 75%,50% 100%,100% 100%,100% 0,0 0); }
+.fx-floater-number { font-variant-numeric: tabular-nums; letter-spacing: -.03em; text-shadow: 0 2px 2px #060b14, 0 0 12px #060b14; animation-timing-function: cubic-bezier(.16,1,.3,1); }
+.fx-floater-heal { color: #acffdc; }
+.fx-floater-damage { color: #ffb09d; }
+
+/* Card reveals: an engraved halo with a different material for each card type. */
+.card-spotlight { --reveal-color: #d4b5ff; isolation: isolate; background: radial-gradient(ellipse, #111524e6, #080c1470 60%, transparent 74%); }
+.spotlight-object { --reveal-color: #ffda97; }
+.spotlight-terrain { --reveal-color: #8ee6d6; }
+.card-spotlight .tcg-card { border-color: var(--reveal-color); box-shadow: 0 28px 80px #0009, 0 0 36px color-mix(in srgb, var(--reveal-color) 24%, transparent); }
+.spotlight-sigil { width: 145%; top: 50%; left: 50%; color: var(--reveal-color); z-index: -1; opacity: .55; animation: reveal-sigil 1700ms ease-out both; }
+@keyframes reveal-sigil { 0% { opacity: 0; transform: translate(-50%,-50%) rotate(-35deg) scale(.65); } 22% { opacity: .55; } 78% { opacity: .4; } 100% { opacity: 0; transform: translate(-50%,-50%) rotate(12deg) scale(1.1); } }
+.card-spotlight-rays { z-index: -1; background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--reveal-color) 14%, transparent) 0deg 1deg, transparent 1deg 20deg); }
+.card-spotlight-burst { border: 1px solid var(--reveal-color); }
+.spotlight-dust { color: var(--reveal-color); z-index: -1; --particle-reach: 260px; }
+.spotlight-dust i { animation-duration: 1400ms; }
+.card-spotlight-action { position: relative; color: var(--reveal-color); font-size: .7rem; letter-spacing: .2em; padding: 8px 20px; border: 1px solid color-mix(in srgb, var(--reveal-color) 25%, transparent); background: #0b1023d9; border-radius: 30px; }
+.card-spotlight-detail { color: #f5edff; letter-spacing: .09em; padding: 8px 18px; background: #0b1023d9; border-radius: 8px; }
+@keyframes card-spotlight-in { 0% { opacity: 0; transform: perspective(1000px) translateY(25px) rotateY(-16deg) scale(.85); } 18% { opacity: 1; transform: perspective(1000px) translateY(0) rotateY(0) scale(1); } 78% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-18px) scale(1.035); } }
+.proc-wheel { border-color: #9dbbda50; box-shadow: 0 20px 70px #0008, inset 0 1px #dff5ff30; background: linear-gradient(145deg, #1a2437f5, #090e19f5); }
+.proc-wheel-dial { box-shadow: 0 0 0 5px #0c1421, 0 0 0 6px #b6d9f94d, 0 12px 28px #0006; }
+.proc-wheel-ticks { opacity: .8; }
+.proc-wheel-needle { filter: drop-shadow(0 0 4px #e9faff); }
+.proc-wheel.hit::after { background: radial-gradient(ellipse, #b0ffd22b, transparent 65%); }
+.ko-ghost-shard { width: 5px; height: 21px; clip-path: polygon(50% 0,100% 40%,45% 100%,0 65%); background: linear-gradient(#ffe7b5, #a17bcc70); }
+.ko-ghost-ash { background: radial-gradient(ellipse at 50% 80%, #141020, transparent 65%); }
+.turn-sweep-band { backdrop-filter: none; width: min(720px, 95vw); border-color: #9be9df70; background: linear-gradient(90deg, transparent, #0b263deb 20% 80%, transparent); box-shadow: 0 0 40px -12px #7bd5e13b; }
+.turn-sweep-title { font-weight: 650; font-size: clamp(1.3rem, 3vw, 2.2rem); letter-spacing: .25em; }
+.turn-sweep-shine { background: linear-gradient(105deg, transparent 47%, #d0fff826 50%, transparent 53%); }
+.board-terrain::after { animation-duration: 9s; }
+.terrain-card { transition: border-color 350ms ease, box-shadow 350ms ease; }
+.recycler-reveal-rays { background: repeating-conic-gradient(from 0deg, #ffda9750 0deg 2deg, transparent 2deg 24deg); }
+.recycler-reveal-burst { background: radial-gradient(circle, #ffedc275, #b991e42b 45%, transparent 72%); }
+.recycler-reveal-card { filter: drop-shadow(0 0 12px #ffda9760); }
+@keyframes active-enter-self { from { opacity: 0; transform: translateX(-24px) scale(.96); } to { opacity: 1; transform: translateX(0) scale(1); } }
+@keyframes active-enter-opp { from { opacity: 0; transform: translateX(24px) scale(.96); } to { opacity: 1; transform: translateX(0) scale(1); } }
+@keyframes ko-ghost {
+  0% { translate: 0 0; rotate: 0deg; scale: 1; opacity: 1; filter: none; }
+  8% { translate: -4px 0; rotate: -1deg; }
+  16% { translate: 4px 0; rotate: 1deg; }
+  24% { translate: 0 0; rotate: 0deg; scale: 1.035; opacity: 1; filter: brightness(1.3) saturate(.5); }
+  48% { translate: 0 -12px; scale: .93; opacity: .7; filter: grayscale(.7) brightness(.75); }
+  72% { translate: calc(var(--ko-dx, 0px) * .3) calc(var(--ko-dy, 0px) * .3 - 16px); rotate: -6deg; scale: .55; opacity: .4; filter: grayscale(1) brightness(.45); }
+  100% { translate: var(--ko-dx, 0px) var(--ko-dy, 0px); rotate: -14deg; scale: .08; opacity: 0; filter: grayscale(1) brightness(.2); }
+}
+
+/* Small cards and mobile: keep the silhouettes, reduce decorative density. */
+.tcg-card-small .fx-rune { width: 16px; height: 16px; top: calc(4px + var(--fx-i) * 19px); right: 4px; }
+.tcg-card-small .fx-rune .effect-glyph { width: 12px; height: 12px; }
+.tcg-card-small .fx-reticle { opacity: .18; }
+@media (max-width: 700px) {
+  .effect-particles i:nth-child(n+7), .fx-ember:nth-child(n+4), .fx-stream i:nth-child(3) { display: none; }
+  .spotlight-sigil { width: 115%; }
+  .strike-bolt-filament-b { display: none; }
+}
+
+/* Keep feedback and labels, remove travel, rotation, flashing and background loops.
+   Specificity intentionally covers legacy per-tier animation rules. */
+@media (prefers-reduced-motion: reduce) {
+  .effect-particles, .effect-sigil, .strike-bolt-layer, .flourish-afterimage,
+  .fx-binding, .fx-stun-orbit, .fx-stream, .fx-reticle, .fx-heal-ring, .fx-heal-mote,
+  .fx-bubble, .fx-ember, .fx-drip, .fx-impact, .card-spotlight-rays, .card-spotlight-burst { display: none; }
+  .fx-status, .fx-status *, .fx-status::after, .tcg-card.amb-burn, .tcg-card.amb-poison,
+  .tcg-card.amb-frozen, .fx-shield-halo, .fx-low-hp, .fx-heal-bloom,
+  .tcg-card.impact-dash, .tcg-card.impact-hit, .tcg-card.impact-hit.impact-heavy,
+  .tcg-card.impact-hit.impact-brutal, .tcg-card.impact-hit.impact-devastating,
+  .tcg-card.impact-hit.impact-cataclysm, .card-flourish *, .card-spotlight,
+  .fx-shield-gain, .fx-shield-break, .fx-impact *, .fx-impact::after {
+    animation: none !important; translate: none; rotate: none; scale: none;
+  }
+  .fx-rune, .fx-poison-mist, .fx-burn-flames { opacity: .65; }
+  .card-flourish .card-flourish-ring { opacity: .4; }
+  .card-flourish .card-flourish-core, .card-flourish .card-flourish-beam { opacity: 0; }
+  .flourish-shield, .flourish-lock { opacity: .65; }
+  .fx-heal-bloom { opacity: .5; }
+  .fx-floater-number, .fx-action-badge { animation: combat-feedback-fade 1050ms linear both; }
+  .card-spotlight { animation: combat-feedback-fade 1700ms linear both; }
+  .board-quake::after, .board-quake-crit::after { display: none; }
+}
+@keyframes combat-feedback-fade { 0%,80% { opacity: 1; } 100% { opacity: 0; } }
