@@ -47,6 +47,8 @@ export type ProcRoll = {
  * nulle part ailleurs -- la CSS ne lit que le palier.
  */
 export type ImpactTier = 'light' | 'heavy' | 'brutal' | 'devastating' | 'cataclysm';
+/** Contact at 30% of the 600 ms lunge. Shared by tracers, recoil and bursts. */
+export const HIT_CONTACT_MS = 180;
 
 /**
  * Seuils de dégâts, du coup d'épingle au cataclysme. Ils vivent ici et nulle part ailleurs :
@@ -71,7 +73,7 @@ function tierFor(amount: number, critical: boolean): ImpactTier {
 }
 
 /** Rôle d'une carte dans un échange de coups : elle porte, ou elle encaisse. */
-export type CharacterImpact = { id: number; role: 'attacker' | 'target'; tier: ImpactTier; critical: boolean };
+export type CharacterImpact = { id: number; role: 'attacker' | 'target'; tier: ImpactTier; critical: boolean; otherInstanceId?: string };
 
 /**
  * Une carte qui vient de mourir, gardée en vie le temps de son animation alors que le
@@ -112,6 +114,8 @@ export type CardFlourish = {
   kind: CardFlourishKind;
   color?: string;
   tier?: ImpactTier;
+  /** Wind-up before a sourced hit connects; periodic damage remains immediate. */
+  delayMs?: number;
   /** Uniquement pour `kind: 'evolve'` : la scène de la forme d'arrivée. */
   variant?: EvolutionFlourishVariant;
 };
@@ -300,7 +304,7 @@ function classifyLogEntry(entry: LogEntry, state: GameState, ctx: BatchContext):
           : []),
         // Le critique a sa propre déflagration sur la cible, quel que soit le montant :
         // c'est ce qui le distingue d'un gros coup ordinaire au même palier.
-        { anchor: 'flourish', flourish: { characterInstanceId: targetInstanceId, kind: critical ? 'crit' : 'impact', tier } },
+        { anchor: 'flourish', flourish: { characterInstanceId: targetInstanceId, kind: critical ? 'crit' : 'impact', tier, delayMs: attackerInstanceId ? HIT_CONTACT_MS : 0 } },
       ];
     }
 
@@ -593,9 +597,9 @@ const SPOTLIGHT_DURATION_MS = 1700;
  * qu'elle fait naître (1,05 s) : c'est la classe d'impact qui teinte ce chiffre en critique,
  * et plus courte, elle le laissait virer au rouge ordinaire en plein vol.
  */
-const IMPACT_DURATION_MS = 1150;
+const IMPACT_DURATION_MS = 1350;
 /** Course du trait de frappe d'un bout à l'autre du plateau, plus sa dissipation. */
-const STRIKE_DURATION_MS = 620;
+const STRIKE_DURATION_MS = 800;
 /** Fenêtre pendant laquelle le Recycleur peut lire la révélation : le Card-Flip lui-même
  *  dure moins longtemps, mais la carte doit rester disponible le temps que l'animation de
  *  sacrifice (jouée AVANT que ce log n'arrive) ait fini de tourner. */
@@ -691,6 +695,7 @@ export function useGameEvents(state: GameState): {
               id: ++seqRef.current,
               characterInstanceId: classified.targetInstanceId,
               role: 'target',
+              otherInstanceId: classified.attackerInstanceId,
               tier: classified.tier,
               critical: classified.critical,
             });
@@ -699,6 +704,7 @@ export function useGameEvents(state: GameState): {
                 id: ++seqRef.current,
                 characterInstanceId: classified.attackerInstanceId,
                 role: 'attacker',
+                otherInstanceId: classified.targetInstanceId,
                 tier: classified.tier,
                 critical: classified.critical,
               });
@@ -779,7 +785,7 @@ export function useGameEvents(state: GameState): {
       setFlourishes((list) => [...list, ...newFlourishes]);
       for (const f of newFlourishes) {
         timersRef.current.push(
-          setTimeout(() => setFlourishes((list) => list.filter((x) => x.id !== f.id)), FLOURISH_DURATION_MS[f.variant ?? f.kind])
+          setTimeout(() => setFlourishes((list) => list.filter((x) => x.id !== f.id)), FLOURISH_DURATION_MS[f.variant ?? f.kind] + (f.delayMs ?? 0))
         );
       }
     }

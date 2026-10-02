@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { useCardRect } from './cardRects';
-import type { CardFlourish, EvolutionFlourishVariant, StrikeBolt } from './gameEvents';
+import { HIT_CONTACT_MS, type CardFlourish, type EvolutionFlourishVariant, type StrikeBolt } from './gameEvents';
 import { EffectGlyph, EffectParticles, EffectSigil } from './EffectPrimitives';
 
 /**
@@ -45,11 +45,13 @@ function StrikeTracer({ bolt }: { bolt: StrikeBolt }) {
     left: `${Math.round(from.x)}px`,
     top: `${Math.round(from.y)}px`,
     width: `${Math.round(distance)}px`,
+    ['--contact-delay']: `${HIT_CONTACT_MS}ms`,
     ['--bolt-angle']: `${(Math.atan2(dy, dx) * 180) / Math.PI}deg`,
   } as CSSProperties;
 
   return (
     <div className={`strike-bolt strike-${bolt.tier}${bolt.critical ? ' strike-crit' : ''}`} style={style}>
+      <span className="strike-bolt-charge" />
       <span className="strike-bolt-beam" />
       {/* Pointe lumineuse qui court le long de la barre : c'est elle qui donne le sens de
           la frappe, la traînée seule pouvant se lire dans les deux sens. */}
@@ -57,6 +59,7 @@ function StrikeTracer({ bolt }: { bolt: StrikeBolt }) {
       <span className="strike-bolt-filament strike-bolt-filament-a" />
       <span className="strike-bolt-filament strike-bolt-filament-b" />
       <span className="strike-bolt-contact" />
+      <span className="strike-bolt-cut" />
     </div>
   );
 }
@@ -89,6 +92,7 @@ function Flourish({ flourish }: { flourish: CardFlourish }) {
     top: `${Math.round(rect.top)}px`,
     width: `${Math.round(rect.width)}px`,
     height: `${Math.round(rect.height)}px`,
+    ['--flourish-delay']: `${flourish.delayMs ?? 0}ms`,
     ...(flourish.color ? { '--flourish-color': flourish.color } : {}),
   } as CSSProperties;
 

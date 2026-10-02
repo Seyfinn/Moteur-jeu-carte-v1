@@ -22,6 +22,12 @@ export function graveyardRectKey(playerId: string): string {
 /** Relève la position de `el`, ou oublie la clé quand l'élément a disparu. */
 export function trackCardRect(key: string, el: HTMLElement | null): void {
   if (!el) return;
+  // Do not replace the resting position with a lunge/recoil sample on an unrelated
+  // React render: the fixed tracer would otherwise chase the moving attacker.
+  if (rects.has(key) && el.getAnimations().some(animation =>
+    animation.playState === 'running' &&
+    ['impact-lunge', 'impact-shake'].includes((animation as CSSAnimation).animationName)
+  )) return;
   rects.set(key, el.getBoundingClientRect());
 }
 

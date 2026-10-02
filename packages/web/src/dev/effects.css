@@ -10,6 +10,8 @@
 .effects-workshop .tcg-card { pointer-events: none; }
 .workshop-vs { color: #8fc9dc; font-size: 30px; text-align: center; letter-spacing: .2em; }
 .workshop-vs span { display: block; color: #8c9eb5; font-size: 11px; margin-top: 15px; letter-spacing: .04em; }
+.workshop-bench { display: flex; align-items: center; gap: 18px; margin: 0 0 20px 8%; color: #8c9eb5; font-size: 12px; }
+.workshop-bench > .tcg-card { width: 78px; }
 .workshop-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; position: relative; z-index: 60; }
 .workshop-controls button { border: 1px solid #9eb8e12c; border-radius: 8px; padding: 8px 13px; background: #182336; color: #b5c9df; font-size: 12px; cursor: pointer; }
 .workshop-controls button[aria-pressed="true"] { color: #d9fff5; background: #224845; border-color: #74d8bb; }

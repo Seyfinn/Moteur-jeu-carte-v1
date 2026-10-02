@@ -7,8 +7,8 @@ import { StatusEffectLayers, statusAmbienceClasses, toneForStatus } from './stat
 import { AttachedObjectCards, AttachedObjectChips } from './AttachedObjects';
 import { attackReadouts, type AttachedObjectView } from './boardActions';
 import { CharacterActionBadges } from './gameEventBadges';
-import { trackCardRect } from './cardRects';
-import type { CharacterBadge, CharacterImpact } from './gameEvents';
+import { readCardRect, trackCardRect } from './cardRects';
+import { HIT_CONTACT_MS, type CharacterBadge, type CharacterImpact } from './gameEvents';
 import { EffectGlyph } from './EffectPrimitives';
 
 function cardName(cardId: string): string {
@@ -303,6 +303,7 @@ export function CharacterCard({
   facing,
   hideName,
   hunted,
+  motionZone,
 }: {
   char: CharacterInstance;
   isActive: boolean;
@@ -363,6 +364,8 @@ export function CharacterCard({
    * qui regarde -- le camp de Gon la voit dès le tirage, l'adversaire à la révélation.
    */
   hunted?: boolean;
+  /** Explicit board position for the development workshop. */
+  motionZone?: string;
 }) {
   const hover = useHoverCard();
   const { currentHP, pct, lockedMaxHP } = characterVitals(char);
@@ -454,8 +457,8 @@ export function CharacterCard({
     // own cleanup (i.e. on the *next* hit) cancelled the pending removal, so rapid
     // successive hits left their floaters stuck on the card forever.
     timersRef.current.push(
-      setTimeout(() => setFlash(current => current?.id === id ? null : current), 400),
-      setTimeout(() => setFloaters((list) => list.filter((f) => f.id !== id)), 1100)
+      setTimeout(() => setFlash(current => current?.id === id ? null : current), 400 + HIT_CONTACT_MS),
+      setTimeout(() => setFloaters((list) => list.filter((f) => f.id !== id)), 1100 + HIT_CONTACT_MS)
     );
   }, [currentHP]);
 
@@ -489,8 +492,39 @@ export function CharacterCard({
   // plus rien à mesurer pour lancer son vol. Cf. `cardRects.ts`.
   const frameRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
-    trackCardRect(char.instanceId, frameRef.current);
+    const frame = frameRef.current;
+    if (!frame) return;
+    const player = state?.players[char.ownerId];
+    const onBoard = player?.activeCharacterInstanceId === char.instanceId || player?.benchCharacterInstanceIds.includes(char.instanceId);
+    if (onBoard || motionZone) {
+      frame.dataset.boardCharacter = char.instanceId;
+      frame.dataset.boardZone = motionZone ?? `${char.ownerId}:${isActive ? 'active' : 'bench'}`;
+    } else {
+      delete frame.dataset.boardCharacter;
+      delete frame.dataset.boardZone;
+    }
+    trackCardRect(char.instanceId, frame);
   });
+
+  useLayoutEffect(() => {
+    const frame = frameRef.current;
+    if (!frame || !impact) return;
+    const own = readCardRect(char.instanceId);
+    const other = impact.otherInstanceId ? readCardRect(impact.otherInstanceId) : undefined;
+    let x = facing === 'left' ? -1 : 1;
+    let y = 0;
+    if (own && other) {
+      const dx = other.left + other.width / 2 - own.left - own.width / 2;
+      const dy = other.top + other.height / 2 - own.top - own.height / 2;
+      const distance = Math.hypot(dx, dy);
+      if (distance > 1) { x = dx / distance; y = dy / distance; }
+    }
+    // The target recoils away from the source, including diagonal attacks on the bench.
+    const sign = impact.role === 'target' ? -1 : 1;
+    frame.style.setProperty('--combat-x', String(x * sign));
+    frame.style.setProperty('--combat-y', String(y * sign));
+    frame.style.setProperty('--hit-delay', impact.otherInstanceId && impact.role === 'target' ? `${HIT_CONTACT_MS}ms` : '0ms');
+  }, [impact?.id, char.instanceId, facing]);
 
   // Une animation CSS ne rejoue pas parce que React a redessiné : deux coups du même palier
   // coup sur coup posent exactement les mêmes classes, et le second passait inaperçu (double
@@ -521,7 +555,7 @@ export function CharacterCard({
           // Le critique renchérit sur le palier au lieu de le remplacer : décharge dorée sur
           // la cible, chiffre flottant doré, sursaut plus sec.
           impact.critical ? 'impact-crit' : '',
-          impact.role === 'target' ? 'impact-hit' : facing ? `impact-dash impact-dash-${facing}` : '',
+          impact.role === 'target' ? 'impact-hit' : facing || impact.otherInstanceId ? `impact-dash impact-dash-${facing ?? 'right'}` : '',
         ].filter(Boolean)
       : []),
     ...statusAmbienceClasses(visibleStatuses),
