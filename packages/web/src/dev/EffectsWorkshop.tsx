@@ -1,5 +1,5 @@
 /** Development-only visual workbench. Not part of index.html / the production bundle. */
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { getCharacterCard, type CharacterInstance } from 'engine';
 import { CharacterCard } from '../components/CharacterCard';
 import { CardFrame } from '../components/CardFrame';
@@ -8,7 +8,8 @@ import { CardFlourishes, StrikeBolts } from '../components/BoardFx';
 import { CardSpotlights } from '../components/CardSpotlight';
 import { ProcWheels } from '../components/ProcWheel';
 import { KoFlights } from '../components/KoFlight';
-import type { CardFlourish, CardSpotlight, CharacterImpact, ProcRoll, StrikeBolt, KoFlight } from '../components/gameEvents';
+import { useBoardMotion } from '../components/useBoardMotion';
+import { HIT_CONTACT_MS, type CardFlourish, type CardSpotlight, type CharacterImpact, type ProcRoll, type StrikeBolt, type KoFlight } from '../components/gameEvents';
 import '../styles.css';
 import '../combatEffects.css';
 import './effects.css';
@@ -27,11 +28,13 @@ const STATUSES = [
 
 export default function Workshop() {
   const [target, setTarget] = useState(() => character('preview-target', 'kayn'));
-  const attacker = useRef(character('preview-attacker', 'gon')).current;
+  const [attacker, setAttacker] = useState(() => character('preview-attacker', 'gon'));
+  const [reserve, setReserve] = useState(() => character('preview-reserve', 'killua'));
   const [scene, setScene] = useState<{ id: number; name: string }>({ id: 0, name: '' });
   const [freeze, setFreeze] = useState(false);
   const [time, setTime] = useState(320);
   const [reducedCss, setReducedCss] = useState('');
+  const motionRoot = useBoardMotion(Boolean(reducedCss));
   const [impact, setImpact] = useState<CharacterImpact>();
   const [flourishes, setFlourishes] = useState<CardFlourish[]>([]);
   const [bolts, setBolts] = useState<StrikeBolt[]>([]);
@@ -45,11 +48,12 @@ export default function Workshop() {
     if (name === 'Frappe' || name === 'Critique' || name === 'Cataclysme') {
       const critical = name === 'Critique';
       const tier = name === 'Cataclysme' ? 'cataclysm' : 'heavy';
-      setImpact({ id, role: 'target', tier, critical });
+      setImpact({ id, role: 'target', tier, critical, otherInstanceId: attacker.instanceId });
       setBolts([{ id, fromInstanceId: attacker.instanceId, toInstanceId: characterInstanceId, tier, critical }]);
-      setFlourishes([{ id, characterInstanceId, kind: critical ? 'crit' : 'impact', tier }]);
+      setFlourishes([{ id, characterInstanceId, kind: critical ? 'crit' : 'impact', tier, delayMs: HIT_CONTACT_MS }]);
       setTarget(t => ({ ...t, damage: t.damage > 110 ? 40 : t.damage + 25 }));
-    } else if (name === 'Soin') setTarget(t => ({ ...t, damage: t.damage > 0 ? Math.max(0, t.damage - 25) : 60 }));
+    } else if (name === 'Déplacement') { setAttacker(reserve); setReserve(attacker); }
+    else if (name === 'Soin') setTarget(t => ({ ...t, damage: t.damage > 0 ? Math.max(0, t.damage - 25) : 60 }));
     else if (name === 'Bouclier') { setTarget(t => ({ ...t, shield: t.shield ? 0 : 40 })); setFlourishes([{ id, characterInstanceId, kind: 'shield-hit' }]); }
     else if (name === 'Esquive' || name === 'Verrou' || name === 'Résurrection') setFlourishes([{ id, characterInstanceId, kind: name === 'Esquive' ? 'evasion' : name === 'Verrou' ? 'lock' : 'revive' }]);
     else if (name === 'Statut') setFlourishes([{ id, characterInstanceId, kind: 'status', color: '#b07ede' }]);
@@ -74,14 +78,15 @@ export default function Workshop() {
   return <main className="effects-workshop">
     {reducedCss && <style>{reducedCss}</style>}
     <header><div><span className="workshop-eyebrow">DIRECTION VISUELLE · COMBAT</span><h1>Atelier des effets</h1><p>Les animations du jeu, à rejouer et à examiner librement.</p></div><a href="/">Retour au jeu ↗</a></header>
-    <section className="workshop-stage">
+    <section className="workshop-stage" ref={motionRoot}>
       <div className="workshop-duel">
-        <CharacterCard char={attacker} isActive size="large" facing="right" impact={impact ? { ...impact, role: 'attacker' } : undefined} />
+        <CharacterCard key={attacker.instanceId} char={attacker} isActive size="large" facing="right" motionZone="active" impact={impact ? { ...impact, role: 'attacker', otherInstanceId: target.instanceId } : undefined} />
         <div className="workshop-vs">VS<span>{scene.name || 'Choisir un effet'}</span></div>
-        <CharacterCard char={target} isActive size="large" impact={impact} />
+        <CharacterCard char={target} isActive size="large" impact={impact} motionZone="opponent" />
       </div>
+      <div className="workshop-bench"><CharacterCard key={reserve.instanceId} char={reserve} isActive={false} size="small" motionZone="bench" /><span>Banc · déplacement vers le combat</span></div>
       <StrikeBolts bolts={bolts} /><CardFlourishes flourishes={flourishes} /><CardSpotlights spotlights={spotlights} /><ProcWheels rolls={rolls} /><KoFlights flights={flights} />
-      <div className="workshop-controls">{['Frappe','Critique','Cataclysme','Soin','Bouclier','Esquive','Verrou','Statut','Résurrection','KO','Gon','Kayn','Rhaast','Capacité','Objet','Terrain','Chance','Échec'].map(name => <button key={name} aria-pressed={scene.name === name} onClick={() => play(name)}>{name}</button>)}</div>
+      <div className="workshop-controls">{['Frappe','Critique','Cataclysme','Déplacement','Soin','Bouclier','Esquive','Verrou','Statut','Résurrection','KO','Gon','Kayn','Rhaast','Capacité','Objet','Terrain','Chance','Échec'].map(name => <button key={name} aria-pressed={scene.name === name} onClick={() => play(name)}>{name}</button>)}</div>
       <div className="workshop-timeline"><label><input type="checkbox" checked={freeze} onChange={e => setFreeze(e.target.checked)} /> Arrêt sur image</label><input aria-label="Instant de l’animation" type="range" min="0" max="3000" step="10" value={time} onChange={e => { setFreeze(true); setTime(Number(e.target.value)); }} /><output>{time} ms</output></div>
       <div className="workshop-timeline"><label><input type="checkbox" checked={Boolean(reducedCss)} onChange={e => {
         // Apply the real media-rule bodies locally without changing OS preferences.

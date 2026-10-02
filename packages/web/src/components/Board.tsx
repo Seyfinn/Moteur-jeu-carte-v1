@@ -54,6 +54,7 @@ import {
 } from './boardActions';
 import { AttachedObjectCards } from './AttachedObjects';
 import { KoFlights } from './KoFlight';
+import { useBoardMotion } from './useBoardMotion';
 import { CardFlourishes, StrikeBolts } from './BoardFx';
 import { useGameEvents, type CharacterBadge, type CharacterImpact } from './gameEvents';
 import { TableEventBanners } from './gameEventBadges';
@@ -759,6 +760,7 @@ function BenchRow({
 }
 
 export function Board({ conn }: { conn: GameConnection }) {
+  const motionRoot = useBoardMotion();
   const state = conn.state!;
   const you = conn.you!;
   const opponentId = otherPlayer(you);
@@ -921,6 +923,7 @@ export function Board({ conn }: { conn: GameConnection }) {
     // au gros coup suivant de rejouer l'animation, une classe restée en place ne
     // redémarrerait rien.
     <div
+      ref={motionRoot}
       className={`board${targeting ? ' targeting' : ''}${ambience ? ` ${ambience}` : ''}${
         boardQuake ? ` board-quake board-quake-${boardQuake.tier}${boardQuake.critical ? ' board-quake-crit' : ''}` : ''
       }${canAct ? ' can-act' : ''}`}
