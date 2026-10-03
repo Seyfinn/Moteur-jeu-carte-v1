@@ -259,6 +259,16 @@ Rappels transverses qui valent pour **toutes** les cartes, et qu'aucune n'a donc
   Spell Thief de Zoé). Sans ce test, voler « Cycle 4 - Soleil » à Escanor donnait 150 ATK à
   chaque tour en court-circuitant tout le cycle qui la conditionne. Une attaque devenue
   injouable fait simplement retomber Chrollo sur sa Dague de Ben.
+  → **Un livre ouvert sur un autre Chrollo ne vole rien** (Métamorphe transformé en Chrollo,
+  clone) : ses entrées ne sont que des délégations vers elles-mêmes, et « Dague de Ben »
+  volée = Dague de Ben. Double Face ne propose rien, l'attaque reste la Dague de base, « Actif
+  volé » n'est pas activable ; le sceau et la Contrainte s'appliquent normalement. En plus de
+  cette exclusion, « Dague de Ben » et « Actif volé » posent un garde de ré-entrance dans
+  `ctx.scratch` (`chrollo:delegating`) : si la chaîne de délégation revient sur l'une d'elles
+  avec le même contexte (via un Spell Thief de Zoé, par exemple), elle se comporte comme
+  l'entrée de base au lieu de déléguer encore. Sans ces deux garde-fous, Chrollo contre
+  Chrollo faisait exploser la pile (`Maximum call stack size exceeded`, trouvé par le fuzz de
+  `card-smoke.spec.ts`, seed 10).
 - **Double Face : Annulation** (active) — *« Condition : L'adversaire doit avoir au moins un
   autre personnage en vie. […] »*
   → Un seul livre à la fois : l'ability est grisée tant qu'une carte est scellée (règle

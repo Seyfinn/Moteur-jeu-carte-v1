@@ -884,4 +884,4 @@ rectangles relevés à chaque rendu (`cardRects.ts`), comme pour le vol d'une ca
 
 Une PR créée sur ce dépôt n'a **pas de description** : `gh pr create --title "<titre>" --body ""`.
 Pas de résumé, pas de liste de changements, pas de plan de test, et pas de footer
-« 🤖 Generated with Claude Code ». La réponse à l'utilisateur est juste le lien de la PR.
+« 🤖 Generated with Codex ». La réponse à l'utilisateur est juste le lien de la PR.

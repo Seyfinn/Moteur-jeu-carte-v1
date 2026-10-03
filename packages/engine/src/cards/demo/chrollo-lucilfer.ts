@@ -27,6 +27,25 @@ const BOOK_STATUS_ID = 'chrollo-livre-ouvert';
  */
 const STOLEN_ENDS_TURN = 'chrollo:stolenEndsTurn';
 
+/**
+ * Garde de ré-entrance, dans `ctx.scratch` (donc propre à CETTE exécution) : « Dague de Ben »
+ * et « Actif volé » délèguent à l'entrée volée avec le MÊME contexte. Si la chaîne revient
+ * sur l'une d'elles (livre ouvert sur un autre Chrollo, ou via un Spell Thief de Zoé qui
+ * relance à son tour), elle se comporte comme l'entrée de base au lieu de déléguer encore --
+ * sans ça, la pile explosait (bug trouvé par le fuzz de `card-smoke.spec.ts`, seed 10).
+ */
+const DELEGATING = 'chrollo:delegating';
+
+/**
+ * Un livre ouvert sur un AUTRE Chrollo (Métamorphe transformé, clone) : ses entrées ne sont
+ * que des délégations vers... elles-mêmes. Rien n'est volé -- « Dague de Ben » reste Dague
+ * de Ben (c'est ce que le vol donnerait de toute façon) et « Actif volé » n'a rien à porter.
+ * Le sceau et la Contrainte, eux, s'appliquent normalement.
+ */
+function isAnotherChrollo(victim: CharacterInstance): boolean {
+  return victim.cardId === 'chrollo-lucilfer';
+}
+
 /** La victime actuellement scellée par ce Chrollo, si elle est toujours sur le plateau. */
 function sealedVictim(ctx: EffectContext): CharacterInstance | undefined {
   const self = ctx.getCharacter(ctx.sourceInstanceId);
@@ -60,7 +79,7 @@ function stolenAttack(ctx: EffectContext): AttackDef | undefined {
   const victim = sealedVictim(ctx);
   const self = ctx.getCharacter(ctx.sourceInstanceId);
   const attackId = getStatus(self, BOOK_STATUS_ID)?.data?.['stolenAttackId'];
-  if (!victim || typeof attackId !== 'string') return undefined;
+  if (!victim || isAnotherChrollo(victim) || typeof attackId !== 'string') return undefined;
   const attack = getCharacterCard(victim.cardId).attacks.find((a) => a.id === attackId);
   // Attaque volée inutilisable en l'état : Chrollo retombe sur sa Dague de Ben.
   return attack && usableByChrollo(attack, ctx) ? attack : undefined;
@@ -71,7 +90,7 @@ function stolenAbility(ctx: EffectContext): AbilityDef | undefined {
   const victim = sealedVictim(ctx);
   const self = ctx.getCharacter(ctx.sourceInstanceId);
   const abilityId = getStatus(self, BOOK_STATUS_ID)?.data?.['stolenAbilityId'];
-  if (!victim || typeof abilityId !== 'string') return undefined;
+  if (!victim || isAnotherChrollo(victim) || typeof abilityId !== 'string') return undefined;
   const ability = getCharacterCard(victim.cardId).abilities.find((a) => a.id === abilityId);
   return ability && usableByChrollo(ability, ctx) ? ability : undefined;
 }
@@ -95,13 +114,14 @@ export const chrolloLucilfer: CharacterCardDef = {
         // 45 ATK ». Un modifier getEffectiveATK qui corrigerait l'affichage fausserait le
         // calcul de l'attaque déléguée (elle repartirait de sa propre base, déjà décalée).
         // Le journal, lui, annonce le vrai nom à chaque coup.
-        const stolen = stolenAttack(ctx);
+        const stolen = ctx.scratch[DELEGATING] ? undefined : stolenAttack(ctx);
         if (stolen) {
           ctx.log(`Chrollo Lucilfer utilise ${stolen.name} (volée)`, {
             kind: 'attack',
             characterInstanceId: ctx.sourceInstanceId,
             attackId: stolen.id,
           });
+          ctx.scratch[DELEGATING] = true;
           await stolen.execute(ctx);
           return;
         }
@@ -140,10 +160,11 @@ Tant que la carte est scellée, Chrollo perd 25 % de ses PV actuels au début de
         // Ne proposer que ce que Chrollo pourra réellement porter : une entrée dont la
         // condition s'appuie sur un compteur propre à la victime (le cycle d'Escanor) ne
         // s'ouvrira jamais pour lui, la lui offrir serait un piège.
-        const stealableAttacks = victimCard.attacks.filter((a) => usableByChrollo(a, ctx));
-        const stealableAbilities = victimCard.abilities.filter(
-          (a) => a.kind === 'active' && !a.trigger && usableByChrollo(a, ctx)
-        );
+        const mirror = isAnotherChrollo(victim);
+        const stealableAttacks = mirror ? [] : victimCard.attacks.filter((a) => usableByChrollo(a, ctx));
+        const stealableAbilities = mirror
+          ? []
+          : victimCard.abilities.filter((a) => a.kind === 'active' && !a.trigger && usableByChrollo(a, ctx));
 
         let stolenAttackId = stealableAttacks[0]?.id;
         if (stealableAttacks.length > 1) {
@@ -218,6 +239,8 @@ Tant que la carte est scellée, Chrollo perd 25 % de ses PV actuels au début de
         return ctx.scratch[STOLEN_ENDS_TURN] === true;
       },
       async execute(ctx) {
+        // Déjà en train de déléguer sur ce contexte : ne pas repartir dans la chaîne.
+        if (ctx.scratch[DELEGATING]) return;
         const stolen = stolenAbility(ctx);
         if (!stolen) return;
         // Relancée avec Chrollo pour source, comme le Spell Thief de Zoé : c'est lui qui
@@ -227,6 +250,7 @@ Tant que la carte est scellée, Chrollo perd 25 % de ses PV actuels au début de
           characterInstanceId: ctx.sourceInstanceId,
           abilityId: stolen.id,
         });
+        ctx.scratch[DELEGATING] = true;
         await stolen.execute(ctx);
 
         // Évalué après coup, sur le même contexte, exactement comme `match.ts` le ferait
